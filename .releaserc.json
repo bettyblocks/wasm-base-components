@@ -1,0 +1,62 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "echo ${nextRelease.version} > .version"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "providers/data-api/build/data-api.par.gz",
+            "label": "data-api-${nextRelease.gitTag}.par.gz"
+          },
+          {
+            "path": "providers/key-vault/build/key-vault.par.gz",
+            "label": "key-vault-${nextRelease.gitTag}.par.gz"
+          },
+          {
+            "path": "providers/smtp-provider/build/smtp-provider.par.gz",
+            "label": "smtp-provider-${nextRelease.gitTag}.par.gz"
+          },
+          {
+            "path": "helper/data-api/component/build/crud_component.wasm",
+            "label": "crud-component-${nextRelease.gitTag}.wasm"
+          },
+          {
+            "path": "helper/data-api/component/build/crud_component_s.wasm",
+            "label": "crud-component-signed-${nextRelease.gitTag}.wasm"
+          },
+          {
+            "path": "providers/smtp-provider/component/build/send_mail_component.wasm",
+            "label": "send-mail-component-${nextRelease.gitTag}.wasm"
+          },
+          {
+            "path": "providers/smtp-provider/component/build/send_mail_component_s.wasm",
+            "label": "send-mail-component-signed-${nextRelease.gitTag}.wasm"
+          }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ]
+  ]
+}
+

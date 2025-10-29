@@ -1,0 +1,47 @@
+name: Deploy WASM Components
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - edge
+          - acceptance
+          - production
+      build_run_id:
+        description: 'Build workflow run ID (leave empty for latest)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      npm_token: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install npm dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: build.yaml
+          run_id: ${{ inputs.build_run_id }}
+          name: wasm-components-*
+          name_is_regexp: true
+          if_no_artifact_found: fail
+          skip_unpack: false
+
+      - name: Publish to Betty Blocks
+        run: cd deply && bun run publish.ts ${{ secrets.BLOCKSTORE_CLI_SECRET }} ${{ inputs.environment }}

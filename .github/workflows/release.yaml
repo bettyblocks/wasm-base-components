@@ -1,0 +1,68 @@
+name: Build WASM Components
+
+on:
+  push:
+    branches:
+      - "main"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache Rust registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: just,wkg,wash
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install npm dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build wasm components
+        run: just build
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bunx semantic-release
+
+      - name: Read version
+        id: version
+        run: |
+          if [ -f .version ]; then
+            echo "version=$(cat .version)" >> $GITHUB_OUTPUT
+            echo "has_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload build artifacts
+        if: steps.version.outputs.has_release == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-components-v${{ steps.version.outputs.version }}
+          path: |
+            **/build/*.wasm
+            **/build/*.par.gz
+          retention-days: 90

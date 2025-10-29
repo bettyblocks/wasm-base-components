@@ -1,0 +1,188 @@
+name: Publish WASM Components to GitHub Packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g., 1.2.3)"
+        required: true
+        type: string
+      registry:
+        description: "Registry to publish to"
+        required: false
+        default: "ghcr.io"
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      REGISTRY: ${{ github.event_name == 'release' && 'ghcr.io' || inputs.registry }}
+      REPO_OWNER: ${{ github.repository_owner }}
+      VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wash
+
+      - name: Prepare environment
+        run: |
+          # Remove 'v' prefix from version if present
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Convert repository owner to lowercase for ghcr.io
+          REPO_OWNER=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
+
+          echo "Publishing version: $VERSION"
+          echo "Publishing to: $REGISTRY/$REPO_OWNER"
+
+      - name: Download release assets
+        if: github.event_name == 'release'
+        run: |
+          # Download artifacts from the release
+          gh release download ${{ github.event.release.tag_name }} --dir ./artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download artifacts from workflow run
+        if: github.event_name == 'workflow_dispatch'
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: release.yaml
+          name: wasm-components-v${{ env.VERSION }}
+          path: ./artifacts
+          if_no_artifact_found: fail
+
+      - name: Organize artifacts
+        run: |
+          # Create build directories if they don't exist
+          mkdir -p providers/data-api/build
+          mkdir -p providers/key-vault/build
+          mkdir -p providers/smtp-provider/build
+
+          # Move artifacts to expected locations
+          if [ -f artifacts/data-api*.par.gz ]; then
+            cp artifacts/data-api*.par.gz providers/data-api/build/data-api.par.gz
+          fi
+          if [ -f artifacts/key-vault*.par.gz ]; then
+            cp artifacts/key-vault*.par.gz providers/key-vault/build/key-vault.par.gz
+          fi
+          if [ -f artifacts/smtp-provider*.par.gz ]; then
+            cp artifacts/smtp-provider*.par.gz providers/smtp-provider/build/smtp-provider.par.gz
+          fi
+
+          # Fallback: check if artifacts are already in build directories
+          if [ -d artifacts/providers ]; then
+            cp -r artifacts/providers/* providers/ 2>/dev/null || true
+          fi
+
+      - name: Publish data-api to registry
+        if: hashFiles('providers/data-api/build/data-api.par.gz') != ''
+        run: |
+          IMAGE_NAME="$REGISTRY/$REPO_OWNER/data-api"
+
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:${VERSION} \
+            ./providers/data-api/build/data-api.par.gz
+
+          # Also tag as latest
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:latest \
+            ./providers/data-api/build/data-api.par.gz
+
+          echo "Published: ${IMAGE_NAME}:${VERSION}"
+
+      - name: Publish key-vault to registry
+        if: hashFiles('providers/key-vault/build/key-vault.par.gz') != ''
+        run: |
+          IMAGE_NAME="$REGISTRY/$REPO_OWNER/key-vault"
+
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:${VERSION} \
+            ./providers/key-vault/build/key-vault.par.gz
+
+          # Also tag as latest
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:latest \
+            ./providers/key-vault/build/key-vault.par.gz
+
+          echo "Published: ${IMAGE_NAME}:${VERSION}"
+
+      - name: Publish smtp-provider to registry
+        if: hashFiles('providers/smtp-provider/build/smtp-provider.par.gz') != ''
+        run: |
+          IMAGE_NAME="$REGISTRY/$REPO_OWNER/smtp-provider"
+
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:${VERSION} \
+            ./providers/smtp-provider/build/smtp-provider.par.gz
+
+          # Also tag as latest
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:latest \
+            ./providers/smtp-provider/build/smtp-provider.par.gz
+
+          echo "Published: ${IMAGE_NAME}:${VERSION}"
+
+      - name: Summary
+        run: |
+          echo "## 📦 Published Components to GitHub Packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Registry:** \`${REGISTRY}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Components Published:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f providers/data-api/build/data-api.par.gz ]; then
+            echo "- ✅ **data-api**" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/data-api:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/data-api:latest\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ data-api (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f providers/key-vault/build/key-vault.par.gz ]; then
+            echo "- ✅ **key-vault**" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/key-vault:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/key-vault:latest\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ key-vault (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f providers/smtp-provider/build/smtp-provider.par.gz ]; then
+            echo "- ✅ **smtp-provider**" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/smtp-provider:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/smtp-provider:latest\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ smtp-provider (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 View Packages" >> $GITHUB_STEP_SUMMARY
+          echo "Visit: [https://github.com/orgs/${REPO_OWNER}/packages](https://github.com/orgs/${REPO_OWNER}/packages)" >> $GITHUB_STEP_SUMMARY

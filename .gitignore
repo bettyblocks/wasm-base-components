@@ -4,3 +4,7 @@ build
 /_build
 /deps
 .vscode
+
+# Semantic release
+.version
+node_modules
