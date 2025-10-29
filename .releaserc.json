@@ -36,16 +36,12 @@
             "label": "crud-component-${nextRelease.gitTag}.wasm"
           },
           {
-            "path": "helper/data-api/component/build/crud_component_s.wasm",
-            "label": "crud-component-signed-${nextRelease.gitTag}.wasm"
+            "path": "helper/http-wrapper/build/http_wrapper.wasm",
+            "label": "http-wrapper-${nextRelease.gitTag}.wasm"
           },
           {
-            "path": "providers/smtp-provider/component/build/send_mail_component.wasm",
-            "label": "send-mail-component-${nextRelease.gitTag}.wasm"
-          },
-          {
-            "path": "providers/smtp-provider/component/build/send_mail_component_s.wasm",
-            "label": "send-mail-component-signed-${nextRelease.gitTag}.wasm"
+            "path": "target/wasm32-wasip2/release/log_to_stdout.wasm",
+            "label": "log-to-stdout-${nextRelease.gitTag}.wasm"
           }
         ]
       }

@@ -1,4 +1,4 @@
-name = "http-wrapper"
+name = "http_wrapper"
 version = "0.1.0"
 language = "rust"
 type = "component"
