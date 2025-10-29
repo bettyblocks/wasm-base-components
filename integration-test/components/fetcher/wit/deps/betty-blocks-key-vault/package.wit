@@ -1,0 +1,9 @@
+package betty-blocks:key-vault;
+
+interface key-vault {
+  get-secret: func(key: string) -> option<string>;
+}
+
+world provider {
+  export key-vault;
+}

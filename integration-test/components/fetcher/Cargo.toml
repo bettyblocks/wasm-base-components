@@ -1,0 +1,14 @@
+[package]
+name = "http-hello-world"
+edition = "2021"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+matchit = "0.8.6"
+url = "2.5.4"
+wasmcloud-component = "0.2.0"
+wit-bindgen = "0.39.0"
+waki = "0.5.1"

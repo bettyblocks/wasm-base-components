@@ -1,0 +1,53 @@
+---
+apiVersion: core.oam.dev/v1beta1
+kind: Application
+metadata:
+  name: key-vault-tester
+  annotations:
+    version: v0.1.0
+    description: "Azure key vault provider"
+spec:
+  components:
+    - name: http-component
+      type: component
+      properties:
+        image: bettywasmregistryedge.azurecr.io/key-vault-tester:0.1.2
+      traits:
+        - type: spreadscaler
+          properties:
+            instances: 1
+        - type: link
+          properties:
+            target:
+              name: key-vault
+            namespace: betty-blocks
+            package: key-vault
+            interfaces: [key-vault]
+
+    - name: httpserver
+      type: capability
+      properties:
+        image: ghcr.io/wasmcloud/http-server:0.27.0
+      traits:
+        - type: link
+          properties:
+            target:
+              name: http-component
+            namespace: wasi
+            package: http
+            interfaces: [incoming-handler]
+            source:
+              config:
+                - name: default-http
+                  properties:
+                    address: 0.0.0.0:8000
+
+    - name: key-vault
+      type: capability
+      properties:
+        image: bettywasmregistryedge.azurecr.io/key-vault-provider:0.1.2
+        config:
+          - name: key-vault-config
+            properties:
+              endpoint: https://betty-edge-keyvault.vault.azure.net/
+              key: data-api-secrets

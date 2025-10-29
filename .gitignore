@@ -1,0 +1,6 @@
+target
+build
+#elixir ignore
+/_build
+/deps
+.vscode

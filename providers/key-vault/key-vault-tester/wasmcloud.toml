@@ -1,0 +1,12 @@
+name = "key-vault-tester"
+version = "0.1.0"
+language = "rust"
+type = "component"
+
+[component]
+wit_world = "hello"
+wasm_target = "wasm32-wasip2"
+
+[[registry.pull.sources]]
+target = "betty-blocks:key-vault/key-vault"
+source = "file://../wit/world.wit"

@@ -1,0 +1,10 @@
+name = "DataAPI"
+language = "rust"
+type = "provider"
+
+[provider]
+vendor = "Betty Blocks"
+
+[[registry.pull.sources]]
+target = "betty-blocks:key-vault/key-vault"
+source = "file://../key-vault/wit/world.wit"

@@ -1,0 +1,74 @@
+apiVersion: core.oam.dev/v1beta1
+kind: Application
+metadata:
+  name: something-something
+  annotations:
+    version: v0.0.2
+    description: 'description of something'
+spec:
+  components:
+    - name: http-component
+      type: component
+      properties:
+        image: file://./components/fetcher/build/http_hello_world_s.wasm
+      traits:
+        - type: spreadscaler
+          properties:
+            instances: 1
+        - type: link
+          properties:
+            target:
+              name: httpclient
+            namespace: wasi
+            package: http
+            interfaces: [outgoing-handler]
+        # Link the component to the provider on betty-blocks:data-api/data-api
+        - type: link
+          properties:
+            target: data-api
+            namespace: betty-blocks
+            package: data-api
+            interfaces: [data-api]
+    - name: httpclient
+      type: capability
+      properties:
+        image: ghcr.io/wasmcloud/http-client:0.13.1
+    - name: data-api
+      type: capability
+      properties:
+        image: file://./../providers/data-api/build/data-api.par.gz
+        id: data-api
+        config:
+          - name: data-config
+            properties:
+              key-vault-target: "key-vault"
+              jaws-issuer: "actions_js"
+              jaws-secret-key: "ACTIONS_WASM_DATA_API_SECRET"
+    - name: key-vault
+      type: capability
+      properties:
+        image: file://./../providers/key-vault/build/key-vault.par.gz
+        id: "key-vault"
+        config:
+          - name: key-vault-config
+            properties:
+              endpoint: https://betty-edge-keyvault.vault.azure.net/
+              key: data-api-secrets
+              keyvault_mock: '{"ACTIONS_WASM_DATA_API_SECRET": "data-api-actions-js-secret"}'
+    - name: httpserver
+      type: capability
+      properties:
+        image: ghcr.io/wasmcloud/http-server:0.26.0
+      traits:
+        - type: link
+          properties:
+            target:
+              name: http-component
+            namespace: wasi
+            package: http
+            interfaces: [incoming-handler]
+            source:
+              config:
+                - name: default-http
+                  properties:
+                    address: 0.0.0.0:8000
