@@ -1,0 +1,8 @@
+package betty-blocks:log-to-stdout@0.1.0;
+
+
+world main {
+  import wasi:cli/stdout@0.2.0;
+
+  export wasi:logging/logging@0.1.0-draft;
+}

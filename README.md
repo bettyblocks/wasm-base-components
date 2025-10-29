@@ -1,6 +1,18 @@
-# Actions Providers
+# Wasm base components
 
-Repo for providers to give access to Betty Blocks services
+Repo that contains the shared components for the Betty Blocks platform. These components can be wasm assembly (WASI) or native plugins that run directly on the server.
+
+The components currenly include:
+- crud-component
+- data-api
+- key-vault
+- http-wrapper
+- types
+- http-server
+
+What it doesn't include:
+- the actual customer actions
+- functions/components that can be imported in Betty Blocks
 
 ### note that wash providers break when using a rust workspace for some reason
 
