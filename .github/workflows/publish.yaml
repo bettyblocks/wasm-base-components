@@ -72,8 +72,11 @@ jobs:
           mkdir -p providers/data-api/build
           mkdir -p providers/key-vault/build
           mkdir -p providers/smtp-provider/build
+          mkdir -p helper/data-api/component/build
+          mkdir -p helper/http-wrapper/build
+          mkdir -p target/wasm32-wasip2/release
 
-          # Move artifacts to expected locations
+          # Move provider artifacts (.par.gz files)
           if [ -f artifacts/data-api*.par.gz ]; then
             cp artifacts/data-api*.par.gz providers/data-api/build/data-api.par.gz
           fi
@@ -84,9 +87,26 @@ jobs:
             cp artifacts/smtp-provider*.par.gz providers/smtp-provider/build/smtp-provider.par.gz
           fi
 
+          # Move WASM component artifacts
+          if [ -f artifacts/crud-component*.wasm ]; then
+            cp artifacts/crud-component*.wasm helper/data-api/component/build/crud_component.wasm
+          fi
+          if [ -f artifacts/http-wrapper*.wasm ]; then
+            cp artifacts/http-wrapper*.wasm helper/http-wrapper/build/http_wrapper.wasm
+          fi
+          if [ -f artifacts/log-to-stdout*.wasm ]; then
+            cp artifacts/log-to-stdout*.wasm target/wasm32-wasip2/release/log_to_stdout.wasm
+          fi
+
           # Fallback: check if artifacts are already in build directories
           if [ -d artifacts/providers ]; then
             cp -r artifacts/providers/* providers/ 2>/dev/null || true
+          fi
+          if [ -d artifacts/helper ]; then
+            cp -r artifacts/helper/* helper/ 2>/dev/null || true
+          fi
+          if [ -d artifacts/target ]; then
+            cp -r artifacts/target/* target/ 2>/dev/null || true
           fi
 
       - name: Publish data-api to registry
@@ -152,6 +172,69 @@ jobs:
 
           echo "Published: ${IMAGE_NAME}:${VERSION}"
 
+      - name: Publish crud-component to registry
+        if: hashFiles('helper/data-api/component/build/crud_component.wasm') != ''
+        run: |
+          IMAGE_NAME="$REGISTRY/$REPO_OWNER/crud-component"
+
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:${VERSION} \
+            ./helper/data-api/component/build/crud_component.wasm
+
+          # Also tag as latest
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --allow-latest \
+            ${IMAGE_NAME}:latest \
+            ./helper/data-api/component/build/crud_component.wasm
+
+          echo "Published: ${IMAGE_NAME}:${VERSION}"
+
+      - name: Publish http-wrapper to registry
+        if: hashFiles('helper/http-wrapper/build/http_wrapper.wasm') != ''
+        run: |
+          IMAGE_NAME="$REGISTRY/$REPO_OWNER/http-wrapper"
+
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:${VERSION} \
+            ./helper/http-wrapper/build/http_wrapper.wasm
+
+          # Also tag as latest
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --allow-latest \
+            ${IMAGE_NAME}:latest \
+            ./helper/http-wrapper/build/http_wrapper.wasm
+
+          echo "Published: ${IMAGE_NAME}:${VERSION}"
+
+      - name: Publish log-to-stdout to registry
+        if: hashFiles('target/wasm32-wasip2/release/log_to_stdout.wasm') != ''
+        run: |
+          IMAGE_NAME="$REGISTRY/$REPO_OWNER/log-to-stdout"
+
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            ${IMAGE_NAME}:${VERSION} \
+            ./target/wasm32-wasip2/release/log_to_stdout.wasm
+
+          # Also tag as latest
+          wash push \
+            --user ${{ github.actor }} \
+            --password ${{ secrets.GITHUB_TOKEN }} \
+            --allow-latest \
+            ${IMAGE_NAME}:latest \
+            ./target/wasm32-wasip2/release/log_to_stdout.wasm
+
+          echo "Published: ${IMAGE_NAME}:${VERSION}"
+
       - name: Summary
         run: |
           echo "## 📦 Published Components to GitHub Packages" >> $GITHUB_STEP_SUMMARY
@@ -184,6 +267,34 @@ jobs:
             echo "  - \`${REGISTRY}/${REPO_OWNER}/smtp-provider:latest\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "- ⏭️ smtp-provider (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### WASM Components:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f helper/data-api/component/build/crud_component.wasm ]; then
+            echo "- ✅ **crud-component**" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/crud-component:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/crud-component:latest\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ crud-component (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f helper/http-wrapper/build/http_wrapper.wasm ]; then
+            echo "- ✅ **http-wrapper**" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/http-wrapper:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/http-wrapper:latest\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ http-wrapper (skipped)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f target/wasm32-wasip2/release/log_to_stdout.wasm ]; then
+            echo "- ✅ **log-to-stdout**" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/log-to-stdout:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+            echo "  - \`${REGISTRY}/${REPO_OWNER}/log-to-stdout:latest\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⏭️ log-to-stdout (skipped)" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY

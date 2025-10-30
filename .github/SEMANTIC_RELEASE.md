@@ -81,12 +81,16 @@ git commit -m "chore: update docs [skip ci]"
 ## Artifacts Published
 
 Each release includes:
+
+**Providers (PAR.GZ):**
 - `data-api-vX.Y.Z.par.gz` - Data API provider
 - `key-vault-vX.Y.Z.par.gz` - Key Vault provider
 - `smtp-provider-vX.Y.Z.par.gz` - SMTP provider
+
+**WASM Components:**
 - `crud-component-vX.Y.Z.wasm` - CRUD component
-- `send-mail-component-vX.Y.Z.wasm` - Send mail component
-- Signed versions (`*_s.wasm`)
+- `http-wrapper-vX.Y.Z.wasm` - HTTP wrapper component
+- `log-to-stdout-vX.Y.Z.wasm` - Logging component
 
 ## Registry Publishing
 

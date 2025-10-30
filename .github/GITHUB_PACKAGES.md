@@ -6,10 +6,15 @@ This project publishes WASM components to **GitHub Packages** (GitHub Container 
 
 All components are published under: `ghcr.io/bettyblocks/`
 
-Available packages:
+**Available Providers (PAR.GZ):**
 - `ghcr.io/bettyblocks/data-api`
 - `ghcr.io/bettyblocks/key-vault`
 - `ghcr.io/bettyblocks/smtp-provider`
+
+**Available WASM Components:**
+- `ghcr.io/bettyblocks/crud-component`
+- `ghcr.io/bettyblocks/http-wrapper`
+- `ghcr.io/bettyblocks/log-to-stdout`
 
 ## Automatic Publishing
 
