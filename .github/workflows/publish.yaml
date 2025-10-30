@@ -104,6 +104,7 @@ jobs:
           wash push \
             --user ${{ github.actor }} \
             --password ${{ secrets.GITHUB_TOKEN }} \
+            --allow-latest \
             ${IMAGE_NAME}:latest \
             ./providers/data-api/build/data-api.par.gz
 
@@ -124,6 +125,7 @@ jobs:
           wash push \
             --user ${{ github.actor }} \
             --password ${{ secrets.GITHUB_TOKEN }} \
+            --allow-latest \
             ${IMAGE_NAME}:latest \
             ./providers/key-vault/build/key-vault.par.gz
 
@@ -144,6 +146,7 @@ jobs:
           wash push \
             --user ${{ github.actor }} \
             --password ${{ secrets.GITHUB_TOKEN }} \
+            --allow-latest \
             ${IMAGE_NAME}:latest \
             ./providers/smtp-provider/build/smtp-provider.par.gz
 
