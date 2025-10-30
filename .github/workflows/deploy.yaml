@@ -33,15 +33,15 @@ jobs:
       - name: Install npm dependencies
         run: bun install --frozen-lockfile
 
-      - name: Download build artifacts
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          workflow: build.yaml
-          run_id: ${{ inputs.build_run_id }}
-          name: wasm-components-*
-          name_is_regexp: true
-          if_no_artifact_found: fail
-          skip_unpack: false
+      # - name: Download build artifacts
+      #   uses: dawidd6/action-download-artifact@v3
+      #   with:
+      #     workflow: build.yaml
+      #     run_id: ${{ inputs.build_run_id }}
+      #     name: wasm-components-*
+      #     name_is_regexp: true
+      #     if_no_artifact_found: fail
+      #     skip_unpack: false
 
-      - name: Publish to Betty Blocks
-        run: cd deply && bun run publish.ts ${{ secrets.BLOCKSTORE_CLI_SECRET }} ${{ inputs.environment }}
+      # - name: Publish to Betty Blocks
+      #   run: cd deply && bun run publish.ts ${{ secrets.BLOCKSTORE_CLI_SECRET }} ${{ inputs.environment }}

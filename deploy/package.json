@@ -1,0 +1,15 @@
+{
+  "name": "deploy",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "publish": "bun run index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
