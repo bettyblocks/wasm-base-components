@@ -1,3 +1,12 @@
+## [1.0.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.0.0...v1.0.1) (2025-10-30)
+
+
+### Bug Fixes
+
+* add flag to allow push latest ([8d8ab5a](https://github.com/bettyblocks/wasm-base-components/commit/8d8ab5a10aeaf4d5d87c6dd9d469d5ee19a1aa2c))
+* add the other wasm components as well using AI ([d58ed32](https://github.com/bettyblocks/wasm-base-components/commit/d58ed32e414fa36218fce4910bd112afdf36f9a6))
+* include target folder in the to uploaded files ([233ca93](https://github.com/bettyblocks/wasm-base-components/commit/233ca938e254f9d28088a1db2bfce366b8efd6d1))
+
 # 1.0.0 (2025-10-30)
 
 
