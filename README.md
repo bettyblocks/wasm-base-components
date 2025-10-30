@@ -68,7 +68,7 @@ just upload-latest 1.2.3
 just version
 ```
 
-Components are published to: `ghcr.io/betty-blocks/COMPONENT_NAME`
+Components are published to: `ghcr.io/bettyblocks/COMPONENT_NAME`
 
 ## Test locally
 

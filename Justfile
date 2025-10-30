@@ -3,7 +3,7 @@
 # Get version from .version file or use default
 VERSION := `cat .version 2>/dev/null || echo "0.1.0"`
 REGISTRY := env_var_or_default("REGISTRY", "ghcr.io")
-REPO_OWNER := env_var_or_default("REPO_OWNER", "betty-blocks")
+REPO_OWNER := env_var_or_default("REPO_OWNER", "bettyblocks")
 
 build:
   wash build --config-path providers/data-api

@@ -92,17 +92,17 @@ Each release includes:
 
 Components are published to: **GitHub Packages** (GitHub Container Registry)
 
-Registry URL: `ghcr.io/betty-blocks`
+Registry URL: `ghcr.io/bettyblocks`
 
 Each component is published with two tags:
-- Version-specific: `ghcr.io/betty-blocks/data-api:1.2.3`
-- Latest: `ghcr.io/betty-blocks/data-api:latest`
+- Version-specific: `ghcr.io/bettyblocks/data-api:1.2.3`
+- Latest: `ghcr.io/bettyblocks/data-api:latest`
 
 ### Accessing Published Packages
 
 Packages are available at:
-- View in GitHub: `https://github.com/orgs/betty-blocks/packages`
-- Pull command: `wash pull ghcr.io/betty-blocks/COMPONENT_NAME:VERSION`
+- View in GitHub: `https://github.com/orgs/bettyblocks/packages`
+- Pull command: `wash pull ghcr.io/bettyblocks/COMPONENT_NAME:VERSION`
 
 ### Authentication for Manual Publishing
 

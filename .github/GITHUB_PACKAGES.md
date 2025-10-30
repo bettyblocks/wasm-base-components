@@ -4,12 +4,12 @@ This project publishes WASM components to **GitHub Packages** (GitHub Container 
 
 ## Published Packages
 
-All components are published under: `ghcr.io/betty-blocks/`
+All components are published under: `ghcr.io/bettyblocks/`
 
 Available packages:
-- `ghcr.io/betty-blocks/data-api`
-- `ghcr.io/betty-blocks/key-vault`
-- `ghcr.io/betty-blocks/smtp-provider`
+- `ghcr.io/bettyblocks/data-api`
+- `ghcr.io/bettyblocks/key-vault`
+- `ghcr.io/bettyblocks/smtp-provider`
 
 ## Automatic Publishing
 
@@ -25,10 +25,10 @@ When a release is created via semantic-release:
 
 ```bash
 # Latest version
-wash pull ghcr.io/betty-blocks/data-api:latest
+wash pull ghcr.io/bettyblocks/data-api:latest
 
 # Specific version
-wash pull ghcr.io/betty-blocks/data-api:1.2.3
+wash pull ghcr.io/bettyblocks/data-api:1.2.3
 ```
 
 ### In wadm.yaml
@@ -39,7 +39,7 @@ spec:
     - name: data-api
       type: capability
       properties:
-        image: ghcr.io/betty-blocks/data-api:1.2.3
+        image: ghcr.io/bettyblocks/data-api:1.2.3
 ```
 
 ## Manual Publishing
@@ -101,7 +101,7 @@ Packages can be:
 - **Private**: Requires authentication to pull
 
 To make packages public:
-1. Go to the package page: `https://github.com/orgs/betty-blocks/packages/container/PACKAGE_NAME`
+1. Go to the package page: `https://github.com/orgs/bettyblocks/packages/container/PACKAGE_NAME`
 2. Click "Package settings"
 3. Scroll to "Danger Zone"
 4. Click "Change visibility" → "Public"
@@ -136,7 +136,7 @@ These are automatically provided via `GITHUB_TOKEN` in GitHub Actions.
 **Solution**:
 - GitHub Container Registry requires lowercase names
 - The workflow automatically converts `REPO_OWNER` to lowercase
-- If manually pushing, ensure: `ghcr.io/betty-blocks/...` (all lowercase)
+- If manually pushing, ensure: `ghcr.io/bettyblocks/...` (all lowercase)
 
 ### Permission Denied in Workflow
 

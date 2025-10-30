@@ -5,7 +5,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/betty-blocks/wasm-base-components.git"
+    "url": "https://github.com/bettyblocks/wasm-base-components.git"
   },
   "scripts": {
     "semantic-release": "semantic-release"
