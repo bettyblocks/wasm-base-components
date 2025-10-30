@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (e.g., 1.2.3)"
-        required: true
+        description: "Version to publish (leave empty to use latest tag)"
+        required: false
         type: string
       registry:
         description: "Registry to publish to"
@@ -25,12 +25,23 @@ jobs:
     env:
       REGISTRY: ${{ github.event_name == 'release' && 'ghcr.io' || inputs.registry }}
       REPO_OWNER: ${{ github.repository_owner }}
-      VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Determine version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -z "${{ inputs.version }}" ]; then
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            echo "Using latest tag: $LATEST_TAG"
+            echo "INPUT_VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          else
+            echo "Using provided version: ${{ inputs.version }}"
+            echo "INPUT_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+          fi
 
       - uses: taiki-e/install-action@v2
         with:
@@ -38,6 +49,13 @@ jobs:
 
       - name: Prepare environment
         run: |
+          # Set VERSION based on event type
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${INPUT_VERSION}"
+          fi
+          
           # Remove 'v' prefix from version if present
           VERSION="${VERSION#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
