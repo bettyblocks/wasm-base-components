@@ -13,7 +13,7 @@ wasmcloud-provider-sdk = { version = "0.13.0", features = ["otel"] }
 wit-bindgen-wrpc = "0.9.0"
 prost = "0.13"
 tonic = "0.13.0"
-jaws-rs = { git = "ssh://git@gitlab.betty.services/code/jaws-rs.git", version = "0.1.0" }
+jaws-rs = { git = "https://github.com/bettyblocks/jaws-rs.git", version = "0.1.0" }
 rand = "0.9.0"
 
 [build-dependencies]
