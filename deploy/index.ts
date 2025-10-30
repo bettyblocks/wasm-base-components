@@ -1,9 +1,15 @@
-import {parseArgs} from 'node:util';
+import { parseArgs } from "node:util";
+import Jaws from "@betty-blocks/jaws";
 import type { Environment, Variables } from "./render";
 import { renderToFile } from "./render";
 
 const REGISTRY = "ghcr.io/bettyblocks";
 const KEYVAULTS = JSON.parse(process.env.KEYVAULTS || "{}");
+const JAWS_SECRETS = JSON.parse(process.env.JAWS_SECRETS || "{}");
+
+if (!JAWS_SECRETS.services || !JAWS_SECRETS.issuer) {
+	throw new Error("JAWS_SECRETS is required");
+}
 
 const determineKeyvaultEndpoint = (env: Environment, zone: string) => {
 	switch (env) {
@@ -48,13 +54,25 @@ async function renderAndDeploy(
 	formData.append("file", Bun.file(wadmPath), "wadm.yaml");
 	formData.append("version", version);
 
-  if (dryRun) {
-    console.log("Dry run, skipping deployment, request:");
-    console.log({url, options: { method: "POST", body: formData }});
-    url = "https://httpbin.org/anything";
-  }
+	const jaws = Jaws.getInstance(JAWS_SECRETS);
+	const {jwt, success} = jaws.sign(zone, { application_id: "native" });
+	if (!success) {
+		throw new Error("Failed to sign JWT");
+	}
 
-	const response = await fetch(url, { method: "POST", body: formData });
+	if (dryRun) {
+		console.log("Dry run, skipping deployment, request:");
+		console.log({ url, options: { method: "POST", body: formData, headers: { Authorization: `Bearer ${jwt}` } } });
+		url = "https://httpbin.org/anything";
+	}
+
+	const response = await fetch(url, {
+		method: "POST",
+		body: formData,
+		headers: {
+			Authorization: dryRun ? "Bearer dry-run" : `Bearer ${jwt}`,
+		},
+	});
 	if (!response.ok) {
 		throw new Error(
 			`Failed to upload to registry: ${response.statusText}, ${await response.text()}`,
@@ -65,25 +83,28 @@ async function renderAndDeploy(
 }
 
 async function main() {
-  const {values: {dryRun}, positionals: [,,env, version]} = parseArgs({
-    args: Bun.argv,
-    options: {
-      dryRun: {
-        type: 'boolean',
-      },
-    },
-    strict: true,
-    allowPositionals: true,
-  })
+	const {
+		values: { dryRun },
+		positionals: [, , env, version],
+	} = parseArgs({
+		args: Bun.argv,
+		options: {
+			dryRun: {
+				type: "boolean",
+			},
+		},
+		strict: true,
+		allowPositionals: true,
+	});
 
-  if (!env) {
+	if (!env) {
 		throw new Error("Environment is required");
 	}
 	if (!version) {
 		throw new Error("Version is required");
 	}
 
-  if (env !== "edge" && env !== "acceptance" && env !== "production") {
+	if (env !== "edge" && env !== "acceptance" && env !== "production") {
 		throw new Error(`Invalid environment, got: ${env}`);
 	}
 
@@ -99,3 +120,7 @@ async function main() {
 }
 
 main();
+
+
+
+// export JAWS_SECRETS='{"services": {"acceptance": {"secret": "github-actions-compiler-secret"}}, "issuer": "github"}'

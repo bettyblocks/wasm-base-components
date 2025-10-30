@@ -11,5 +11,8 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@betty-blocks/jaws": "^1.2.4"
   }
 }

@@ -44,4 +44,4 @@ jobs:
       #     skip_unpack: false
 
       # - name: Publish to Betty Blocks
-      #   run: cd deply && bun run publish.ts ${{ secrets.BLOCKSTORE_CLI_SECRET }} ${{ inputs.environment }}
+      #   run: cd deploy && bun install && bun run publish ${{ inputs.environment }} ${{ env.VERSION }}
