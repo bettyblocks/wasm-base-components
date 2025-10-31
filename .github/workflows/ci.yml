@@ -17,6 +17,9 @@ jobs:
               elixir: 1.18.4
               otp: 27.3.4
             lint: lint
+          - pair:
+              elixir: 1.18.4
+              otp: 27.3.4
     steps:
       - uses: actions/checkout@v4
       - name: Cache Rust
