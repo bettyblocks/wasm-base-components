@@ -71,5 +71,8 @@ jobs:
         if: ${{ matrix.lint }}
 
       - name: Run elixir tests
-        run: cd integration-test && mix test
+        run: |
+          cd integration-test
+          wash up -d
+          CI=1 mix test
         if: ${{ !matrix.lint }}
