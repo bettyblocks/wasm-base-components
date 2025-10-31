@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to'
+        description: "Environment to deploy to"
         required: true
         type: choice
         options:
@@ -12,7 +12,7 @@ on:
           - acceptance
           - production
       build_run_id:
-        description: 'Build workflow run ID (leave empty for latest)'
+        description: "Release workflow run ID (leave empty for latest successful build)"
         required: false
         type: string
 
@@ -33,15 +33,54 @@ jobs:
       - name: Install npm dependencies
         run: bun install --frozen-lockfile
 
+      - name: Get build run ID
+        id: get_run_id
+        run: |
+          if [ -z "${{ inputs.build_run_id }}" ]; then
+            # Get the latest successful run of release.yaml
+            RUN_ID=$(gh run list --workflow=release.yaml --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+            echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+            echo "Using latest build run ID: $RUN_ID"
+          else
+            echo "run_id=${{ inputs.build_run_id }}" >> $GITHUB_OUTPUT
+            echo "Using provided build run ID: ${{ inputs.build_run_id }}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from build run
+        id: get_version
+        run: |
+          # Fetch the workflow run and extract the version output
+          VERSION=$(gh run view ${{ steps.get_run_id.outputs.run_id }} --json jobs --jq '.jobs[] | select(.name == "build") | .steps[] | select(.name == "Read version") | .conclusion' )
+
+          # Get artifact name to extract version
+          ARTIFACT_NAME=$(gh run view ${{ steps.get_run_id.outputs.run_id }} --json artifacts --jq '.artifacts[0].name')
+
+          # Extract version from artifact name (format: wasm-components-vX.Y.Z)
+          VERSION=$(echo $ARTIFACT_NAME | sed 's/wasm-components-v//')
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download build artifacts
         uses: dawidd6/action-download-artifact@v3
         with:
-          workflow: build.yaml
-          run_id: ${{ inputs.build_run_id }}
+          workflow: release.yaml
+          run_id: ${{ steps.get_run_id.outputs.run_id }}
           name: wasm-components-*
           name_is_regexp: true
           if_no_artifact_found: fail
           skip_unpack: false
 
       - name: Publish to Betty Blocks
-        run: cd deply && bun run publish.ts ${{ secrets.BLOCKSTORE_CLI_SECRET }} ${{ inputs.environment }}
+        env:
+          KEYVAULTS: ${{ secrets.KEYVAULTS }}
+          JAWS_SECRETS: ${{ secrets.JAWS_SECRETS }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd deploy
+          bun install
+          bun run publish ${{ inputs.environment }} ${{ steps.get_version.outputs.version }}
