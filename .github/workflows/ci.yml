@@ -51,9 +51,9 @@ jobs:
         if: ${{ !matrix.lint }}
 
       - name: Install Dependencies
-        run: cd integration-test && mix deps.get
+        run: cd integration-test && mix hex.organization auth betty_blocks_bv --key ${{ secrets.HEX_API_KEY }} && mix deps.get
 
-      - run: mix format --check-formatted
+      - run: cd integration-test && mix format --check-formatted
         if: ${{ matrix.lint }}
 
       - run: cd integration-test && mix deps.compile
