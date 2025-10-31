@@ -32,4 +32,4 @@ for (const [keyvault, accountId] of Object.entries(keyvaultsWithAccountId)) {
 }
 let results = await Promise.all(tasks2)
 const zoneLookup = Object.fromEntries(results.filter(([key]) => key !== "backup").toSorted());
-console.log(zoneLookup);
+console.log(JSON.stringify(zoneLookup, null, 2));

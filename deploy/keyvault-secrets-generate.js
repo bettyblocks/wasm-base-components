@@ -1,6 +1,7 @@
 import { $ } from "bun";
 
 const BETTY_PREFIX = "betty-";
+const ISSUER = "github";
 
 async function getKeyvaults(accountId) {
   const keyvaults = await $`az keyvault list --subscription ${accountId}`.json();
@@ -14,6 +15,19 @@ async function getKeyvaultSecrets(accountId, keyvault) {
   const secrets = await $`az keyvault secret show --name actions-compiler-secrets --subscription ${accountId} --vault-name ${keyvault}`.json();
   const zone = keyvault.split("-")[1];
   return [zone, JSON.parse(secrets.value)["ACTIONS_COMPILER_GITHUB_SECRET"]];
+}
+
+function formatSecrets(secrets) {
+  let services = Object.entries(secrets).map(([zone, secret]) => {
+    return {
+      [zone]: { secret },
+    };
+  });
+
+  return {
+    issuer: ISSUER,
+    services,
+  }
 }
 
 const accounts = await $`az account list`.json();
@@ -35,4 +49,4 @@ for (const [keyvault, accountId] of Object.entries(keyvaultsWithAccountId)) {
 }
 let results = await Promise.all(tasks2)
 const secretsLookup = Object.fromEntries(results.filter(([key]) => key).toSorted());
-console.log(secretsLookup);
+console.log(JSON.stringify(formatSecrets(secretsLookup), null, 2));
