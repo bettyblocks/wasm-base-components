@@ -1,3 +1,7 @@
+/**
+ * This file is a script that generates a lookup table of Azure Key Vault URIs organized by zone
+ * this uses the az cli to get the keyvaults and then the keyvault show command to get the vault URI
+ */
 import { $ } from "bun";
 
 const BETTY_PREFIX = "betty-";

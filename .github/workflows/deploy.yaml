@@ -79,6 +79,7 @@ jobs:
         env:
           KEYVAULTS: ${{ secrets.KEYVAULTS }}
           JAWS_SECRETS: ${{ secrets.JAWS_SECRETS }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd deploy
           bun install

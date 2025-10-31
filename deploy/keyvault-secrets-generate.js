@@ -1,3 +1,7 @@
+/**
+ * This file is a script that generates a configuration file with GitHub secrets from Azure Key Vault
+ * this uses the az cli to get the keyvaults and then the keyvault secret show command to get the secrets
+ */
 import { $ } from "bun";
 
 const BETTY_PREFIX = "betty-";
