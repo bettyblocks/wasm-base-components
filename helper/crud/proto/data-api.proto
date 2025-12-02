@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package data_grpc;
+
+service DataAPI {
+  rpc Execute (DataAPIRequest) returns (DataAPIResult);
+}
+
+message Context {
+  string application_id = 1;
+  string jwt = 2;
+}
+
+message DataAPIRequest {
+  string query = 1;
+  string variables = 2;
+  Context context = 3;
+}
+
+message DataAPIResult {
+  enum Status {
+    OK = 0;
+    ERROR = 1;
+  }
+  Status status = 1;
+  string result = 2;
+}

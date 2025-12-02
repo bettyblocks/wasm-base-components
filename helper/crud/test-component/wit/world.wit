@@ -1,0 +1,9 @@
+package betty-blocks:test-component;
+
+
+
+world http-provider {
+    import betty-blocks:crud/crud;
+
+    export wasi:http/incoming-handler@0.2.2;
+}

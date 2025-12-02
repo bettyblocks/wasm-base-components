@@ -1,4 +1,8 @@
-wit_bindgen::generate!({ generate_all });
+wit_bindgen::generate!({ additional_derives: [serde::Deserialize],
+    with: {
+    "betty-blocks:data-api/data-api": generate,
+    "wasi:logging/logging@0.1.0-draft": generate,
+    } });
 
 use crate::betty_blocks::data_api::data_api::request;
 use crate::exports::betty_blocks::crud::crud::{
