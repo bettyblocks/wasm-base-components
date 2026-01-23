@@ -6,7 +6,7 @@ pub mod bindings {
     wit_bindgen::generate!({ generate_all });
 }
 
-use crate::bindings::betty_blocks::types::actions::{Input, Output, Payload, call, health};
+use crate::bindings::betty_blocks::types::actions::{Input, Output, Payload, call};
 
 struct Component;
 
@@ -41,17 +41,12 @@ const MEGABYTE: u64 = 2u64.pow(20);
 const MAX_READ: u64 = MAX_READ_MB * MEGABYTE;
 
 trait IncomingRequestImpl {
-    fn method(&self) -> &http::Method;
     fn body_mut(&mut self) -> &mut impl IncomingBodyImpl;
 }
 
 trait IncomingBodyImpl: std::io::Read {}
 
 impl IncomingRequestImpl for http::IncomingRequest {
-    fn method(&self) -> &http::Method {
-        http::IncomingRequest::method(self)
-    }
-
     fn body_mut(&mut self) -> &mut impl IncomingBodyImpl {
         http::IncomingRequest::body_mut(self)
     }
@@ -65,7 +60,6 @@ enum Error {
     InvalidInput(String),
     InputTooLarge,
     ActionCallFailed(String),
-    HealthCheckFailed(String),
 }
 
 impl From<Error> for http::Response<String> {
@@ -84,9 +78,6 @@ impl From<Error> for http::Response<String> {
             Error::ActionCallFailed(message) => {
                 http::Response::builder().status(400).body(message).unwrap()
             }
-            Error::HealthCheckFailed(message) => {
-                http::Response::builder().status(400).body(message).unwrap()
-            }
         }
     }
 }
@@ -98,12 +89,6 @@ fn inner_handle<F>(
 where
     F: for<'a> FnOnce(&'a Input) -> Result<Output, String>,
 {
-    // Use GET for health checks because cant define multiple paths in wadm in kubernetes
-    if request.method() == http::Method::GET {
-        let health_status = health().map_err(Error::HealthCheckFailed)?;
-        return Ok(http::Response::new(health_status));
-    }
-
     let body = request.body_mut();
     let reader = body.take(MAX_READ);
 
@@ -268,10 +253,6 @@ mod tests {
         assert_eq!(response.body(), "Body size exceeded the maximum of 16mb");
 
         let response = http::Response::from(Error::ActionCallFailed("it broke :(".to_string()));
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(response.body(), "it broke :(");
-
-        let response = http::Response::from(Error::HealthCheckFailed("it broke :(".to_string()));
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         assert_eq!(response.body(), "it broke :(");
     }

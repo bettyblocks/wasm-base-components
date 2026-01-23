@@ -18,5 +18,4 @@ interface actions {
    }
 
    call: func(input: input) -> result<output, string>;
-   health: func() -> result<string, string>;
 }
