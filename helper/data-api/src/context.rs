@@ -116,3 +116,63 @@ impl GuestDataApi for DataAPIContext {
             .map_err(|e| format!("{e:#}"))
     }
 }
+
+
+
+#[test]
+fn xd() {
+    use graphql_parser::{parse_query, minify_query};
+    use graphql_parser::query::{ParseError};
+
+    let query = "mutation {createSong(input: $input)} {id}";
+    let xd = parse_query::<String>(query).unwrap();
+    let mut mutations = Vec::new();
+
+    #[derive(Debug)]
+    enum Blagh {
+        Create,
+        Update,
+        Delete
+    }
+
+    for def in xd.definitions {
+        match def {
+            graphql_parser::query::Definition::Operation(operation) => {
+                match operation {
+                    graphql_parser::query::OperationDefinition::Mutation(mutation) => {
+                        for item in mutation.selection_set.items {
+                            match item {
+                                graphql_parser::query::Selection::Field(field) if field.name.starts_with("create") && !field.name.starts_with("createMany") => {
+                                    let name = field.name.split_at("create".len()).1.to_string();
+                                    mutations.push((Blagh::Create, name));
+                                }
+                                graphql_parser::query::Selection::Field(field) if field.name.starts_with("update") && !field.name.starts_with("updateMany") => {
+                                    let name = field.name.split_at("update".len()).1.to_string();
+                                    mutations.push((Blagh::Update, name));
+                                }
+                                graphql_parser::query::Selection::Field(field) if field.name.starts_with("delete") && !field.name.starts_with("deleteMany") => {
+                                    let name = field.name.split_at("delete".len()).1.to_string();
+                                    mutations.push((Blagh::Delete, name));
+                                }
+                                _ => unimplemented!("other than field")
+                            }
+                        }
+                    }
+                    graphql_parser::query::OperationDefinition::SelectionSet(set) => {
+                        for item in set.items {
+                            match item {
+                                graphql_parser::query::Selection::Field(field) if field.name == "id" => {
+                                }
+                                _ => unimplemented!("other than id")
+                            }
+                        }
+                    }
+                    _ => unimplemented!("other than mutation")
+                }
+            }
+            _ => unimplemented!("other than operation")
+        }
+    }
+    dbg!(mutations);
+    panic!()
+}
