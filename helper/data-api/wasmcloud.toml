@@ -5,3 +5,7 @@ type = "component"
 
 [component]
 wasm_target = "wasm32-wasip2"
+
+[[registry.pull.sources]]
+target = "betty-blocks:types@0.1.0"
+source = "file://../http-wrapper/external/actions.wit"

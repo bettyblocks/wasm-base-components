@@ -11,7 +11,9 @@ use crate::exports::betty_blocks::data_api::data_api::{Guest, HelperContext};
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");
 }
+pub mod context;
 
+use crate::context::DataAPIContext;
 use crate::data_grpc::data_api_client::DataApiClient;
 use crate::data_grpc::DataApiRequest;
 use crate::data_grpc::{Context as GrpcContext, DataApiResult};
@@ -21,14 +23,14 @@ wit_bindgen::generate!({ generate_all });
 const STATUS_ERROR: i32 = Status::Error as i32;
 const STATUS_OK: i32 = Status::Ok as i32;
 
-struct Config {
+pub struct Config {
     grpc_server_uri: String,
     jaws_issuer: String,
     jaws_secret_key: String,
 }
 
 impl Config {
-    fn from_env() -> anyhow::Result<Self> {
+    pub fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             grpc_server_uri: env::var("GRPC_SERVER_URI")
                 .unwrap_or_else(|_| "http://data-api:50054".to_string()),
@@ -38,11 +40,10 @@ impl Config {
     }
 }
 
-struct DataApi {}
-
-export!(DataApi);
+pub struct DataApi {}
 
 impl Guest for DataApi {
+    type DataApi = DataAPIContext;
     fn request(
         helper_context: HelperContext,
         query: String,
@@ -62,14 +63,23 @@ impl Guest for DataApi {
         };
 
         runtime
-            .block_on(inner_request(config, helper_context, query, variables))
+            .block_on(inner_request(
+                config,
+                &helper_context.application_id,
+                helper_context.jwt,
+                query,
+                variables,
+            ))
             .map_err(|e| format!("{e:#}"))
     }
 }
 
-async fn inner_request(
+export!(DataApi);
+
+pub async fn inner_request(
     config: Config,
-    helper_context: HelperContext,
+    application_id: &str,
+    jwt: Option<String>,
     query: String,
     variables: String,
 ) -> anyhow::Result<String> {
@@ -87,12 +97,12 @@ async fn inner_request(
         query,
         variables,
         context: Some(GrpcContext {
-            application_id: helper_context.application_id.to_string(),
-            jwt: helper_context.jwt.unwrap_or_default(),
+            application_id: application_id.to_string(),
+            jwt: jwt.unwrap_or_default(),
         }),
     });
 
-    let token = generate_jaws(&config, helper_context.application_id)?;
+    let token = generate_jaws(&config, application_id.to_string())?;
 
     let metadata = request.metadata_mut();
     metadata.insert(

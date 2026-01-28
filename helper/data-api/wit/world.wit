@@ -1,6 +1,26 @@
 package betty-blocks:data-api;
 
 interface data-api {
+    // use types when it exists
+    use betty-blocks:types/actions.{json-string};
+
+    resource data-api {
+        constructor(application-id: string, action-id: string, jwt: option<string>);
+
+        // capture api. Will capture single mutations and when calling apply-capture will apply them all at once.
+        // the query and many mutations will just pass through it.
+
+        /// start capturing the mutations
+        start-capture: func() -> result<string, string>;
+        /// discard the current captured mutations
+        discard-capture: func() -> result<string, string>;
+        // or flush or commit ?
+        /// apply all the captured mutations
+        apply-capture: func() -> result<string, string>;
+
+        /// do a graphql request to the data-api
+        request: func(query: string, variables: json-string) -> result<json-string, string>;
+    }
 
     record helper-context {
         application-id: string,
