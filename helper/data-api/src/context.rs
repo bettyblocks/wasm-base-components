@@ -1,9 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use crate::exports::betty_blocks::data_api::data_api::{
-     GuestDataApi,  JsonString,
-};
+use crate::exports::betty_blocks::data_api::data_api::{GuestDataApi, JsonString};
 use crate::{inner_request, Config};
 
 pub struct DataAPIContext {
@@ -22,13 +20,9 @@ pub struct MassMutateEntries {
     delete: VecDeque<MassMutateEntry>,
 }
 
-// replace with real serde_json::Value when implementing
-#[allow(non_camel_case_types)]
-type serde_json_Value = String;
-
 pub struct MassMutateEntry {
     model_name: String,
-    variables: serde_json_Value,
+    variables: serde_json::Map<String, serde_json::Value>,
 }
 
 impl GuestDataApi for DataAPIContext {
@@ -117,62 +111,245 @@ impl GuestDataApi for DataAPIContext {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum DataMutation {
+    Create,
+    Update,
+    Delete,
+}
 
+#[derive(Debug, PartialEq)]
+pub struct Intruction {
+    operator: DataMutation,
+    name: String,
+    data: Option<serde_json::Map<String, serde_json::Value>>,
+}
 
-#[test]
-fn xd() {
-    use graphql_parser::{parse_query, minify_query};
-    use graphql_parser::query::{ParseError};
-
-    let query = "mutation {createSong(input: $input)} {id}";
-    let xd = parse_query::<String>(query).unwrap();
-    let mut mutations = Vec::new();
-
-    #[derive(Debug)]
-    enum Blagh {
-        Create,
-        Update,
-        Delete
-    }
-
-    for def in xd.definitions {
-        match def {
-            graphql_parser::query::Definition::Operation(operation) => {
-                match operation {
-                    graphql_parser::query::OperationDefinition::Mutation(mutation) => {
-                        for item in mutation.selection_set.items {
-                            match item {
-                                graphql_parser::query::Selection::Field(field) if field.name.starts_with("create") && !field.name.starts_with("createMany") => {
-                                    let name = field.name.split_at("create".len()).1.to_string();
-                                    mutations.push((Blagh::Create, name));
-                                }
-                                graphql_parser::query::Selection::Field(field) if field.name.starts_with("update") && !field.name.starts_with("updateMany") => {
-                                    let name = field.name.split_at("update".len()).1.to_string();
-                                    mutations.push((Blagh::Update, name));
-                                }
-                                graphql_parser::query::Selection::Field(field) if field.name.starts_with("delete") && !field.name.starts_with("deleteMany") => {
-                                    let name = field.name.split_at("delete".len()).1.to_string();
-                                    mutations.push((Blagh::Delete, name));
-                                }
-                                _ => unimplemented!("other than field")
-                            }
-                        }
-                    }
-                    graphql_parser::query::OperationDefinition::SelectionSet(set) => {
-                        for item in set.items {
-                            match item {
-                                graphql_parser::query::Selection::Field(field) if field.name == "id" => {
-                                }
-                                _ => unimplemented!("other than id")
-                            }
-                        }
-                    }
-                    _ => unimplemented!("other than mutation")
-                }
-            }
-            _ => unimplemented!("other than operation")
+impl Intruction {
+    pub fn create(name: String) -> Self {
+        Intruction {
+            name,
+            operator: DataMutation::Create,
+            data: None,
         }
     }
-    dbg!(mutations);
-    panic!()
+
+    pub fn update(name: String) -> Self {
+        Intruction {
+            name,
+            operator: DataMutation::Update,
+            data: None,
+        }
+    }
+
+    pub fn delete(name: String) -> Self {
+        Intruction {
+            name,
+            operator: DataMutation::Delete,
+            data: None,
+        }
+    }
+}
+
+use graphql_parser::parse_query;
+use graphql_parser::query::ParseError;
+use serde_json::Number;
+
+pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, ParseError> {
+    let document = parse_query::<String>(graphql)?;
+    let mut instruction = None;
+
+    // TODO: get the inlined data from the mutation
+    for def in document.definitions {
+        match def {
+            graphql_parser::query::Definition::Operation(operation) => match operation {
+                graphql_parser::query::OperationDefinition::Mutation(mutation) => {
+                    if mutation.selection_set.items.len() > 1 {
+                        return Ok(None);
+                    }
+
+                    for item in mutation.selection_set.items {
+                        match item {
+                            graphql_parser::query::Selection::Field(field)
+                                if field.name.starts_with("create")
+                                    && !field.name.starts_with("createMany") =>
+                            {
+                                let name = field.name.split_at("create".len()).1.to_string();
+                                let mut new_instruction = Intruction::create(name);
+
+                                extract_values_from_gql_argument(
+                                    &mut new_instruction,
+                                    field.arguments,
+                                );
+
+                                instruction = Some(new_instruction);
+                            }
+                            graphql_parser::query::Selection::Field(field)
+                                if field.name.starts_with("update")
+                                    && !field.name.starts_with("updateMany") =>
+                            {
+                                let name = field.name.split_at("update".len()).1.to_string();
+                                let mut new_instruction = Intruction::update(name);
+
+                                extract_values_from_gql_argument(
+                                    &mut new_instruction,
+                                    field.arguments,
+                                );
+
+                                instruction = Some(new_instruction);
+                            }
+                            graphql_parser::query::Selection::Field(field)
+                                if field.name.starts_with("delete")
+                                    && !field.name.starts_with("deleteMany") =>
+                            {
+                                let name = field.name.split_at("delete".len()).1.to_string();
+                                let mut new_instruction = Intruction::delete(name);
+
+                                extract_values_from_gql_argument(
+                                    &mut new_instruction,
+                                    field.arguments,
+                                );
+
+                                instruction = Some(new_instruction);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                graphql_parser::query::OperationDefinition::SelectionSet(set) => {
+                    for item in set.items {
+                        match item {
+                            graphql_parser::query::Selection::Field(field)
+                                if field.name == "id" => {}
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+    }
+
+    Ok(instruction)
+}
+
+fn extract_values_from_gql_argument(
+    instruction: &mut Intruction,
+    arguments: Vec<(String, graphql_parser::query::Value<'_, String>)>,
+) {
+    let mut tmp_data = serde_json::Map::new();
+    for (key, value) in arguments {
+        if let Some(json) = graphql_to_json(value) {
+            tmp_data.insert(key, json);
+        }
+    }
+    if !tmp_data.is_empty() {
+        instruction.data = Some(tmp_data);
+    }
+}
+
+fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serde_json::Value> {
+    match val {
+        graphql_parser::query::Value::Variable(_) => return None,
+        graphql_parser::query::Value::Boolean(b) => return Some(serde_json::Value::Bool(b)),
+        graphql_parser::query::Value::String(s) => {
+            return Some(serde_json::Value::String(s));
+        }
+        graphql_parser::query::Value::Int(i) => {
+            let num = i.as_i64()?;
+            return Some(serde_json::Value::Number(num.into()));
+        }
+        graphql_parser::query::Value::Float(f) => {
+            return Some(serde_json::Value::Number(Number::from_f64(f)?));
+        }
+        graphql_parser::query::Value::Null => {
+            return Some(serde_json::Value::Null);
+        }
+        graphql_parser::query::Value::Enum(s) => {
+            return Some(serde_json::Value::String(s));
+        }
+        graphql_parser::query::Value::List(l) => {
+            let list = l.into_iter().flat_map(graphql_to_json).collect();
+            return Some(serde_json::Value::Array(list));
+        }
+        graphql_parser::query::Value::Object(m) => {
+            let mut map = serde_json::Map::new();
+            for (k, v) in m {
+                if let Some(json) = graphql_to_json(v) {
+                    map.insert(k, json);
+                }
+            }
+            return Some(serde_json::Value::Object(map));
+        }
+    }
+}
+
+#[test]
+fn parse_graphql_to_intruction_test() {
+    let query = "mutation {createSong(input: $input)} {id}";
+    let out = parse_graphql_to_intruction(query).unwrap().unwrap();
+    assert_eq!(out, Intruction::create("Song".to_string()));
+
+    let query = r#"
+    mutation ($input: userInput, $validationSets: [String]) {
+        createuser(input: $input, validationSets: $validationSets) {
+            id
+        }
+    }"#;
+
+    let out = parse_graphql_to_intruction(query).unwrap().unwrap();
+    assert_eq!(out, Intruction::create("user".to_string()));
+
+    let query = r#"
+        mutation ($id: Int!, $input: userInput, $validationSets: [String]) {
+            updateuser(id: $id, input: $input, validationSets: $validationSets) {
+                id
+        }
+    }"#;
+
+    let out = parse_graphql_to_intruction(query).unwrap().unwrap();
+    assert_eq!(out, Intruction::update("user".to_string()));
+
+    let query = r#"
+        mutation ($id: Int!) {
+            deleteuser(id: $id) {
+                id
+            }
+        }"#;
+
+    let out = parse_graphql_to_intruction(query).unwrap().unwrap();
+    assert_eq!(out, Intruction::delete("user".to_string()));
+
+    let query = r#"
+       {
+            allSong {
+                results {
+                    id
+                    name
+                }
+            }
+        }"#;
+
+    let out = parse_graphql_to_intruction(query).unwrap();
+    assert_eq!(out, None);
+}
+
+#[test]
+fn extract_data_from_mutation() {
+    let query = r#"
+        mutation {
+            deleteuser(id: 2) {
+                id
+            }
+        }"#;
+
+    let out = parse_graphql_to_intruction(query).unwrap().unwrap();
+    let mut instruction = Intruction::delete("user".to_string());
+    instruction.data = Some(serde_json::Map::from_iter([(
+        String::from("id"),
+        serde_json::Value::Number(2.into()),
+    )]));
+
+    assert_eq!(out, instruction);
 }
