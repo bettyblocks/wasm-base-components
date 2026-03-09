@@ -4,8 +4,15 @@ interface data-api {
     // use types when it exists
     use betty-blocks:types/actions.{json-string};
 
+    record pending-mutation {
+        mutation-name: string,
+        mutation: string,
+        variables: json-string,
+    }
+
     resource data-api {
         constructor(application-id: string, action-id: string, jwt: option<string>);
+
 
         // capture api. Will capture single mutations and when calling apply-capture will apply them all at once.
         // the query and many mutations will just pass through it.
@@ -18,8 +25,14 @@ interface data-api {
         /// apply all the captured mutations
         apply-capture: func() -> result<string, string>;
 
+        /// returns the current pending capture, grouped by the order how they need to be applied
+        pending-capture: func() -> result<list<list<pending-mutation>>, string>;
+
         /// do a graphql request to the data-api
         request: func(query: string, variables: json-string) -> result<json-string, string>;
+
+        /// do a graphql request to the data-api, only use when you know what you are doing
+        request-raw: func(query: string, variables: json-string) -> result<json-string, string>;
     }
 
     record helper-context {

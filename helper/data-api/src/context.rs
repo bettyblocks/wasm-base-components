@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
-use crate::exports::betty_blocks::data_api::data_api::{GuestDataApi, JsonString};
+use crate::exports::betty_blocks::data_api::data_api::{self, GuestDataApi, JsonString};
 use crate::{inner_request, Config};
 
 pub struct DataAPIContext {
@@ -20,9 +20,49 @@ pub struct MassMutateEntries {
     delete: VecDeque<MassMutateEntry>,
 }
 
+impl MassMutateEntries {
+    fn as_pending_mutations(&self) -> Vec<Vec<data_api::PendingMutation>> {
+        vec![
+            self.create
+                .iter()
+                .map(|x| x.as_pending_mutation(DataMutation::Create))
+                .collect(),
+            self.update
+                .iter()
+                .map(|x| x.as_pending_mutation(DataMutation::Update))
+                .collect(),
+            self.delete
+                .iter()
+                .map(|x| x.as_pending_mutation(DataMutation::Delete))
+                .collect(),
+        ]
+    }
+}
+
 pub struct MassMutateEntry {
     model_name: String,
     variables: serde_json::Map<String, serde_json::Value>,
+}
+
+impl MassMutateEntry {
+    fn as_pending_mutation(&self, operation: DataMutation) -> data_api::PendingMutation {
+        data_api::PendingMutation {
+            mutation_name: format_mutation_name(&self.model_name, &operation),
+            mutation: format_mutation(&self.model_name, &operation),
+            variables: serde_json::to_string(&self.variables).expect("incorrect variables"),
+        }
+    }
+}
+
+fn format_mutation(model_name: &str, operation: &DataMutation) -> String {
+    format!(
+        "mutation {{ {}{model_name}(input: $input) {{ id }} }}",
+        operation.as_static_str()
+    )
+}
+
+fn format_mutation_name(model_name: &str, operation: &DataMutation) -> String {
+    format!("{}{model_name}", operation.as_static_str())
 }
 
 impl GuestDataApi for DataAPIContext {
@@ -79,6 +119,20 @@ impl GuestDataApi for DataAPIContext {
         Ok(random_capture_id)
     }
 
+    fn pending_capture(&self) -> Result<Vec<Vec<data_api::PendingMutation>>, String> {
+        if let Some(capture_id) = self.capture_stack.lock().expect("lock is poisoned").last() {
+            let lock = self.mass_mutate_entries.lock().expect("lock is poisoned");
+
+            let entries = lock
+                .get(capture_id)
+                .expect("capture stack and mass mutate entries out of sync");
+
+            return Ok(entries.as_pending_mutations());
+        }
+
+        Ok(Vec::new())
+    }
+
     fn request(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
         if let Ok(capture_stack) = self.capture_stack.lock() {
             if capture_stack.len() > 0 {
@@ -86,6 +140,10 @@ impl GuestDataApi for DataAPIContext {
             }
         }
 
+        self.request_raw(query, variables)
+    }
+
+    fn request_raw(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
         let config = match Config::from_env() {
             Ok(config) => config,
             Err(e) => return Err(format!("Configuration error: {e:#}")),
@@ -116,6 +174,18 @@ pub enum DataMutation {
     Create,
     Update,
     Delete,
+}
+
+impl DataMutation {
+    fn as_static_str(&self) -> &'static str {
+        use DataMutation::*;
+
+        match self {
+            Create => "create",
+            Update => "update",
+            Delete => "delete",
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -159,7 +229,6 @@ pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, 
     let document = parse_query::<String>(graphql)?;
     let mut instruction = None;
 
-    // TODO: get the inlined data from the mutation
     for def in document.definitions {
         match def {
             graphql_parser::query::Definition::Operation(operation) => match operation {
