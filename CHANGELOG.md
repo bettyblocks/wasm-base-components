@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.7.0...v1.7.1) (2026-03-13)
+
+
+### Bug Fixes
+
+* forward actions error message ([d7e3e1c](https://github.com/bettyblocks/wasm-base-components/commit/d7e3e1ca70894ad78863ab7d2b41d266ae0ae522))
+
 # [1.7.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.6.0...v1.7.0) (2026-03-12)
 
 
