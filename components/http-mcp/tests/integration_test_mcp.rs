@@ -23,7 +23,7 @@ use wash_runtime::{
         http::{DevRouter, HttpServer},
         Host, HostApi, HostBuilder,
     },
-    plugin::wasi_config::WasiConfig,
+    plugin::wasi_config::DynamicConfig,
     types::{Component, LocalResources, Workload, WorkloadStartRequest},
     wit::WitInterface,
 };
@@ -176,11 +176,11 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
     let mock_action_addr = start_mock_action_server().await?;
 
     let engine = Engine::builder().build()?;
-    let http_plugin = HttpServer::new(DevRouter::default(), addr);
+    let http_plugin = HttpServer::new(DevRouter::default(), addr).await?;
     let host = HostBuilder::new()
         .with_engine(engine)
         .with_http_handler(Arc::new(http_plugin))
-        .with_plugin(Arc::new(WasiConfig::default()))?
+        .with_plugin(Arc::new(DynamicConfig::default()))?
         .build()?
         .start()
         .await
@@ -195,7 +195,9 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
             service: None,
             components: vec![
                 Component {
+                    name: "betty-mcp".to_string(),
                     bytes: bytes::Bytes::from_static(BETTY_MCP_COMPONENT_WASM),
+                    digest: None,
                     local_resources: LocalResources {
                         memory_limit_mb: 256,
                         cpu_limit: 1,
@@ -208,20 +210,22 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
                             ("APPLICATION_ID".to_string(), "test-app-id".to_string()),
                         ]),
                         volume_mounts: vec![],
-                        allowed_hosts: vec![mock_action_addr.to_string()],
+                        allowed_hosts: vec![mock_action_addr.to_string()].into(),
                     },
                     pool_size: 1,
                     max_invocations: 100,
                 },
                 Component {
+                    name: "jwt-auth".to_string(),
                     bytes: bytes::Bytes::from_static(JWT_AUTH_COMPONENT_WASM),
+                    digest: None,
                     local_resources: LocalResources {
                         memory_limit_mb: 128,
                         cpu_limit: 1,
                         config: auth_component_config(),
                         environment: HashMap::new(),
                         volume_mounts: vec![],
-                        allowed_hosts: vec![],
+                        allowed_hosts: vec![].into(),
                     },
                     pool_size: 1,
                     max_invocations: 100,
@@ -239,6 +243,7 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
                     .collect(),
                     version: Some(semver::Version::parse("0.2.2").unwrap()),
                     config: HashMap::from([("host".to_string(), addr.to_string())]),
+                    name: None,
                 },
                 WitInterface {
                     namespace: "wasi".to_string(),
@@ -250,6 +255,7 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
                         config.extend(auth_component_config());
                         config
                     },
+                    name: None,
                 },
                 WitInterface {
                     namespace: "wasi".to_string(),
@@ -257,6 +263,7 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
                     interfaces: ["environment".to_string()].into_iter().collect(),
                     version: Some(semver::Version::parse("0.2.2").unwrap()),
                     config: HashMap::new(),
+                    name: None,
                 },
             ],
             volumes: vec![],

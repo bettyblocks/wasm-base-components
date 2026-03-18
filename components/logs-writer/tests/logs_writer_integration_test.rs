@@ -111,7 +111,7 @@ async fn setup_wasmcloud_host() -> anyhow::Result<TestConfig> {
     let engine = Engine::builder().build()?;
 
     let http_handler = DevRouter::default();
-    let http_plugin = HttpServer::new(http_handler, http_addr);
+    let http_plugin = HttpServer::new(http_handler, http_addr).await?;
 
     info!("Starting host");
     let host = HostBuilder::new()
@@ -148,27 +148,31 @@ async fn start_workload(test_config: &TestConfig, logs_addr: SocketAddr) -> anyh
             service: None,
             components: vec![
                 Component {
+                    name: "logs-writer".to_string(),
                     bytes: bytes::Bytes::from_static(LOGS_WRITER_COMPONENT),
+                    digest: None,
                     local_resources: LocalResources {
                         memory_limit_mb: 256,
                         cpu_limit: 1,
                         config: HashMap::new(),
                         environment: config.clone(),
                         volume_mounts: vec![],
-                        allowed_hosts: allowed_hosts.clone(),
+                        allowed_hosts: allowed_hosts.into(),
                     },
                     pool_size: 1,
                     max_invocations: 100,
                 },
                 Component {
+                    name: "test-component".to_string(),
                     bytes: bytes::Bytes::from_static(TEST_COMPONENT),
+                    digest: None,
                     local_resources: LocalResources {
                         memory_limit_mb: 256,
                         cpu_limit: 1,
                         config: HashMap::new(),
                         environment: config.clone(),
                         volume_mounts: vec![],
-                        allowed_hosts: vec![],
+                        allowed_hosts: vec![].into(),
                     },
                     pool_size: 1,
                     max_invocations: 100,
@@ -185,6 +189,7 @@ async fn start_workload(test_config: &TestConfig, logs_addr: SocketAddr) -> anyh
                         config.insert("host".to_string(), HTTP_HOST_HEADER.to_string());
                         config
                     },
+                    name: None,
                 },
                 WitInterface {
                     namespace: "wasi".to_string(),
@@ -192,6 +197,7 @@ async fn start_workload(test_config: &TestConfig, logs_addr: SocketAddr) -> anyh
                     interfaces: ["outgoing-handler".to_string()].into_iter().collect(),
                     version: Some(semver::Version::parse("0.2.4").unwrap()),
                     config: HashMap::new(),
+                    name: None,
                 },
             ],
             volumes: vec![],

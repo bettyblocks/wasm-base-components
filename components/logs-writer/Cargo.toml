@@ -23,4 +23,4 @@ reqwest = { version = "0.12.24", default-features = false, features = ["json"] }
 semver = "1.0.27"
 tokio = { version = "1.48.0", features = ["macros", "net", "rt-multi-thread", "time"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-wash-runtime = { git = "https://github.com/bettyblocks/wash", branch = "feat/ordering-remote-test" }
+wash-runtime = { git = "https://github.com/bettyblocks/wasmCloud.git", rev = "54376a3d0470dc0527e0592faa170f9c0afd861f" }

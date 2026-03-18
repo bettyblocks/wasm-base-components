@@ -15,7 +15,7 @@ jsonschema = { version = "0.28", default-features = false }
 wstd = "0.6.5"
 
 [dev-dependencies]
-wash-runtime = { git = "https://github.com/bettyblocks/wash", rev = "45e778cd692a86cacdfc8dac748f9be9bc4d304b" }
+wash-runtime = { git = "https://github.com/bettyblocks/wasmCloud.git", rev = "54376a3d0470dc0527e0592faa170f9c0afd861f" }
 tokio = { version = "1", features = ["rt", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 axum = "0.8"

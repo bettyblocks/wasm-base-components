@@ -26,7 +26,7 @@ impl http::Server for Component {
         })
         .to_string();
 
-        send_log_and_variables(&vec![message], &variables);
+        send_log_and_variables(&[message], &variables);
 
         Ok(http::Response::new("ok".to_string()))
     }
