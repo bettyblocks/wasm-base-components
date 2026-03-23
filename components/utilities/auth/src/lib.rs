@@ -1,5 +1,5 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{de::DeserializeOwned, Deserialize};
 use std::collections::HashMap;
 
@@ -22,21 +22,36 @@ struct JwtPayload {
     auth_profile_id: String,
 }
 
-#[derive(Deserialize)]
-struct AuthProfileConfig {
-    value: String,
-    #[allow(unused)]
-    is_encrypted: bool,
-}
+type AuthProfileConfig = HashMap<String, String>;
 
 #[derive(Deserialize)]
 struct ResourceAuthConfig {
+    /// the auth profile configured for this resource, None means that it is a public resource
     #[serde(rename = "authentication-profile-id")]
-    authentication_profile_id: String,
+    authentication_profile_id: Option<String>,
 }
 
+#[cfg(test)]
 fn load_config<T: DeserializeOwned>(key: &str) -> Result<T, AuthError> {
-    let raw = crate::bindings::wasi::config::store::get(key)
+    let auth_profiles: AuthProfileConfig =
+        HashMap::from_iter([("profile-abc".to_string(), "c2VjcmV0".to_string())]);
+    let map: HashMap<String, String> = HashMap::from_iter([(
+        "authentication_profiles".to_string(),
+        serde_json::to_string(&auth_profiles).unwrap(),
+    )]);
+    config_from_string(key, Ok(map.get(key).map(|x| x.to_string())))
+}
+
+#[cfg(not(test))]
+fn load_config<T: DeserializeOwned>(key: &str) -> Result<T, AuthError> {
+    config_from_string(key, crate::bindings::wasi::config::store::get(key))
+}
+
+fn config_from_string<T: DeserializeOwned>(
+    key: &str,
+    input: Result<Option<String>, crate::bindings::wasi::config::store::Error>,
+) -> Result<T, AuthError> {
+    let raw = input
         .map_err(|e| {
             AuthError::MissingConfig(format!("Config store error for '{}': {:?}", key, e))
         })?
@@ -47,7 +62,7 @@ fn load_config<T: DeserializeOwned>(key: &str) -> Result<T, AuthError> {
         .map_err(|e| AuthError::MissingConfig(format!("Failed to parse {}: {}", key, e)))
 }
 
-fn load_auth_profiles() -> Result<HashMap<String, AuthProfileConfig>, AuthError> {
+fn load_auth_profiles() -> Result<AuthProfileConfig, AuthError> {
     load_config(CONFIG_KEY_AUTHENTICATION_PROFILES)
 }
 
@@ -83,64 +98,79 @@ fn peek_auth_profile_id(token: &str) -> Result<String, AuthError> {
     Ok(claims.auth_profile_id)
 }
 
-fn validate_hs256(token: &str, secret: &str) -> Result<(), AuthError> {
+fn validate_jwt(token: &str, secret: &str) -> Result<(), AuthError> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
     validation.validate_nbf = true;
     validation.leeway = 30;
     validation.set_required_spec_claims(&["exp"]);
-    let _claims = decode::<serde_json::Value>(
+
+    let decoded_secret = match URL_SAFE_NO_PAD.decode(secret) {
+        Ok(x) => x,
+        Err(_) => secret.as_bytes().to_vec(),
+    };
+    jsonwebtoken::decode::<serde_json::Value>(
         token,
-        &DecodingKey::from_secret(secret.as_bytes()),
+        &DecodingKey::from_secret(&decoded_secret),
         &validation,
     )
     .map_err(|e| AuthError::ValidationFailed(format!("JWT validation failed: {}", e)))?;
     Ok(())
 }
 
-fn fetch_validated_profile(
-    headers: &[(String, Vec<u8>)],
-) -> Result<(String, AuthProfileConfig), AuthError> {
+fn fetch_validated_profile(headers: &[(String, Vec<u8>)]) -> Result<String, AuthError> {
     let token = extract_bearer_token(headers)?;
     let jwt_profile_id = peek_auth_profile_id(&token)?;
     let profiles = load_auth_profiles()?;
     let profile = profiles
-        .into_iter()
-        .find(|(id, _)| id == &jwt_profile_id)
+        .get_key_value(&jwt_profile_id)
         .ok_or_else(|| AuthError::ValidationFailed("Unknown auth profile in JWT".into()))?;
-    validate_hs256(&token, &profile.1.value)?;
-    Ok(profile)
+    validate_jwt(&token, profile.1)?;
+    Ok(jwt_profile_id)
 }
 
-fn authenticate_and_check_profile(
-    headers: &[(String, Vec<u8>)],
-    expected_profile_id: &str,
-) -> Result<bool, AuthError> {
-    let (jwt_profile_id, _) = fetch_validated_profile(headers)?;
-    Ok(jwt_profile_id == expected_profile_id)
+fn check_profile_authorization(
+    headers: &Headers,
+    resource_cfg: &ResourceAuthConfig,
+    error_msg: &'static str,
+) -> Result<(), AuthError> {
+    if let Some(ref auth_profile_id) = resource_cfg.authentication_profile_id {
+        let jwt_profile_id = fetch_validated_profile(headers)?;
+        if &jwt_profile_id != auth_profile_id {
+            return Err(AuthError::ValidationFailed(error_msg.into()));
+        }
+        Ok(())
+    } else {
+        // resource is public so allow everyone
+        Ok(())
+    }
 }
 
 impl Guest for Component {
-    fn allowed_to_call(headers: Headers, action_id: String) -> Result<bool, AuthError> {
+    fn allowed_to_call(headers: Headers, action_id: String) -> Result<(), AuthError> {
         let actions = load_actions_config()?;
         let action_cfg = actions
             .get(&action_id)
             .ok_or_else(|| AuthError::ValidationFailed("Action not found in auth config".into()))?;
-        let (jwt_profile_id, _profile) = fetch_validated_profile(&headers)?;
-        if jwt_profile_id != action_cfg.authentication_profile_id {
-            return Err(AuthError::ValidationFailed(
-                "Forbidden: auth profile does not allow this action".into(),
-            ));
-        }
-        Ok(true)
+
+        check_profile_authorization(
+            &headers,
+            action_cfg,
+            "Forbidden: auth profile does not allow this action",
+        )
     }
 
-    fn allowed_to_list(headers: Headers, mcp_id: String) -> Result<bool, AuthError> {
+    fn allowed_to_list(headers: Headers, mcp_id: String) -> Result<(), AuthError> {
         let mcps = load_mcps_config()?;
         let mcp_cfg = mcps
             .get(&mcp_id)
             .ok_or_else(|| AuthError::ValidationFailed("MCP not found in auth config".into()))?;
-        authenticate_and_check_profile(&headers, &mcp_cfg.authentication_profile_id)
+
+        check_profile_authorization(
+            &headers,
+            mcp_cfg,
+            "Forbidden: auth profile does not allow to list this mcp server",
+        )
     }
 }
 
@@ -149,18 +179,10 @@ bindings::export!(Component with_types_in bindings);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+    use jsonwebtoken::{Algorithm, EncodingKey, Header};
     use serde::Serialize;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn now() -> u64 {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-    }
-
-    fn make_hs256_token(secret: &[u8], auth_profile: &str, exp_offset: i64) -> String {
+    fn make_jwt_token(secret: &[u8], auth_profile: &str, exp_offset: i64) -> String {
         #[derive(Serialize)]
         struct Claims {
             auth_profile_id: String,
@@ -168,7 +190,7 @@ mod tests {
             nbf: u64,
             iat: u64,
         }
-        let n = now();
+        let n = jsonwebtoken::get_current_timestamp();
         let claims = Claims {
             auth_profile_id: auth_profile.to_string(),
             exp: (n as i64 + exp_offset) as u64,
@@ -176,7 +198,8 @@ mod tests {
             iat: n,
         };
         let header = Header::new(Algorithm::HS256);
-        encode(&header, &claims, &EncodingKey::from_secret(secret)).expect("encode failed")
+        jsonwebtoken::encode(&header, &claims, &EncodingKey::from_secret(secret))
+            .expect("encode failed")
     }
 
     fn make_auth_headers(token: &str) -> Vec<(String, Vec<u8>)> {
@@ -216,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_peek_auth_profile_id_valid() {
-        let token = make_hs256_token(b"secret", "profile-abc", 3600);
+        let token = make_jwt_token(b"secret", "profile-abc", 3600);
         let result = peek_auth_profile_id(&token);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "profile-abc");
@@ -235,25 +258,89 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_hs256_valid() {
+    fn test_validate_jwt_valid() {
         let secret = b"test_secret";
-        let token = make_hs256_token(secret, "profile-xyz", 3600);
-        let result = validate_hs256(&token, "test_secret");
+        let token = make_jwt_token(secret, "profile-xyz", 3600);
+        let result = validate_jwt(&token, "test_secret");
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_validate_hs256_wrong_secret() {
-        let token = make_hs256_token(b"correct_secret", "profile-xyz", 3600);
-        let result = validate_hs256(&token, "wrong_secret");
+    fn test_validate_jwt_wrong_secret() {
+        let token = make_jwt_token(b"correct_secret", "profile-xyz", 3600);
+        let result = validate_jwt(&token, "wrong_secret");
         assert!(matches!(result, Err(AuthError::ValidationFailed(_))));
     }
 
     #[test]
-    fn test_validate_hs256_expired() {
+    fn test_validate_jwt_expired() {
         let secret = b"test_secret";
-        let token = make_hs256_token(secret, "profile-xyz", -3600);
-        let result = validate_hs256(&token, "test_secret");
+        let token = make_jwt_token(secret, "profile-xyz", -3600);
+        let result = validate_jwt(&token, "test_secret");
         assert!(matches!(result, Err(AuthError::ValidationFailed(_))));
+    }
+
+    #[test]
+    fn test_check_profile_authorization_works() {
+        let token = make_jwt_token(b"secret", "profile-abc", 3600);
+        let headers = make_auth_headers(&token);
+
+        check_profile_authorization(
+            &headers,
+            &ResourceAuthConfig {
+                authentication_profile_id: Some("profile-abc".to_string()),
+            },
+            "",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_check_profile_authorization_auth_profile_not_found() {
+        let token = make_jwt_token(b"secret", "profile-xyz", 3600);
+        let headers = make_auth_headers(&token);
+
+        let actual = check_profile_authorization(
+            &headers,
+            &ResourceAuthConfig {
+                authentication_profile_id: Some("profile-abc".to_string()),
+            },
+            "",
+        )
+        .unwrap_err();
+        let expected = AuthError::ValidationFailed("Unknown auth profile in JWT".to_string());
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_check_profile_authorization_incorrect_auth_profile() {
+        let token = make_jwt_token(b"secret", "profile-abc", 3600);
+        let headers = make_auth_headers(&token);
+
+        let error_msg = "here";
+        let actual = check_profile_authorization(
+            &headers,
+            &ResourceAuthConfig {
+                authentication_profile_id: Some("profile-xyz".to_string()),
+            },
+            error_msg,
+        )
+        .unwrap_err();
+        let expected = AuthError::ValidationFailed(error_msg.to_string());
+        assert_eq!(actual.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn test_check_profile_authorization_public() {
+        let headers = make_auth_headers("testing");
+
+        check_profile_authorization(
+            &headers,
+            &ResourceAuthConfig {
+                authentication_profile_id: None,
+            },
+            "",
+        )
+        .unwrap()
     }
 }
