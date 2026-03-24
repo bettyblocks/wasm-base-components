@@ -1,3 +1,12 @@
+# [1.8.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.7.1...v1.8.0) (2026-03-24)
+
+
+### Features
+
+* add auth component to mcp server component ([a859852](https://github.com/bettyblocks/wasm-base-components/commit/a85985249c5c32cae15b9bf5130d43c3f79b825a))
+* sync auth component with actions-compiler implementation ([a1eab4a](https://github.com/bettyblocks/wasm-base-components/commit/a1eab4a6081552fcc4be3b0b66243c25aefb62f2))
+* sync auth component with actions-compiler implementation ([0991a6d](https://github.com/bettyblocks/wasm-base-components/commit/0991a6d2b026e6731febdd9a947e5ff396dcbb3d))
+
 ## [1.7.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.7.0...v1.7.1) (2026-03-13)
 
 
