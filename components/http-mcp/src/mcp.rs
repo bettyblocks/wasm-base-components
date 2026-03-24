@@ -1,5 +1,5 @@
 use crate::actions;
-// use crate::betty_blocks::auth::jwt::{allowed_to_call, allowed_to_list, AuthError};
+use crate::betty_blocks::auth::jwt::{allowed_to_call, allowed_to_list, AuthError};
 use crate::config;
 use crate::types::McpServerConfig;
 use rust_mcp_schema::{
@@ -83,24 +83,22 @@ pub async fn process_rpc(
     }
 }
 
-// fn check_allowed_to_list(headers: &Headers, server_id: &str) -> Result<(), String> {
-//     match allowed_to_list(headers, server_id) {
-//         Ok(true) => Ok(()),
-//         Ok(false) => Err("Forbidden: auth profile does not allow access to this mcp".to_string()),
-//         Err(e) => Err(format!("Auth error: {}", auth_error_message(e))),
-//     }
-// }
+fn check_allowed_to_list(headers: &Headers, server_id: &str) -> Result<(), String> {
+    if let Err(e) = allowed_to_list(headers, server_id) {
+        return Err(format!("Auth error: {}", auth_error_message(e)));
+    }
 
-fn handle_initialize(_headers: &Headers, server_config: &McpServerConfig) -> Result<Value, String> {
-    // NOTE: Milestone 0, without API key only public MCPs
-    // check_allowed_to_list(headers, &server_config.id)?;
+    Ok(())
+}
+
+fn handle_initialize(headers: &Headers, server_config: &McpServerConfig) -> Result<Value, String> {
+    check_allowed_to_list(headers, &server_config.id)?;
     let result = crate::config::build_initialize_result(server_config);
     serde_json::to_value(result).map_err(|e| format!("Failed to serialize initialize result: {e}"))
 }
 
-fn handle_list_tools(_headers: &Headers, server_config: &McpServerConfig) -> Result<Value, String> {
-    // NOTE: Milestone 0, without API key only public MCPs
-    // check_allowed_to_list(headers, &server_config.id)?;
+fn handle_list_tools(headers: &Headers, server_config: &McpServerConfig) -> Result<Value, String> {
+    check_allowed_to_list(headers, &server_config.id)?;
     let result = ListToolsResult {
         tools: server_config.tools.iter().map(|t| t.tool.clone()).collect(),
         next_cursor: None,
@@ -112,7 +110,7 @@ fn handle_list_tools(_headers: &Headers, server_config: &McpServerConfig) -> Res
 
 async fn handle_call_tool(
     server_config: &McpServerConfig,
-    _headers: &Headers,
+    headers: &Headers,
     params: Option<Value>,
     wasmcloud_host: &str,
     application_id: &str,
@@ -132,14 +130,9 @@ async fn handle_call_tool(
         &tool_with_action.tool.input_schema,
     )?;
 
-    // NOTE: Milestone 0, without API key only public MCPs
-    // match allowed_to_call(headers, &tool_with_action.action_id) {
-    //     Ok(true) => {}
-    //     Ok(false) => {
-    //         return Err("Forbidden: auth profile does not allow calling this tool".to_string())
-    //     }
-    //     Err(e) => return Err(format!("Auth error: {}", auth_error_message(e))),
-    // }
+    if let Err(e) = allowed_to_call(headers, &tool_with_action.action_id) {
+        return Err(format!("Auth error: {}", auth_error_message(e)));
+    }
 
     // TODO(Configurations fetching TBD)
     let configurations = "[]".to_string();
@@ -201,12 +194,12 @@ pub fn create_error_response(
     )
 }
 
-// fn auth_error_message(e: AuthError) -> String {
-//     match e {
-//         AuthError::MalformedToken => "malformed token".to_string(),
-//         AuthError::MissingConfig(msg) | AuthError::ValidationFailed(msg) => msg,
-//     }
-// }
+fn auth_error_message(e: AuthError) -> String {
+    match e {
+        AuthError::MalformedToken => "malformed token".to_string(),
+        AuthError::MissingConfig(msg) | AuthError::ValidationFailed(msg) => msg,
+    }
+}
 
 #[cfg(test)]
 mod tests {

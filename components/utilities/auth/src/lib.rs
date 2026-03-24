@@ -1,4 +1,7 @@
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{de::DeserializeOwned, Deserialize};
 use std::collections::HashMap;
@@ -25,10 +28,24 @@ struct JwtPayload {
 type AuthProfileConfig = HashMap<String, String>;
 
 #[derive(Deserialize)]
+enum Access {
+    Public,
+    Private(String),
+}
+
+#[derive(Deserialize)]
 struct ResourceAuthConfig {
-    /// the auth profile configured for this resource, None means that it is a public resource
     #[serde(rename = "authentication-profile-id")]
     authentication_profile_id: Option<String>,
+}
+
+impl ResourceAuthConfig {
+    fn as_access(&self) -> Access {
+        match self.authentication_profile_id {
+            Some(ref auth_id) => Access::Private(auth_id.clone()),
+            None => Access::Public,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -105,7 +122,7 @@ fn validate_jwt(token: &str, secret: &str) -> Result<(), AuthError> {
     validation.leeway = 30;
     validation.set_required_spec_claims(&["exp"]);
 
-    let decoded_secret = match URL_SAFE_NO_PAD.decode(secret) {
+    let decoded_secret = match STANDARD.decode(secret) {
         Ok(x) => x,
         Err(_) => secret.as_bytes().to_vec(),
     };
@@ -123,9 +140,9 @@ fn fetch_validated_profile(headers: &[(String, Vec<u8>)]) -> Result<String, Auth
     let jwt_profile_id = peek_auth_profile_id(&token)?;
     let profiles = load_auth_profiles()?;
     let profile = profiles
-        .get_key_value(&jwt_profile_id)
+        .get(&jwt_profile_id)
         .ok_or_else(|| AuthError::ValidationFailed("Unknown auth profile in JWT".into()))?;
-    validate_jwt(&token, profile.1)?;
+    validate_jwt(&token, profile)?;
     Ok(jwt_profile_id)
 }
 
@@ -134,15 +151,15 @@ fn check_profile_authorization(
     resource_cfg: &ResourceAuthConfig,
     error_msg: &'static str,
 ) -> Result<(), AuthError> {
-    if let Some(ref auth_profile_id) = resource_cfg.authentication_profile_id {
-        let jwt_profile_id = fetch_validated_profile(headers)?;
-        if &jwt_profile_id != auth_profile_id {
-            return Err(AuthError::ValidationFailed(error_msg.into()));
+    match resource_cfg.as_access() {
+        Access::Private(auth_profile_id) => {
+            let jwt_profile_id = fetch_validated_profile(headers)?;
+            if jwt_profile_id != auth_profile_id {
+                return Err(AuthError::ValidationFailed(error_msg.into()));
+            }
+            Ok(())
         }
-        Ok(())
-    } else {
-        // resource is public so allow everyone
-        Ok(())
+        Access::Public => Ok(()),
     }
 }
 

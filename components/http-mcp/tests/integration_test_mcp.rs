@@ -82,7 +82,7 @@ fn auth_component_config() -> HashMap<String, String> {
         (
             "authentication_profiles".to_string(),
             json!({
-                TEST_PROFILE_ID: { "value": TEST_SECRET, "is_encrypted": false }
+                TEST_PROFILE_ID: TEST_SECRET
             })
             .to_string(),
         ),
@@ -350,8 +350,6 @@ async fn test_happy_path() -> Result<()> {
     Ok(())
 }
 
-// TODO: Re-enable when JWT auth is enabled (milestone 2)
-#[ignore]
 #[tokio::test]
 async fn test_auth_failures() -> Result<()> {
     let (_host, addr) = setup().await?;
