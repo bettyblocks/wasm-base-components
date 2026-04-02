@@ -134,8 +134,13 @@ async fn handle_call_tool(
         return Err(format!("Auth error: {}", auth_error_message(e)));
     }
 
-    // TODO(Configurations fetching TBD)
-    let configurations = "[]".to_string();
+    let betty_config = if let Ok(betty_config) = config::load_betty_config() {
+        betty_config
+    } else {
+        serde_json::Value::Object(Default::default())
+    };
+
+    let configurations = serde_json::to_string(&betty_config).expect("betty config was loaded from json");
 
     let args_value = call_params
         .arguments

@@ -9,6 +9,7 @@ use rust_mcp_schema::{
 };
 
 const WASI_CONFIG_KEY: &str = "mcp_servers";
+const BETTY_CONFIG_KEY: &str = "betty_config";
 const WASMCLOUD_HOST_ENV: &str = "WASMCLOUD_HOST";
 const APPLICATION_ID_ENV: &str = "APPLICATION_ID";
 
@@ -40,6 +41,14 @@ pub fn load_server_config(server_id: &str) -> Result<McpServerConfig, String> {
         .ok_or_else(|| "mcp_servers key not found in runtime configuration".to_string())?;
 
     parse_server_config(&raw, server_id)
+}
+
+pub fn load_betty_config() -> Result<serde_json::Value, String> {
+    let raw = get(BETTY_CONFIG_KEY)
+        .map_err(|e| format!("Failed to get betty config: {e:?}"))?
+        .ok_or_else(|| "mcp_servers key not found in runtime configuration".to_string())?;
+
+    Ok(serde_json::from_str(&raw).map_err(|e| format!("unable to decode betty config {e}"))?)
 }
 
 pub fn build_initialize_result(server_config: &McpServerConfig) -> InitializeResult {
