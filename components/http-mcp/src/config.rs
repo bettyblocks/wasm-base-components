@@ -48,7 +48,7 @@ pub fn load_betty_config() -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Failed to get betty config: {e:?}"))?
         .ok_or_else(|| "mcp_servers key not found in runtime configuration".to_string())?;
 
-    Ok(serde_json::from_str(&raw).map_err(|e| format!("unable to decode betty config {e}"))?)
+    serde_json::from_str(&raw).map_err(|e| format!("unable to decode betty config {e}"))
 }
 
 pub fn build_initialize_result(server_config: &McpServerConfig) -> InitializeResult {

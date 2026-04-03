@@ -140,7 +140,8 @@ async fn handle_call_tool(
         serde_json::Value::Object(Default::default())
     };
 
-    let configurations = serde_json::to_string(&betty_config).expect("betty config was loaded from json");
+    let configurations =
+        serde_json::to_string(&betty_config).expect("betty config was loaded from json");
 
     let args_value = call_params
         .arguments
