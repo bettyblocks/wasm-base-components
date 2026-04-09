@@ -134,8 +134,7 @@ async fn handle_call_tool(
         return Err(format!("Auth error: {}", auth_error_message(e)));
     }
 
-    // TODO(Configurations fetching TBD)
-    let configurations = "[]".to_string();
+    let configurations = config::load_betty_config().unwrap_or(String::from("{}"));
 
     let args_value = call_params
         .arguments
