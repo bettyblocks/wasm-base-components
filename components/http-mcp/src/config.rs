@@ -43,12 +43,15 @@ pub fn load_server_config(server_id: &str) -> Result<McpServerConfig, String> {
     parse_server_config(&raw, server_id)
 }
 
-pub fn load_betty_config() -> Result<serde_json::Value, String> {
-    let raw = get(BETTY_CONFIG_KEY)
+pub fn load_betty_config() -> Result<String, String> {
+    let betty_config_string = get(BETTY_CONFIG_KEY)
         .map_err(|e| format!("Failed to get betty config: {e:?}"))?
         .ok_or_else(|| "mcp_servers key not found in runtime configuration".to_string())?;
 
-    serde_json::from_str(&raw).map_err(|e| format!("unable to decode betty config {e}"))
+    let _: serde::de::IgnoredAny = serde_json::from_str(&betty_config_string)
+        .map_err(|e| format!("unable to decode betty config {e}"))?;
+
+    Ok(betty_config_string)
 }
 
 pub fn build_initialize_result(server_config: &McpServerConfig) -> InitializeResult {
