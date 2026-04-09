@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.8.0...v1.9.0) (2026-04-09)
+
+
+### Features
+
+* add betty config to mcp component ([e1333e1](https://github.com/bettyblocks/wasm-base-components/commit/e1333e15df95b35329ca959a2070e56a272a82c9))
+
 # [1.8.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.7.1...v1.8.0) (2026-03-24)
 
 
