@@ -55,6 +55,7 @@ fn is_collection(value: &serde_json::Value) -> bool {
 fn as_collection(value: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
     match value {
         serde_json::Value::Array(arr) if arr.first().map(is_record).unwrap_or(false) => Some(arr),
+        serde_json::Value::Array(arr) if arr.is_empty() => Some(arr),
         _ => None,
     }
 }
@@ -1051,6 +1052,33 @@ fragment taskFields on Task {
             let expected_result: serde_json::Value =
                 json!({ "name": "test", "abilities": [{"name": "Tackle"}] });
             assert_eq!(assigned_properties, expected_result,);
+        }
+
+        #[test]
+        fn empty_has_and_belongs_to_many_should_wrap_in_id_object() {
+            let property_map = vec![
+                PropertyMap {
+                    key: vec![PropertyPath {
+                        kind: "STRING".to_string(),
+                        name: "title".to_string(),
+                        object_fields: None,
+                    }],
+                    value: Some("Assign empty collection".to_string()),
+                },
+                PropertyMap {
+                    key: vec![PropertyPath {
+                        kind: "HAS_AND_BELONGS_TO_MANY".to_string(),
+                        name: "tags".to_string(),
+                        object_fields: None,
+                    }],
+                    value: Some(serde_json::json!([]).to_string()),
+                },
+            ];
+
+            let assigned_properties = parse_assigned_properties(property_map);
+            let expected_result: serde_json::Value =
+                json!({ "title": "Assign empty collection", "tags": {"id": []} });
+            assert_eq!(assigned_properties, expected_result);
         }
     }
 
