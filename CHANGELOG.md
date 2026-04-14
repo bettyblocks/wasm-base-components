@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.0...v1.9.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* handle empty arrays in as_collection ([5e2a41c](https://github.com/bettyblocks/wasm-base-components/commit/5e2a41ca6c9f78844b628ca0e8565c87b64f6d2c))
+
 # [1.9.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.8.0...v1.9.0) (2026-04-09)
 
 
