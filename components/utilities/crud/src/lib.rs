@@ -77,6 +77,10 @@ fn convert_object_to_graphql(field: &str, data: &serde_json::Value) -> String {
 
             object_to_graphql_query(field, first_object)
         }
+        // Objects or arrays without a usable record shape (empty, or lacking an
+        // `id` key) still represent a relation in GraphQL and therefore need a
+        // subselection. Fall back to `field { id }` so the query stays valid.
+        serde_json::Value::Object(_) | serde_json::Value::Array(_) => id_fragment(field),
         _ => field.to_string(),
     }
 }
@@ -966,6 +970,130 @@ fragment taskFields on Task {
     id
     users {
         id
+    }
+}"#
+                    .to_string(),
+                    name: "taskFields".to_string(),
+                }
+                .minify()
+            );
+        }
+
+        #[test]
+        fn returns_task_fragment_has_many_with_empty_array() {
+            let property_map = vec![
+                PropertyMap {
+                    key: vec![PropertyPath {
+                        kind: "STRING".to_string(),
+                        name: "title".to_string(),
+                        object_fields: None,
+                    }],
+                    value: Some("My Task".to_string()),
+                },
+                PropertyMap {
+                    key: vec![PropertyPath {
+                        kind: "HAS_MANY".to_string(),
+                        name: "tags".to_string(),
+                        object_fields: None,
+                    }],
+                    value: Some(json!([]).to_string()),
+                },
+            ];
+            let model_name = "Task";
+
+            let fragment = parse_to_gql_fragment(model_name, property_map);
+
+            assert_eq!(
+                fragment.minify(),
+                GraphQL {
+                    gql: r#"
+fragment taskFields on Task {
+    id
+    title
+    tags {
+        id
+    }
+}"#
+                    .to_string(),
+                    name: "taskFields".to_string(),
+                }
+                .minify()
+            );
+        }
+
+        #[test]
+        fn returns_task_fragment_with_nested_empty_collection() {
+            let property_map = vec![PropertyMap {
+                key: vec![PropertyPath {
+                    kind: "BELONGS_TO".to_string(),
+                    name: "user".to_string(),
+                    object_fields: None,
+                }],
+                value: Some(
+                    json!({
+                        "id": 1,
+                        "name": "John",
+                        "tags": []
+                    })
+                    .to_string(),
+                ),
+            }];
+
+            let model_name = "Task";
+
+            let fragment = parse_to_gql_fragment(model_name, property_map);
+
+            assert_eq!(
+                fragment.minify(),
+                GraphQL {
+                    gql: r#"
+fragment taskFields on Task {
+    id
+    user {
+        id
+        name
+        tags { id }
+    }
+}"#
+                    .to_string(),
+                    name: "taskFields".to_string(),
+                }
+                .minify()
+            );
+        }
+
+        #[test]
+        fn returns_task_fragment_with_nested_empty_record() {
+            let property_map = vec![PropertyMap {
+                key: vec![PropertyPath {
+                    kind: "BELONGS_TO".to_string(),
+                    name: "user".to_string(),
+                    object_fields: None,
+                }],
+                value: Some(
+                    json!({
+                        "id": 1,
+                        "name": "John",
+                        "team": {}
+                    })
+                    .to_string(),
+                ),
+            }];
+
+            let model_name = "Task";
+
+            let fragment = parse_to_gql_fragment(model_name, property_map);
+
+            assert_eq!(
+                fragment.minify(),
+                GraphQL {
+                    gql: r#"
+fragment taskFields on Task {
+    id
+    user {
+        id
+        name
+        team { id }
     }
 }"#
                     .to_string(),
