@@ -48,16 +48,16 @@ fn is_record(value: &serde_json::Value) -> bool {
     }
 }
 
+fn is_collection(value: &serde_json::Value) -> bool {
+    as_collection(value).is_some()
+}
+
 fn as_collection(value: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
     match value {
         serde_json::Value::Array(arr) if arr.first().map(is_record).unwrap_or(false) => Some(arr),
         serde_json::Value::Array(arr) if arr.is_empty() => Some(arr),
         _ => None,
     }
-}
-
-fn is_collection(value: &serde_json::Value) -> bool {
-    as_collection(value).is_some()
 }
 
 fn convert_object_to_graphql(field: &str, data: &serde_json::Value) -> String {
