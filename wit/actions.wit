@@ -23,5 +23,4 @@ interface actions {
    }
    
    call: func(input: run-input) -> result<run-output, error>;
-   health: func() -> result<string, string>;
 }

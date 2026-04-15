@@ -8,7 +8,6 @@ pub mod bindings {
 
 use crate::bindings::betty_blocks::actions::actions::{
     Error as ActionError, RunInput as Input, RunOutput as Output, RunPayload as Payload, call,
-    health,
 };
 
 struct Component;
@@ -44,16 +43,12 @@ const MEGABYTE: u64 = 2u64.pow(20);
 const MAX_READ: u64 = MAX_READ_MB * MEGABYTE;
 
 trait IncomingRequestImpl {
-    fn method(&self) -> &http::Method;
     fn body_mut(&mut self) -> &mut impl IncomingBodyImpl;
 }
 
 trait IncomingBodyImpl: std::io::Read {}
 
 impl IncomingRequestImpl for http::IncomingRequest {
-    fn method(&self) -> &http::Method {
-        http::IncomingRequest::method(self)
-    }
 
     fn body_mut(&mut self) -> &mut impl IncomingBodyImpl {
         http::IncomingRequest::body_mut(self)
@@ -68,7 +63,6 @@ enum Error {
     InvalidInput(String),
     InputTooLarge,
     ActionCallFailed(String),
-    HealthCheckFailed(String),
     Forbidden(String),
 }
 
@@ -88,9 +82,6 @@ impl From<Error> for http::Response<String> {
             Error::ActionCallFailed(message) => {
                 http::Response::builder().status(400).body(message).unwrap()
             }
-            Error::HealthCheckFailed(message) => {
-                http::Response::builder().status(503).body(message).unwrap()
-            }
             Error::Forbidden(message) => {
                 http::Response::builder().status(403).body(message).unwrap()
             }
@@ -105,11 +96,6 @@ fn inner_handle<F>(
 where
     F: for<'a> FnOnce(&'a Input) -> Result<Output, ActionError>,
 {
-    // Use GET for health checks because cant define multiple paths in wadm in kubernetes
-    if request.method() == http::Method::GET {
-        let health_status = health().map_err(Error::HealthCheckFailed)?;
-        return Ok(http::Response::new(health_status));
-    }
 
     let body = request.body_mut();
     let reader = body.take(MAX_READ);
