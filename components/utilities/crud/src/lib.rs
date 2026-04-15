@@ -56,6 +56,10 @@ fn as_collection(value: &serde_json::Value) -> Option<&Vec<serde_json::Value>> {
     }
 }
 
+fn is_collection(value: &serde_json::Value) -> bool {
+    as_collection(value).is_some()
+}
+
 fn convert_object_to_graphql(field: &str, data: &serde_json::Value) -> String {
     match data {
         serde_json::Value::Object(object) if !object.is_empty() && object.contains_key("id") => {
@@ -148,7 +152,7 @@ fn get_query_fields(property_map: PropertyMapping) -> String {
                     if property_json.is_some() =>
                 {
                     let property_json = property_json.as_ref().expect("is always some");
-                    if as_collection(property_json).is_some() {
+                    if is_collection(property_json) {
                         return convert_object_to_graphql(name, property_json);
                     }
                     id_fragment(name)
