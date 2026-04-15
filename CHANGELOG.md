@@ -1,3 +1,11 @@
+## [1.9.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.1...v1.9.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* enhance empty array handling in as_collection function ([290ddd5](https://github.com/bettyblocks/wasm-base-components/commit/290ddd5370a01708c54d57a1e36e33b900676dc8))
+* improve handling of empty arrays in GraphQL fragments ([34fa915](https://github.com/bettyblocks/wasm-base-components/commit/34fa9157d8fb74f350eca8b7b749d523c5866c04))
+
 ## [1.9.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.0...v1.9.1) (2026-04-14)
 
 
