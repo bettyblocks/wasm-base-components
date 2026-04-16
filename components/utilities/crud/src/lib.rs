@@ -202,7 +202,7 @@ fn get_assigned_value(kind: &PropertyKind, value: serde_json::Value) -> serde_js
             value
         }
         PropertyKind::HasMany | PropertyKind::HasAndBelongsToMany => {
-            if let Some(items) = as_collection(&value) {
+            if let serde_json::Value::Array(items) = &value {
                 let record_ids: Vec<serde_json::Value> = items
                     .iter()
                     .map(|val| {
@@ -1167,18 +1167,13 @@ fragment taskFields on Task {
                         name: "abilities".to_string(),
                         object_fields: None,
                     }],
-                    value: Some(
-                        serde_json::json!([
-                            {"name": "Tackle"},
-                        ])
-                        .to_string(),
-                    ),
+                    value: Some(serde_json::json!([1, 2, 3]).to_string()),
                 },
             ];
 
             let assigned_properties = parse_assigned_properties(property_map);
             let expected_result: serde_json::Value =
-                json!({ "name": "test", "abilities": [{"name": "Tackle"}] });
+                json!({ "name": "test", "abilities": {"id": [1, 2, 3]} });
             assert_eq!(assigned_properties, expected_result,);
         }
 
