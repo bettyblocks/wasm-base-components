@@ -1167,10 +1167,7 @@ fragment taskFields on Task {
                         name: "abilities".to_string(),
                         object_fields: None,
                     }],
-                    value: Some(
-                        serde_json::json!([1, 2, 3])
-                        .to_string(),
-                    ),
+                    value: Some(serde_json::json!([1, 2, 3]).to_string()),
                 },
             ];
 
