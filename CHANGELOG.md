@@ -1,3 +1,11 @@
+## [1.9.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.2...v1.9.3) (2026-04-16)
+
+
+### Bug Fixes
+
+* fmt ([e067e59](https://github.com/bettyblocks/wasm-base-components/commit/e067e594555db1ab1e86205cd1e5ccb3bbff71b7))
+* improve array handling in get_assigned_value function ([91862cb](https://github.com/bettyblocks/wasm-base-components/commit/91862cb3e47e0e59915e04c89d76b0e4b6152059))
+
 ## [1.9.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.1...v1.9.2) (2026-04-15)
 
 
