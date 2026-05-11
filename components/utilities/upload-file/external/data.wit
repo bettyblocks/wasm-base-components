@@ -2,18 +2,18 @@ package betty-blocks:data-api;
 
 interface data-api {
     record helper-context {
-        application-id: string,      
-        action-id: string,           
-        log-id: string,              
+        application-id: string,
+        action-id: string,
+        log-id: string,
         encrypted-configurations: option<list<string>>,
-        jwt: option<string>,        
+        jwt: option<string>,
     }
 
     request: func(
         helper-context: helper-context, 
-        query: string,              
-        variables: string           
-    ) -> result<string, string>;    
+        query: string,
+        variables: string
+    ) -> result<string, string>;
 }
 
 interface data-api-utilities {
