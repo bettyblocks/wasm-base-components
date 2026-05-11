@@ -26,12 +26,6 @@ interface store {
 
     type download-headers = option<list<tuple<string, string>>>;
 
-    record store-file-result {
-        reference: string,
-        file-size: u64,
-        message: option<string>,
-    }
-
     record url-source {
         url: string,
         headers: download-headers,
@@ -42,10 +36,5 @@ interface store {
         filename: string,
     }
 
-    variant file-source {
-        url(url-source),
-        base64(base64-source),
-    }
-
-    store-file: func(helper-context: helper-context, model: model, property: property, source: file-source) -> result<store-file-result, string>;
+    store-file: func(helper-context: helper-context, model: model, property: property, source: base64-source) -> result<string, string>;
 }

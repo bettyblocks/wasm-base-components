@@ -33,15 +33,58 @@ mutation GenerateFileUploadRequest(
 }
 "#;
 
-#[derive(Deserialize)]
 struct PolicyField {
     key: String,
     value: String,
 }
 
+fn deserialize_policy_fields<'de, D>(deserializer: D) -> std::result::Result<Vec<PolicyField>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+    use serde_json::Value;
+
+    let value = Value::deserialize(deserializer)?;
+    match value {
+        Value::Array(array) => {
+            let mut fields = Vec::new();
+            for item in array {
+                let key = item
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| de::Error::custom("missing 'key' in policy field"))?
+                    .to_string();
+                let value = item
+                    .get("value")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| de::Error::custom("missing 'value' in policy field"))?
+                    .to_string();
+                fields.push(PolicyField { key, value });
+            }
+            Ok(fields)
+        }
+        Value::Object(map) => {
+            let fields = map
+                .into_iter()
+                .map(|(key, value)| {
+                    let value = value
+                        .as_str()
+                        .ok_or_else(|| de::Error::custom("expected string value in fields map"))?
+                        .to_string();
+                    Ok(PolicyField { key, value })
+                })
+                .collect::<std::result::Result<Vec<_>, D::Error>>()?;
+            Ok(fields)
+        }
+        _ => Err(de::Error::custom("expected array or object for fields")),
+    }
+}
+
 #[derive(Deserialize)]
 struct PresignedPostRequest {
     reference: String,
+    #[serde(deserialize_with = "deserialize_policy_fields")]
     fields: Vec<PolicyField>,
     url: String,
 }
@@ -134,8 +177,11 @@ async fn upload_to_presigned_post(
 
     let request = Request::post(&presigned_post.url)
         .header("content-type", &*content_type_header)
+        .header("content-length", body_bytes.len().to_string().as_str())
         .body(Body::from(body_bytes))
         .map_err(|e| anyhow::anyhow!("Failed to build upload request: {e}"))?;
+
+    eprintln!("{:#?}", request);
 
     let response = client
         .send(request)
