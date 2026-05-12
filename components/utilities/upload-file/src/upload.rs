@@ -181,8 +181,6 @@ async fn upload_to_presigned_post(
         .body(Body::from(body_bytes))
         .map_err(|e| anyhow::anyhow!("Failed to build upload request: {e}"))?;
 
-    eprintln!("{:#?}", request);
-
     let response = client
         .send(request)
         .await
