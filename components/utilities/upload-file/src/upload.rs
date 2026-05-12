@@ -38,7 +38,9 @@ struct PolicyField {
     value: String,
 }
 
-fn deserialize_policy_fields<'de, D>(deserializer: D) -> std::result::Result<Vec<PolicyField>, D::Error>
+fn deserialize_policy_fields<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<PolicyField>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
