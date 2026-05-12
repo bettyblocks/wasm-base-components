@@ -1,3 +1,11 @@
+# [1.10.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.3...v1.10.0) (2026-05-12)
+
+
+### Features
+
+* add file.wit to global WIT files ([e4af22a](https://github.com/bettyblocks/wasm-base-components/commit/e4af22a2b94a2abc3146a2d74c9164c8b14572f3))
+* update upload-file to only use base64 ([3c2948f](https://github.com/bettyblocks/wasm-base-components/commit/3c2948f96de6f9908fd9c24d072f81c358b9ac65))
+
 ## [1.9.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.2...v1.9.3) (2026-04-16)
 
 
