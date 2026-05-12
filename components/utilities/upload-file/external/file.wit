@@ -11,7 +11,7 @@ interface upload-file {
     }
 
     upload: func(
-        helper-context: helper-context,
+	helper-context: helper-context,
         model: model,
         property: property,
         file-bytes: list<u8>,
@@ -30,6 +30,13 @@ interface store {
         url: string,
         headers: download-headers,
     }
+
+    store-file: func(helper-context: helper-context, model: model, property: property, source: url-source) -> result<string, string>;
+}
+
+interface store-base64 {
+    use betty-blocks:data-api/data-api.{helper-context};
+    use betty-blocks:types/types.{model, property};
 
     record base64-source {
         data: string,
