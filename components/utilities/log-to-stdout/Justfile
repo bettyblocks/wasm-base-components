@@ -12,8 +12,7 @@ test:
 integration-test:
     cargo test --tests '*'
 
-lint:
-    wash wit deps
+lint: fetch_wit_deps
     cargo check
 
 formatting *args:
