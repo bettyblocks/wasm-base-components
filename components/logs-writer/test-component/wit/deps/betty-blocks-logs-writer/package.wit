@@ -1,0 +1,18 @@
+package betty-blocks:logs-writer;
+
+interface debug-logging {
+  type json-string = string;
+
+  send-log-and-variables: func(messages: list<json-string>, variables: json-string);
+}
+
+world main {
+  import wasi:io/poll@0.2.2;
+  import wasi:clocks/monotonic-clock@0.2.2;
+  import wasi:io/error@0.2.2;
+  import wasi:io/streams@0.2.2;
+  import wasi:http/types@0.2.2;
+  import wasi:http/outgoing-handler@0.2.2;
+
+  export debug-logging;
+}

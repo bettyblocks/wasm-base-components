@@ -1,6 +1,6 @@
 package betty-blocks:http-wrapper;
 
 world main {
-    import betty-blocks:actions/actions;
-    export wasi:http/incoming-handler@0.2.2;
+   import betty-blocks:actions/actions;
+   export wasi:http/incoming-handler@0.2.2;
 }

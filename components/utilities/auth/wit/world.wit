@@ -1,6 +1,6 @@
 package betty-blocks:validate-auth;
 
 world auth {
-    import wasi:config/store@0.2.0-rc.1;
-    export betty-blocks:auth/jwt;
+   import wasi:config/store@0.2.0-rc.1;
+   export betty-blocks:auth/jwt;
 }

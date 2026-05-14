@@ -8,5 +8,3 @@ build
 # Semantic release
 .version
 node_modules
-
-**/wit/deps
