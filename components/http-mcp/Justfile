@@ -9,6 +9,7 @@ integration-test:
     cargo test --test integration_test_mcp -- --nocapture
 
 lint:
+    wash wit deps
     cargo check
 
 formatting *args:

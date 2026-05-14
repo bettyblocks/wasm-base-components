@@ -9,6 +9,7 @@ integration-test:
     cargo test --tests '*'
 
 lint:
+    wash wit deps
     cargo check
 
 formatting *args:
