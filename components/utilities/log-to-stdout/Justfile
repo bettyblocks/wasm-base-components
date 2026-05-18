@@ -12,7 +12,7 @@ test:
 integration-test:
     cargo test --tests '*'
 
-lint:
+lint: fetch_wit_deps
     cargo check
 
 formatting *args:
