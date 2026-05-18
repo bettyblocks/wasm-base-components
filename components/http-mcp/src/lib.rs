@@ -90,7 +90,11 @@ async fn handle_mcp_request(request: Request<Body>, path: &str) -> Response<Body
     )
     .await
     {
-        Ok(result) => serialize_to_json_response(&result),
+        Ok(Some(result)) => serialize_to_json_response(&result),
+        Ok(None) => Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .body(Body::from(String::new()))
+            .unwrap_or_else(|_| Response::new(Body::from("Internal Server Error"))),
         Err(error_response) => serialize_to_json_response(&error_response),
     }
 }
