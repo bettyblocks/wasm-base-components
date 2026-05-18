@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.10.0...v1.11.0) (2026-05-18)
+
+
+### Features
+
+* ignore notifications/initialized ([3276190](https://github.com/bettyblocks/wasm-base-components/commit/32761909e3f0ebf1811b6dddddb38e3ee56e343c))
+
 # [1.10.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.3...v1.10.0) (2026-05-12)
 
 
