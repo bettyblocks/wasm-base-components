@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.0...v1.11.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* set contentType as empty as it is required for the query ([7d18059](https://github.com/bettyblocks/wasm-base-components/commit/7d1805959397092088b8eac1e2fd6ba5ac35276a))
+
 # [1.11.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.10.0...v1.11.0) (2026-05-18)
 
 
