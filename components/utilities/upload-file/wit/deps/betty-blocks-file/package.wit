@@ -11,7 +11,7 @@ interface upload-file {
     message: option<string>,
   }
 
-  upload: func(helper-context: helper-context, model: model, property: property, file-bytes: list<u8>, filename: string, file-extension: string) -> result<upload-result, string>;
+  upload: func(helper-context: helper-context, model: model, property: property, file-bytes: list<u8>, full-filename: string) -> result<upload-result, string>;
 }
 
 interface store {
