@@ -165,12 +165,15 @@ async fn upload_to_presigned_post(
         .prepare()
         .map_err(|e| anyhow::anyhow!("Failed to prepare multipart form: {e}"))?;
 
+    let content_type_header = format!("multipart/form-data; boundary={}", prepared.boundary());
+
     let mut body_bytes = Vec::new();
     prepared
         .read_to_end(&mut body_bytes)
         .map_err(|e| anyhow::anyhow!("Failed to read multipart body: {e}"))?;
 
     let request = Request::post(&presigned_post.url)
+        .header("content-type", &*content_type_header)
         .header("content-length", body_bytes.len().to_string().as_str())
         .body(Body::from(body_bytes))
         .map_err(|e| anyhow::anyhow!("Failed to build upload request: {e}"))?;
