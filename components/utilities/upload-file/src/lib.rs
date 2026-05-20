@@ -22,16 +22,14 @@ impl UploadFileGuest for Component {
         model: Model,
         property: Property,
         file_bytes: Vec<u8>,
-        filename: String,
-        content_type: String,
+        full_filename: String,
     ) -> Result<UploadResult, String> {
         wstd::runtime::block_on(upload_bytes_internal(
             helper_context,
             model,
             property,
             file_bytes,
-            filename,
-            content_type,
+            full_filename,
         ))
         .map_err(|e| e.to_string())
     }
