@@ -101,6 +101,7 @@ pub async fn upload_bytes_internal(
 ) -> Result<UploadResult> {
     let file_size = file_bytes.len() as u64;
 
+    // The contentType will be handled by the data-api if it is not set.
     let variables = serde_json::json!({
         "modelName": model.name,
         "propertyName": property.name,
