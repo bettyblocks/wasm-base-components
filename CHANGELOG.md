@@ -1,3 +1,10 @@
+## [1.11.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.1...v1.11.2) (2026-05-20)
+
+
+### Bug Fixes
+
+* add multipart/form-data content-type for file upload for upload-file ([5f39cca](https://github.com/bettyblocks/wasm-base-components/commit/5f39cca2e079c5eb4be3976cb9b483ebf0e32d22))
+
 ## [1.11.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.0...v1.11.1) (2026-05-20)
 
 
