@@ -1,3 +1,24 @@
+## [1.11.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.1...v1.11.2) (2026-05-20)
+
+
+### Bug Fixes
+
+* add multipart/form-data content-type for file upload for upload-file ([5f39cca](https://github.com/bettyblocks/wasm-base-components/commit/5f39cca2e079c5eb4be3976cb9b483ebf0e32d22))
+
+## [1.11.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.0...v1.11.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* set contentType as empty as it is required for the query ([7d18059](https://github.com/bettyblocks/wasm-base-components/commit/7d1805959397092088b8eac1e2fd6ba5ac35276a))
+
+# [1.11.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.10.0...v1.11.0) (2026-05-18)
+
+
+### Features
+
+* ignore notifications/initialized ([3276190](https://github.com/bettyblocks/wasm-base-components/commit/32761909e3f0ebf1811b6dddddb38e3ee56e343c))
+
 # [1.10.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.3...v1.10.0) (2026-05-12)
 
 

@@ -97,15 +97,15 @@ pub async fn upload_bytes_internal(
     property: Property,
     file_bytes: Vec<u8>,
     filename: String,
-    content_type: String,
 ) -> Result<UploadResult> {
     let file_size = file_bytes.len() as u64;
 
     let variables = serde_json::json!({
         "modelName": model.name,
         "propertyName": property.name,
-        "contentType": content_type,
         "fileName": filename,
+        // The contentType will be handled by the data-api.
+        "contentType": "",
     })
     .to_string();
 
@@ -138,7 +138,7 @@ pub async fn upload_bytes_internal(
     )
     .map_err(|e| anyhow::anyhow!("Failed to parse presigned post: {}", e))?;
 
-    upload_to_presigned_post(&presigned_post, file_bytes, &filename, &content_type).await?;
+    upload_to_presigned_post(&presigned_post, file_bytes, &filename).await?;
 
     Ok(UploadResult {
         reference: presigned_post.reference,
@@ -151,7 +151,6 @@ async fn upload_to_presigned_post(
     presigned_post: &PresignedPostRequest,
     file_bytes: Vec<u8>,
     filename: &str,
-    content_type: &str,
 ) -> Result<()> {
     let client = Client::new();
     let mut form = Multipart::new();
@@ -160,11 +159,7 @@ async fn upload_to_presigned_post(
         form.add_text(field.key.clone(), field.value.clone());
     }
 
-    let mime: mime::Mime = content_type
-        .parse()
-        .unwrap_or(mime::APPLICATION_OCTET_STREAM);
-
-    form.add_stream("file", file_bytes.as_slice(), Some(filename), Some(mime));
+    form.add_stream("file", file_bytes.as_slice(), Some(filename), None);
 
     let mut prepared = form
         .prepare()

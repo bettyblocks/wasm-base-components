@@ -16,7 +16,7 @@ pub async fn process_rpc(
     headers: &Headers,
     wasmcloud_host: &str,
     application_id: &str,
-) -> Result<JsonrpcResponse, JsonrpcErrorResponse> {
+) -> Result<Option<JsonrpcResponse>, JsonrpcErrorResponse> {
     let request_obj: JsonrpcRequest = match serde_json::from_str(body) {
         Ok(r) => r,
         Err(e) => {
@@ -27,6 +27,10 @@ pub async fn process_rpc(
             ));
         }
     };
+
+    if request_obj.method.starts_with("notifications/") {
+        return Ok(None);
+    }
 
     let id = Some(request_obj.id);
 
@@ -72,7 +76,7 @@ pub async fn process_rpc(
 
     match result {
         Ok(result_value) => match create_success_response(id, result_value) {
-            Ok(resp) => Ok(resp),
+            Ok(resp) => Ok(Some(resp)),
             Err(e) => Err(create_error_response(
                 -32603,
                 &format!("Failed to build response: {e}"),
@@ -238,6 +242,14 @@ mod tests {
             ]
         }))
         .expect("test server config must parse")
+    }
+
+    #[tokio::test]
+    async fn test_notifications_initialized_returns_no_content() {
+        let body = r#"{"jsonrpc":"2.0","method":"notifications/initialized","id":2}"#;
+        let headers: Headers = vec![("content-type".to_string(), b"application/json".to_vec())];
+        let result = process_rpc("any-server", body, &headers, "host", "app-id").await;
+        assert!(matches!(result, Ok(None)));
     }
 
     #[test]
