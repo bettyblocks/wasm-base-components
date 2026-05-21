@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.2...v1.12.0) (2026-05-21)
+
+
+### Features
+
+* add upsert to crud component ([ee51e64](https://github.com/bettyblocks/wasm-base-components/commit/ee51e644cc69d25b0b490b73a0440dd73f99b0f8))
+
 ## [1.11.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.1...v1.11.2) (2026-05-20)
 
 
