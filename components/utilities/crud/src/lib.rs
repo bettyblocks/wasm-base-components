@@ -329,6 +329,16 @@ fn format_update_mutation(mutation_name: &str, model_name: &str) -> String {
     )
 }
 
+fn format_upsert_mutation(mutation_name: &str, model_name: &str) -> String {
+    format!(
+        r#"mutation($input: {model_name}Input, $uniqueBy: [String!]!, $validationSets: [String]) {{
+            {mutation_name}(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) {{
+                id
+            }}
+        }}"#,
+    )
+}
+
 fn format_delete_mutation(mutation_name: &str) -> String {
     format!(
         r#"mutation($id: Int!) {{
@@ -435,6 +445,46 @@ impl Guest for CrudComponent {
             {
                 "id": record_id,
                 "input": assign_properties,
+                "validationSets": validation_sets.unwrap_or_else(|| vec!["default".to_string()]),
+            }
+        );
+
+        let result = request(
+            &helper_context.clone(),
+            &mutation,
+            &serde_json::to_string(&input).unwrap(),
+        );
+
+        match result {
+            Ok(data) => get_affected_record(
+                &data,
+                &mutation_name,
+                helper_context,
+                &model.name,
+                &fragment,
+            ),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn upsert(
+        helper_context: HelperContext,
+        model: Model,
+        mapping: PropertyMapping,
+        unique_by: Property,
+        validation_sets: Option<Vec<String>>,
+    ) -> Result<JsonString, String> {
+        let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
+
+        let assign_properties = parse_assigned_properties(mapping.clone());
+
+        let mutation_name = format!("upsert{}", model.name);
+        let mutation = format_upsert_mutation(&mutation_name, &model.name);
+
+        let input = serde_json::json!(
+            {
+                "input": assign_properties,
+                "uniqueBy": [unique_by.name],
                 "validationSets": validation_sets.unwrap_or_else(|| vec!["default".to_string()]),
             }
         );
