@@ -1,3 +1,10 @@
+## [1.12.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.12.0...v1.12.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* update file WIT definition ([14e3ef0](https://github.com/bettyblocks/wasm-base-components/commit/14e3ef0d87f8517271895a6c748559a99381d612))
+
 # [1.12.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.2...v1.12.0) (2026-05-21)
 
 
