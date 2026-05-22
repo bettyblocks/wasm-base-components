@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.12.1...v1.13.0) (2026-05-22)
+
+
+### Features
+
+* empty feat to bump wasm version number to resolve conflict ([35cdc1b](https://github.com/bettyblocks/wasm-base-components/commit/35cdc1bab17f5db769de1dbae8c25c4d2805d627))
+
 ## [1.12.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.12.0...v1.12.1) (2026-05-22)
 
 
