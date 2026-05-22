@@ -8,7 +8,7 @@ pub mod bindings {
 
 use bindings::{
     betty_blocks::data_api::data_api::HelperContext,
-    exports::betty_blocks::file::upload_file::{Guest as UploadFileGuest, UploadResult, Input},
+    exports::betty_blocks::file::upload_file::{Guest as UploadFileGuest, Input, UploadResult},
 };
 
 use crate::upload::upload_bytes_internal;
@@ -18,10 +18,12 @@ struct Component;
 impl UploadFileGuest for Component {
     fn upload(
         helper_context: HelperContext,
-        Input{model,
-        property,
-        file_bytes,
-        full_filename}: Input,
+        Input {
+            model,
+            property,
+            file_bytes,
+            full_filename,
+        }: Input,
     ) -> Result<UploadResult, String> {
         wstd::runtime::block_on(upload_bytes_internal(
             helper_context,
