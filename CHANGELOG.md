@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.0...v1.13.1) (2026-05-27)
+
+
+### Bug Fixes
+
+* allow notification messages to not have an id ([18e9336](https://github.com/bettyblocks/wasm-base-components/commit/18e9336c357daa71b501650f05826f47ac6b6616))
+
 # [1.13.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.12.1...v1.13.0) (2026-05-22)
 
 
