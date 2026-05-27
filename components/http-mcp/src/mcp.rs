@@ -24,6 +24,8 @@ pub async fn process_rpc(
 ) -> Result<Option<JsonrpcResponse>, JsonrpcErrorResponse> {
     match serde_json::from_str::<JsonrpcRequestWithoutId>(body) {
         // short circuit notifications
+        // these are just events that the client sends so the backend can do bookkeeping, it is expected that these return no content
+        // most clients will just ignore this response, except copilot will error when this call returns an error
         Ok(r) if r.method.starts_with("notifications/") => {
             return Ok(None);
         }
