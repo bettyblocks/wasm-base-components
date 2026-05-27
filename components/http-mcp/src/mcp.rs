@@ -10,6 +10,11 @@ use serde_json::Value;
 
 type Headers = Vec<(String, Vec<u8>)>;
 
+#[derive(serde::Deserialize)]
+struct JsonrpcRequestWithoutId {
+    pub method: String,
+}
+
 pub async fn process_rpc(
     server_id: &str,
     body: &str,
@@ -17,6 +22,16 @@ pub async fn process_rpc(
     wasmcloud_host: &str,
     application_id: &str,
 ) -> Result<Option<JsonrpcResponse>, JsonrpcErrorResponse> {
+    match serde_json::from_str::<JsonrpcRequestWithoutId>(body) {
+        // short circuit notifications
+        // these are just events that the client sends so the backend can do bookkeeping, it is expected that these return no content
+        // most clients will just ignore this response, except copilot will error when this call returns an error
+        Ok(r) if r.method.starts_with("notifications/") => {
+            return Ok(None);
+        }
+        _ => (),
+    };
+
     let request_obj: JsonrpcRequest = match serde_json::from_str(body) {
         Ok(r) => r,
         Err(e) => {
@@ -27,10 +42,6 @@ pub async fn process_rpc(
             ));
         }
     };
-
-    if request_obj.method.starts_with("notifications/") {
-        return Ok(None);
-    }
 
     let id = Some(request_obj.id);
 
@@ -246,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_notifications_initialized_returns_no_content() {
-        let body = r#"{"jsonrpc":"2.0","method":"notifications/initialized","id":2}"#;
+        let body = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
         let headers: Headers = vec![("content-type".to_string(), b"application/json".to_vec())];
         let result = process_rpc("any-server", body, &headers, "host", "app-id").await;
         assert!(matches!(result, Ok(None)));
