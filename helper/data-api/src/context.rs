@@ -6,23 +6,26 @@ use crate::{inner_request, Config};
 
 pub struct DataAPIContext {
     application_id: String,
+
+    // TODO: Check if this is still dead
+    #[allow(dead_code)]
     action_id: String,
     /// jwt of the customer (so not the jaws jwt used for authenticating the server to server communication)
     jwt: Option<String>,
-    mass_mutate_entries: Arc<Mutex<HashMap<String, MassMutateEntries>>>,
-    capture_stack: Arc<Mutex<Vec<String>>>,
+    capture_stack: Arc<Mutex<Vec<MassMutateEntries>>>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct MassMutateEntries {
     create: VecDeque<MassMutateEntry>,
     update: VecDeque<MassMutateEntry>,
+    upsert: VecDeque<MassMutateEntry>,
     delete: VecDeque<MassMutateEntry>,
 }
 
 impl MassMutateEntries {
-    fn as_pending_mutations(&self) -> Vec<Vec<data_api::PendingMutation>> {
-        vec![
+    fn as_pending_mutations(&self) -> [Vec<data_api::PendingMutation>; 4] {
+        [
             self.create
                 .iter()
                 .map(|x| x.as_pending_mutation(DataMutation::Create))
@@ -30,6 +33,10 @@ impl MassMutateEntries {
             self.update
                 .iter()
                 .map(|x| x.as_pending_mutation(DataMutation::Update))
+                .collect(),
+            self.upsert
+                .iter()
+                .map(|x| x.as_pending_mutation(DataMutation::Upsert))
                 .collect(),
             self.delete
                 .iter()
@@ -39,6 +46,7 @@ impl MassMutateEntries {
     }
 }
 
+#[derive(Debug)]
 pub struct MassMutateEntry {
     model_name: String,
     variables: serde_json::Map<String, serde_json::Value>,
@@ -65,78 +73,129 @@ fn format_mutation_name(model_name: &str, operation: &DataMutation) -> String {
     format!("{}{model_name}", operation.as_static_str())
 }
 
+fn generate_delayed_id(id: &str, mutation_name: &str) -> JsonString {
+    format!(r#"{{"data": {{"{mutation_name}": {{"id": "{id}"}}}}}}"#)
+}
+
 impl GuestDataApi for DataAPIContext {
     fn new(application_id: String, action_id: String, jwt: Option<String>) -> Self {
         DataAPIContext {
             application_id,
             action_id,
             jwt,
-            mass_mutate_entries: Default::default(),
             capture_stack: Default::default(),
         }
     }
 
     fn apply_capture(&self) -> Result<String, String> {
-        todo!("construct the different mutations and apply them")
-    }
+        if let Some(MassMutateEntries { create, update, upsert, delete }) = self.capture_stack.lock().expect("lock is poisoned").pop() {
+            /* TODO: resolve ids
+            Locally generated ids need to be distinguishable from normal ids after being sent back to the caller and then sent here as for example a related row.
+            This will probably be done with negative numbered ids? Unless we have a better way of distinguising them.
+            Preferrably the caller wouldn't be able to distinguish them.
 
-    fn discard_capture(&self) -> Result<String, String> {
-        if let Some(capture_id) = self.capture_stack.lock().expect("lock is poisoned").pop() {
-            match self
-                .mass_mutate_entries
-                .lock()
-                .expect("lock is poisoned")
-                .remove(&capture_id)
-            {
-                Some(_) => return Ok(format!("deleted capture entry with id {capture_id}")),
-                None => {
-                    return Ok(format!(
-                        "capture entry with id {capture_id} was already deleted"
-                    ))
-                }
+            Here, we need to go through all reserved ids.
+            In theory the relations would still work if we only reserve ids that are referenced as relations by other mutations, and set the rest to default.
+            However, that would mess with the order of the inserted records.
+            I believe it would be better to preserve the insert order of the action, but it is an optimization worth considering.
+            These need to be reserved by a query, and we need to map them to the locally generated ids.
+            Then we need to replace all locally generated ids with the real ids.
+            Then we can upsert all creates, upsert all updates, upsert all upserts and delete all deletes.
+            These can be clustered by model, so we can do upsertManyUser but not upsertManyUserAndRole.
+            */
+
+            // If we want to be able to specify a unique by for the upsert we would want to handle them separately,
+            // but this is left out of cope for now.
+            let upsert_manys = [create, update, upsert].into_iter().flatten().fold(HashMap::new(), |mut map, item| {map.entry(item.model_name).or_insert(Vec::new()).push(item.variables); map});
+            
+            // TODO: Do we want to delete entries before they get upserted where possible?
+            // Would mean less unnecessary mutations in the data api, but likely worse performance if we need to check for that here.
+            // It would look something like this.
+            // for entry in delete {
+            //     if let Some(id) = entry.variables.get("id") && let Some(model_entry) = x.get_mut(&entry.model_name) {
+            //         model_entry.retain(|v| !v.get("id").is_some_and(|y| y == id)) 
+            //         // Still need to delete if this doesn't match anything
+            //     }
+            // }
+
+            for (model_name, variables) in upsert_manys {
+                let query = format!(
+                    "mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}"
+                );
+
+                let variables = format!("{{\"input\": {}}}", serde_json::to_string(&variables).map_err(|_| String::from("could not format input variables"))?);
+
+                // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys.
+                // self.request_raw(query, variables)?;
+            }
+
+            let delete_manys = delete.into_iter().fold(HashMap::new(), |mut map, mut item| {if let Some(id) = item.variables.remove("id") {map.entry(item.model_name).or_insert(Vec::new()).push(id);} map});
+
+            for (model_name, variables) in delete_manys {
+                let query = format!(
+                    "mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}"
+                );
+
+                let variables = format!("{{\"input\": {{\"ids\": {}}}}}", serde_json::to_string(&variables).map_err(|_| String::from("could not format input variables"))?);
+
+                // self.request_raw(query, variables)?;
             }
         }
 
         Ok(String::from("nothing to do"))
     }
 
-    fn start_capture(&self) -> Result<String, String> {
-        let random_capture_id = String::from("hallo1234");
-        {
-            self.mass_mutate_entries
-                .lock()
-                .expect("lock is poisoned")
-                .insert(random_capture_id.clone(), MassMutateEntries::default());
+    fn discard_capture(&self) -> Result<String, String> {
+        if let Some(_) = self.capture_stack.lock().expect("lock is poisoned").pop() {
+            return Ok(format!("deleted most recent capture stack entry"));
         }
 
-        {
-            self.capture_stack
-                .lock()
-                .expect("lock is poisoned")
-                .push(random_capture_id.clone());
-        }
+        Ok(String::from("nothing to do"))
+    }
 
-        Ok(random_capture_id)
+    fn start_capture(&self) -> Result<(), String> {
+        self.capture_stack
+            .lock()
+            .map_err(|_| String::from("capture stack lock poisoned"))?
+            .push(MassMutateEntries::default());
+        Ok(())
     }
 
     fn pending_capture(&self) -> Result<Vec<Vec<data_api::PendingMutation>>, String> {
-        if let Some(capture_id) = self.capture_stack.lock().expect("lock is poisoned").last() {
-            let lock = self.mass_mutate_entries.lock().expect("lock is poisoned");
-
-            let entries = lock
-                .get(capture_id)
-                .expect("capture stack and mass mutate entries out of sync");
-
-            return Ok(entries.as_pending_mutations());
+        if let Some(entries) = self.capture_stack.lock().expect("lock is poisoned").last() {
+            return Ok(entries.as_pending_mutations().to_vec());
         }
 
         Ok(Vec::new())
     }
 
     fn request(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
-        if let Ok(capture_stack) = self.capture_stack.lock() {
-            if capture_stack.len() > 0 {
-                todo!("parse gql and put to correct capture stack if it is a single create,update,delete. If it is a many let it continue")
+        if let Ok(mut capture_stack) = self.capture_stack.lock() {
+            if let Some(entries) = capture_stack.last_mut() {
+                let query_remainder = match query.split_once("mutation") {
+                    Some((_, remainder)) => remainder,
+                    None => return self.request_raw(query, variables)
+                };
+
+                let query_remainder = query_remainder.split_once('{').ok_or_else(|| String::from("query is improperly formatted"))?.1.trim();
+
+                if query_remainder[6..10] == *"Many" {
+                    return self.request_raw(query, variables)
+                }
+
+                let mutation_name = query_remainder.split_once(|c: char| c.is_whitespace() || c == '(').ok_or_else(|| String::from("query is improperly formatted"))?.0;
+
+                match &query_remainder[0..6] {
+                    "create" => &mut entries.create,
+                    "update" => &mut entries.update,
+                    "upsert" => &mut entries.upsert,
+                    "delete" => &mut entries.delete,
+                    _ => return self.request_raw(query, variables)
+                }.push_back(MassMutateEntry { model_name: mutation_name[6..].to_string(), variables: serde_json::from_str(&variables).map_err(|_| String::from("could not parse variables"))? });
+                
+                // TODO: Generate a local id that will be resolved to a real id later. 
+                // Read more about this logic in [[Self::apply_capture]]
+                return Ok(generate_delayed_id("1", mutation_name));
             }
         }
 
@@ -173,6 +232,7 @@ impl GuestDataApi for DataAPIContext {
 pub enum DataMutation {
     Create,
     Update,
+    Upsert,
     Delete,
 }
 
@@ -183,21 +243,22 @@ impl DataMutation {
         match self {
             Create => "create",
             Update => "update",
+            Upsert => "upsert",
             Delete => "delete",
         }
     }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Intruction {
+pub struct Instruction {
     operator: DataMutation,
     name: String,
     data: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-impl Intruction {
+impl Instruction {
     pub fn create(name: String) -> Self {
-        Intruction {
+        Instruction {
             name,
             operator: DataMutation::Create,
             data: None,
@@ -205,15 +266,23 @@ impl Intruction {
     }
 
     pub fn update(name: String) -> Self {
-        Intruction {
+        Instruction {
             name,
             operator: DataMutation::Update,
             data: None,
         }
     }
 
+    pub fn upsert(name: String) -> Self {
+        Instruction {
+            name,
+            operator: DataMutation::Upsert,
+            data: None,
+        }
+    }
+
     pub fn delete(name: String) -> Self {
-        Intruction {
+        Instruction {
             name,
             operator: DataMutation::Delete,
             data: None,
@@ -225,7 +294,7 @@ use graphql_parser::parse_query;
 use graphql_parser::query::ParseError;
 use serde_json::Number;
 
-pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, ParseError> {
+pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Instruction>, ParseError> {
     let document = parse_query::<String>(graphql)?;
     let mut instruction = None;
 
@@ -244,7 +313,7 @@ pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, 
                                     && !field.name.starts_with("createMany") =>
                             {
                                 let name = field.name.split_at("create".len()).1.to_string();
-                                let mut new_instruction = Intruction::create(name);
+                                let mut new_instruction = Instruction::create(name);
 
                                 extract_values_from_gql_argument(
                                     &mut new_instruction,
@@ -258,7 +327,7 @@ pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, 
                                     && !field.name.starts_with("updateMany") =>
                             {
                                 let name = field.name.split_at("update".len()).1.to_string();
-                                let mut new_instruction = Intruction::update(name);
+                                let mut new_instruction = Instruction::update(name);
 
                                 extract_values_from_gql_argument(
                                     &mut new_instruction,
@@ -272,7 +341,7 @@ pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, 
                                     && !field.name.starts_with("deleteMany") =>
                             {
                                 let name = field.name.split_at("delete".len()).1.to_string();
-                                let mut new_instruction = Intruction::delete(name);
+                                let mut new_instruction = Instruction::delete(name);
 
                                 extract_values_from_gql_argument(
                                     &mut new_instruction,
@@ -304,7 +373,7 @@ pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Intruction>, 
 }
 
 fn extract_values_from_gql_argument(
-    instruction: &mut Intruction,
+    instruction: &mut Instruction,
     arguments: Vec<(String, graphql_parser::query::Value<'_, String>)>,
 ) {
     let mut tmp_data = serde_json::Map::new();
@@ -355,10 +424,33 @@ fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serd
 }
 
 #[test]
+fn capture_mutation_test() {
+    let ctx = DataAPIContext::new(String::new(), String::new(), Some(String::new()));
+
+    ctx.start_capture().unwrap();
+
+    assert_eq!(ctx.request(String::from(r#"
+    mutation ($input: userInput, $validationSets: [String]) {
+        createuser(input: $input, validationSets: $validationSets) {
+            id
+        }
+    }"#), String::from(r#"{"id": 1}"#)).unwrap().as_str(), r#"{"data": {"createuser": {"id": "1"}}}"#);
+
+    assert_eq!(ctx.request(String::from(r#"
+    mutation ($input: userInput, $validationSets: [String]) {
+        deleteuser(input: $input, validationSets: $validationSets) {
+            id
+        }
+    }"#), String::from(r#"{"id": 1}"#)).unwrap().as_str(), r#"{"data": {"deleteuser": {"id": "1"}}}"#);
+
+    ctx.apply_capture().unwrap();
+}
+
+#[test]
 fn parse_graphql_to_intruction_test() {
     let query = "mutation {createSong(input: $input)} {id}";
     let out = parse_graphql_to_intruction(query).unwrap().unwrap();
-    assert_eq!(out, Intruction::create("Song".to_string()));
+    assert_eq!(out, Instruction::create("Song".to_string()));
 
     let query = r#"
     mutation ($input: userInput, $validationSets: [String]) {
@@ -368,7 +460,7 @@ fn parse_graphql_to_intruction_test() {
     }"#;
 
     let out = parse_graphql_to_intruction(query).unwrap().unwrap();
-    assert_eq!(out, Intruction::create("user".to_string()));
+    assert_eq!(out, Instruction::create("user".to_string()));
 
     let query = r#"
         mutation ($id: Int!, $input: userInput, $validationSets: [String]) {
@@ -378,7 +470,7 @@ fn parse_graphql_to_intruction_test() {
     }"#;
 
     let out = parse_graphql_to_intruction(query).unwrap().unwrap();
-    assert_eq!(out, Intruction::update("user".to_string()));
+    assert_eq!(out, Instruction::update("user".to_string()));
 
     let query = r#"
         mutation ($id: Int!) {
@@ -388,7 +480,7 @@ fn parse_graphql_to_intruction_test() {
         }"#;
 
     let out = parse_graphql_to_intruction(query).unwrap().unwrap();
-    assert_eq!(out, Intruction::delete("user".to_string()));
+    assert_eq!(out, Instruction::delete("user".to_string()));
 
     let query = r#"
        {
@@ -414,7 +506,7 @@ fn extract_data_from_mutation() {
         }"#;
 
     let out = parse_graphql_to_intruction(query).unwrap().unwrap();
-    let mut instruction = Intruction::delete("user".to_string());
+    let mut instruction = Instruction::delete("user".to_string());
     instruction.data = Some(serde_json::Map::from_iter([(
         String::from("id"),
         serde_json::Value::Number(2.into()),

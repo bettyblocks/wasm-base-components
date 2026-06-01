@@ -18,7 +18,7 @@ interface data-api {
         // the query and many mutations will just pass through it.
 
         /// start capturing the mutations
-        start-capture: func() -> result<string, string>;
+        start-capture: func() -> result<_, string>;
         /// discard the current captured mutations
         discard-capture: func() -> result<string, string>;
         // or flush or commit ?
