@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::default;
 use std::sync::{Arc, Mutex};
 
 use crate::exports::betty_blocks::data_api::data_api::{self, GuestDataApi, JsonString};
@@ -115,7 +114,10 @@ impl GuestDataApi for DataAPIContext {
             // but this is left out of cope for now.
             let upsert_manys = [create, update, upsert].into_iter().flatten().fold(
                 HashMap::new(),
-                |mut map, item| {
+                |mut map, mut item| {
+                    // TODO: Add reserved_ids.
+                    replace_negative_ids_in_variables(&vec![], &mut item.variables);
+
                     map.entry(item.model_name)
                         .or_insert(Vec::new())
                         .push(item.variables);
@@ -133,9 +135,7 @@ impl GuestDataApi for DataAPIContext {
             //     }
             // }
 
-            for (model_name, mut all_variables) in upsert_manys {
-                replace_negative_ids_in_all_variables(&vec![], &mut all_variables);
-
+            for (model_name, all_variables) in upsert_manys {
                 let query =
                     format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
 
@@ -267,17 +267,6 @@ impl GuestDataApi for DataAPIContext {
                 variables,
             ))
             .map_err(|e| format!("{e:#}"))
-    }
-}
-
-/// Loops through a vec of serde_json::Maps and replaces all the negative IDs with their reserved
-/// counterparts.
-fn replace_negative_ids_in_all_variables(
-    reserved_ids: &Vec<usize>,
-    all_variables: &mut [serde_json::Map<String, serde_json::Value>],
-) {
-    for variables in all_variables.iter_mut() {
-        replace_negative_ids_in_variables(reserved_ids, variables);
     }
 }
 
