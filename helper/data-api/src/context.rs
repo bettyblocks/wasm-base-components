@@ -313,9 +313,9 @@ fn get_reserved_id_as_value_for_negative_id(
     reserved_ids: &[usize],
     negative_id: i64,
 ) -> serde_json::Value {
-    // TODO: Do we need guardrails around this to make sure the value is positive and error
-    // otherwise, or just trust it works?
     serde_json::Value::Number(serde_json::Number::from(
+        // If `negative_id` is -1 which is the first possible negative ID, then `-1 - -1 = 0`.
+        // Which is the first reserved ID.
         reserved_ids[(-1 - negative_id) as usize],
     ))
 }
