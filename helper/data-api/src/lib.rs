@@ -14,8 +14,8 @@ pub mod data_grpc {
 pub mod context;
 
 use crate::context::DataAPIContext;
-use crate::data_grpc::data_api_client::DataApiClient;
 use crate::data_grpc::DataApiRequest;
+use crate::data_grpc::data_api_client::DataApiClient;
 use crate::data_grpc::{Context as GrpcContext, DataApiResult};
 
 wit_bindgen::generate!({ generate_all });
