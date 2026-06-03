@@ -133,9 +133,8 @@ impl GuestDataApi for DataAPIContext {
             //     }
             // }
 
-            for (model_name, all_variables) in upsert_manys {
-                let _model_and_amount_of_negative_ids =
-                    count_negative_ids_in_maps(&model_name, &all_variables);
+            for (model_name, mut all_variables) in upsert_manys {
+                replace_negative_ids_in_all_variables(&vec![], &mut all_variables);
 
                 let query =
                     format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
@@ -271,57 +270,54 @@ impl GuestDataApi for DataAPIContext {
     }
 }
 
-/// Loops through a vec of serde_json::Maps and counts the amount of negative ids along with which
-/// model name they correspond to.
-fn count_negative_ids_in_maps(
-    current_model: &str,
-    all_variables: &Vec<serde_json::Map<String, serde_json::Value>>,
-) -> HashMap<String, usize> {
-    let mut map: HashMap<String, usize> = HashMap::new();
-
-    for variables in all_variables {
-        count_negative_ids_in_map(&mut map, current_model, variables);
+/// Loops through a vec of serde_json::Maps and replaces all the negative IDs with their reserved
+/// counterparts.
+fn replace_negative_ids_in_all_variables(
+    reserved_ids: &Vec<usize>,
+    all_variables: &mut [serde_json::Map<String, serde_json::Value>],
+) {
+    for variables in all_variables.iter_mut() {
+        replace_negative_ids_in_variables(reserved_ids, variables);
     }
-
-    map
 }
 
-/// Loops through the entries of a serde_json::Map and counts the amount of negative ids along with
-/// which model name they correspond to and puts it into the given HashMap.
-fn count_negative_ids_in_map(
-    map: &mut HashMap<String, usize>,
-    current_model: &str,
-    variables: &serde_json::Map<String, serde_json::Value>,
+/// Loops through the entries of a serde_json::Map and replaces all the negative IDs with their
+/// reserved counterparts.
+fn replace_negative_ids_in_variables(
+    reserved_ids: &Vec<usize>,
+    variables: &mut serde_json::Map<String, serde_json::Value>,
 ) {
-    for (key, value) in variables {
+    for (key, value) in variables.iter_mut() {
         if key == "id" {
             if let Some(id) = value.as_i64()
                 && id < 0
             {
-                increment_mapped_value_by(map, String::from(current_model), 1);
-            } else if let Some(array_of_ids) = value.as_array() {
-                let amount_of_negative_ids = array_of_ids
-                    .iter()
-                    .filter(|id| id.as_i64().is_some_and(|id| id < 0))
-                    .count();
-                increment_mapped_value_by(map, String::from(current_model), amount_of_negative_ids);
+                *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
+            } else if let serde_json::Value::Array(array_of_ids) = value {
+                for item in array_of_ids.iter_mut() {
+                    if let Some(id) = item.as_i64()
+                        && id < 0
+                    {
+                        *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
+                    }
+                }
             }
         } else if let serde_json::Value::Object(inner) = value {
-            count_negative_ids_in_map(map, key, inner);
+            replace_negative_ids_in_variables(reserved_ids, inner);
         }
     }
 }
 
-/// Increments the value of the key in the given map by the given amount.
-fn increment_mapped_value_by<
-    K: std::cmp::Eq + std::hash::Hash,
-    V: Default + std::ops::AddAssign,
->(
-    map: &mut HashMap<K, V>,
-    key: K,
-    amount: V,
-) {
-    *map.entry(key).or_default() += amount;
+/// Uses the negative_id to index for its reserved id and put it into a serde_json::Value.
+fn get_reserved_id_as_value_for_negative_id(
+    reserved_ids: &[usize],
+    negative_id: i64,
+) -> serde_json::Value {
+    // TODO: Do we need guardrails around this to make sure the value is positive and error
+    // otherwise, or just trust it works?
+    serde_json::Value::Number(serde_json::Number::from(
+        reserved_ids[(-1 - negative_id) as usize],
+    ))
 }
 
 #[derive(Debug, PartialEq)]
