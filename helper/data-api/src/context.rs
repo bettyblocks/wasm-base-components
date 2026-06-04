@@ -278,35 +278,33 @@ fn replace_negative_ids_in_variables(
 ) {
     for (key, value) in variables.iter_mut() {
         if key == "id" {
-            if let Some(id) = value.as_i64()
-                && id < 0
-            {
-                *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
-            } else if let serde_json::Value::Array(array_of_ids) = value {
-                for item in array_of_ids.iter_mut() {
-                    if let Some(id) = item.as_i64()
-                        && id < 0
-                    {
-                        *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
-                    }
-                }
-            }
+            handle_id_key(reserved_ids, value)
         } else if let serde_json::Value::Object(object) = value {
             replace_negative_ids_in_variables(reserved_ids, object);
-        } else if let serde_json::Value::Array(array) = value {
-            if array.is_empty() {
-                // TODO: Do we return an error?
-                eprintln!("huh");
-            } else {
-                for item in array.iter_mut() {
-                    if let serde_json::Value::Object(object) = item {
-                        replace_negative_ids_in_variables(reserved_ids, object);
-                    } else {
-                        // TODO: Do we return an error?
-                        eprintln!("huh");
-                    }
-                }
-            }
+        } else if let serde_json::Value::Array(array_of_values) = value {
+            handle_array_of_values(reserved_ids, array_of_values);
+        }
+    }
+}
+
+/// Replaces the negative ID or IDs with their reserved counterpart.
+fn handle_id_key(reserved_ids: &[usize], value: &mut serde_json::Value) {
+    if let Some(id) = value.as_i64()
+        && id.is_negative()
+    {
+        *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
+    } else if let serde_json::Value::Array(array_of_ids) = value {
+        handle_array_of_ids(reserved_ids, array_of_ids);
+    }
+}
+
+/// Loops over an Vec of IDs and replaces negative ones with their reserved counterpart.
+fn handle_array_of_ids(reserved_ids: &[usize], array_of_ids: &mut [serde_json::Value]) {
+    for item in array_of_ids.iter_mut() {
+        if let Some(id) = item.as_i64()
+            && id.is_negative()
+        {
+            *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
         }
     }
 }
@@ -322,6 +320,20 @@ fn get_reserved_id_as_value_for_negative_id(
         reserved_ids[(-1 - negative_id) as usize],
     ))
 }
+
+/// Looks at the items in an array and if they're an object tries to replace negative IDs in that
+/// object, and if they are an array it searches for objects or arrays within that object which
+/// might have negative IDs to replace.
+fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serde_json::Value]) {
+    for item in array_of_values.iter_mut() {
+        if let serde_json::Value::Object(object) = item {
+            replace_negative_ids_in_variables(reserved_ids, object);
+        } else if let serde_json::Value::Array(array) = item {
+            handle_array_of_values(reserved_ids, array);
+        }
+    }
+}
+
 
 #[derive(Debug, PartialEq)]
 pub enum DataMutation {
