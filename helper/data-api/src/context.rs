@@ -291,8 +291,22 @@ fn replace_negative_ids_in_variables(
                     }
                 }
             }
-        } else if let serde_json::Value::Object(inner) = value {
-            replace_negative_ids_in_variables(reserved_ids, inner);
+        } else if let serde_json::Value::Object(object) = value {
+            replace_negative_ids_in_variables(reserved_ids, object);
+        } else if let serde_json::Value::Array(array) = value {
+            if array.is_empty() {
+                // TODO: Do we return an error?
+                eprintln!("huh");
+            } else {
+                for item in array.iter_mut() {
+                    if let serde_json::Value::Object(object) = item {
+                        replace_negative_ids_in_variables(reserved_ids, object);
+                    } else {
+                        // TODO: Do we return an error?
+                        eprintln!("huh");
+                    }
+                }
+            }
         }
     }
 }
