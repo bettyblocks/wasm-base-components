@@ -116,7 +116,8 @@ impl GuestDataApi for DataAPIContext {
                 HashMap::new(),
                 |mut map, mut item| {
                     // TODO: Add reserved_ids.
-                    replace_negative_ids_in_variables(&vec![], &mut item.variables);
+                    // TODO: Remove unwrap.
+                    replace_negative_ids_in_variables(&vec![], &mut item.variables).unwrap();
 
                     map.entry(item.model_name)
                         .or_insert(Vec::new())
@@ -275,63 +276,73 @@ impl GuestDataApi for DataAPIContext {
 fn replace_negative_ids_in_variables(
     reserved_ids: &Vec<usize>,
     variables: &mut serde_json::Map<String, serde_json::Value>,
-) {
+) -> Result<(), String> {
     for (key, value) in variables.iter_mut() {
         if key == "id" {
-            handle_id_key(reserved_ids, value)
+            handle_id_key(reserved_ids, value)?;
         } else if let serde_json::Value::Object(object) = value {
-            replace_negative_ids_in_variables(reserved_ids, object);
+            replace_negative_ids_in_variables(reserved_ids, object)?;
         } else if let serde_json::Value::Array(array_of_values) = value {
-            handle_array_of_values(reserved_ids, array_of_values);
+            handle_array_of_values(reserved_ids, array_of_values)?;
         }
     }
+
+    Ok(())
 }
 
 /// Replaces the negative ID or IDs with their reserved counterpart.
-fn handle_id_key(reserved_ids: &[usize], value: &mut serde_json::Value) {
+fn handle_id_key(reserved_ids: &[usize], value: &mut serde_json::Value) -> Result<(), String> {
     if let Some(id) = value.as_i64()
         && id.is_negative()
     {
-        *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
+        *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
     } else if let serde_json::Value::Array(array_of_ids) = value {
-        handle_array_of_ids(reserved_ids, array_of_ids);
+        handle_array_of_ids(reserved_ids, array_of_ids)?;
     }
+
+    Ok(())
 }
 
 /// Loops over an Vec of IDs and replaces negative ones with their reserved counterpart.
-fn handle_array_of_ids(reserved_ids: &[usize], array_of_ids: &mut [serde_json::Value]) {
+fn handle_array_of_ids(reserved_ids: &[usize], array_of_ids: &mut [serde_json::Value]) -> Result<(), String> {
     for item in array_of_ids.iter_mut() {
         if let Some(id) = item.as_i64()
             && id.is_negative()
         {
-            *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id);
+            *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
         }
     }
+
+    Ok(())
 }
 
 /// Uses the negative_id to index for its reserved id and put it into a serde_json::Value.
 fn get_reserved_id_as_value_for_negative_id(
     reserved_ids: &[usize],
     negative_id: i64,
-) -> serde_json::Value {
-    serde_json::Value::Number(serde_json::Number::from(
-        // If `negative_id` is -1 which is the first possible negative ID, then `-1 - -1 = 0`.
-        // Which is the first possible item in the reserved ID list.
-        reserved_ids[(-1 - negative_id) as usize],
-    ))
+) -> Result<serde_json::Value, String> {
+    // If `negative_id` is -1 which is the first possible negative ID, then `-1 - -1 = 0`.
+    // Which is the first possible item in the reserved ID list.
+    let index: usize = (-1 - negative_id).try_into().map_err(|error| format!("could not convert number to usize: {error}"))?;
+
+    Ok(serde_json::Value::Number(serde_json::Number::from(
+        reserved_ids[index],
+    )))
 }
 
 /// Looks at the items in an array and if they're an object tries to replace negative IDs in that
 /// object, and if they are an array it searches for objects or arrays within that object which
 /// might have negative IDs to replace.
-fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serde_json::Value]) {
+fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serde_json::Value]) -> Result<(), String> {
     for item in array_of_values.iter_mut() {
         if let serde_json::Value::Object(object) = item {
-            replace_negative_ids_in_variables(reserved_ids, object);
+            replace_negative_ids_in_variables(reserved_ids, object)?;
         } else if let serde_json::Value::Array(array) = item {
-            handle_array_of_values(reserved_ids, array);
+            handle_array_of_values(reserved_ids, array)?;
         }
     }
+
+    Ok(())
 }
 
 #[derive(Debug, PartialEq)]
