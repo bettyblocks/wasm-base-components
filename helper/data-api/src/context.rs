@@ -334,7 +334,6 @@ fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serd
     }
 }
 
-
 #[derive(Debug, PartialEq)]
 pub enum DataMutation {
     Create,
