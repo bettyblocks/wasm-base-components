@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use crate::exports::betty_blocks::data_api::data_api::{self, GuestDataApi, JsonString};
-use crate::{inner_request, Config};
+use crate::{Config, inner_request};
 
 pub struct DataAPIContext {
     application_id: String,
@@ -88,7 +88,13 @@ impl GuestDataApi for DataAPIContext {
     }
 
     fn apply_capture(&self) -> Result<String, String> {
-        if let Some(MassMutateEntries { create, update, upsert, delete }) = self.capture_stack.lock().expect("lock is poisoned").pop() {
+        if let Some(MassMutateEntries {
+            create,
+            update,
+            upsert,
+            delete,
+        }) = self.capture_stack.lock().expect("lock is poisoned").pop()
+        {
             /* TODO: resolve ids
             Locally generated ids need to be distinguishable from normal ids after being sent back to the caller and then sent here as for example a related row.
             This will probably be done with negative numbered ids? Unless we have a better way of distinguising them.
@@ -106,37 +112,62 @@ impl GuestDataApi for DataAPIContext {
 
             // If we want to be able to specify a unique by for the upsert we would want to handle them separately,
             // but this is left out of cope for now.
-            let upsert_manys = [create, update, upsert].into_iter().flatten().fold(HashMap::new(), |mut map, item| {map.entry(item.model_name).or_insert(Vec::new()).push(item.variables); map});
-            
+            let upsert_manys = [create, update, upsert].into_iter().flatten().fold(
+                HashMap::new(),
+                |mut map, mut item| {
+                    // TODO: Add reserved_ids.
+                    // TODO: Remove unwrap.
+                    replace_negative_ids_in_variables(&vec![], &mut item.variables).unwrap();
+
+                    map.entry(item.model_name)
+                        .or_insert(Vec::new())
+                        .push(item.variables);
+                    map
+                },
+            );
+
             // TODO: Do we want to delete entries before they get upserted where possible?
             // Would mean less unnecessary mutations in the data api, but likely worse performance if we need to check for that here.
             // It would look something like this.
             // for entry in delete {
             //     if let Some(id) = entry.variables.get("id") && let Some(model_entry) = x.get_mut(&entry.model_name) {
-            //         model_entry.retain(|v| !v.get("id").is_some_and(|y| y == id)) 
+            //         model_entry.retain(|v| !v.get("id").is_some_and(|y| y == id))
             //         // Still need to delete if this doesn't match anything
             //     }
             // }
 
-            for (model_name, variables) in upsert_manys {
-                let query = format!(
-                    "mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}"
-                );
+            for (model_name, all_variables) in upsert_manys {
+                let query =
+                    format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
 
-                let variables = format!("{{\"input\": {}}}", serde_json::to_string(&variables).map_err(|_| String::from("could not format input variables"))?);
+                let variables = format!(
+                    "{{\"input\": {}}}",
+                    serde_json::to_string(&all_variables)
+                        .map_err(|_| String::from("could not format input variables"))?
+                );
 
                 // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys.
                 // self.request_raw(query, variables)?;
             }
 
-            let delete_manys = delete.into_iter().fold(HashMap::new(), |mut map, mut item| {if let Some(id) = item.variables.remove("id") {map.entry(item.model_name).or_insert(Vec::new()).push(id);} map});
+            let delete_manys = delete
+                .into_iter()
+                .fold(HashMap::new(), |mut map, mut item| {
+                    if let Some(id) = item.variables.remove("id") {
+                        map.entry(item.model_name).or_insert(Vec::new()).push(id);
+                    }
+                    map
+                });
 
             for (model_name, variables) in delete_manys {
-                let query = format!(
-                    "mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}"
-                );
+                let query =
+                    format!("mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}");
 
-                let variables = format!("{{\"input\": {{\"ids\": {}}}}}", serde_json::to_string(&variables).map_err(|_| String::from("could not format input variables"))?);
+                let variables = format!(
+                    "{{\"input\": {{\"ids\": {}}}}}",
+                    serde_json::to_string(&variables)
+                        .map_err(|_| String::from("could not format input variables"))?
+                );
 
                 // self.request_raw(query, variables)?;
             }
@@ -174,26 +205,38 @@ impl GuestDataApi for DataAPIContext {
             if let Some(entries) = capture_stack.last_mut() {
                 let query_remainder = match query.split_once("mutation") {
                     Some((_, remainder)) => remainder,
-                    None => return self.request_raw(query, variables)
+                    None => return self.request_raw(query, variables),
                 };
 
-                let query_remainder = query_remainder.split_once('{').ok_or_else(|| String::from("query is improperly formatted"))?.1.trim();
+                let query_remainder = query_remainder
+                    .split_once('{')
+                    .ok_or_else(|| String::from("query is improperly formatted"))?
+                    .1
+                    .trim();
 
                 if query_remainder[6..10] == *"Many" {
-                    return self.request_raw(query, variables)
+                    return self.request_raw(query, variables);
                 }
 
-                let mutation_name = query_remainder.split_once(|c: char| c.is_whitespace() || c == '(').ok_or_else(|| String::from("query is improperly formatted"))?.0;
+                let mutation_name = query_remainder
+                    .split_once(|c: char| c.is_whitespace() || c == '(')
+                    .ok_or_else(|| String::from("query is improperly formatted"))?
+                    .0;
 
                 match &query_remainder[0..6] {
                     "create" => &mut entries.create,
                     "update" => &mut entries.update,
                     "upsert" => &mut entries.upsert,
                     "delete" => &mut entries.delete,
-                    _ => return self.request_raw(query, variables)
-                }.push_back(MassMutateEntry { model_name: mutation_name[6..].to_string(), variables: serde_json::from_str(&variables).map_err(|_| String::from("could not parse variables"))? });
-                
-                // TODO: Generate a local id that will be resolved to a real id later. 
+                    _ => return self.request_raw(query, variables),
+                }
+                .push_back(MassMutateEntry {
+                    model_name: mutation_name[6..].to_string(),
+                    variables: serde_json::from_str(&variables)
+                        .map_err(|_| String::from("could not parse variables"))?,
+                });
+
+                // TODO: Generate a local id that will be resolved to a real id later.
                 // Read more about this logic in [[Self::apply_capture]]
                 return Ok(generate_delayed_id("1", mutation_name));
             }
@@ -226,6 +269,80 @@ impl GuestDataApi for DataAPIContext {
             ))
             .map_err(|e| format!("{e:#}"))
     }
+}
+
+/// Loops through the entries of a serde_json::Map and replaces all the negative IDs with their
+/// reserved counterparts.
+fn replace_negative_ids_in_variables(
+    reserved_ids: &Vec<usize>,
+    variables: &mut serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    for (key, value) in variables.iter_mut() {
+        if key == "id" {
+            handle_id_key(reserved_ids, value)?;
+        } else if let serde_json::Value::Object(object) = value {
+            replace_negative_ids_in_variables(reserved_ids, object)?;
+        } else if let serde_json::Value::Array(array_of_values) = value {
+            handle_array_of_values(reserved_ids, array_of_values)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Replaces the negative ID or IDs with their reserved counterpart.
+fn handle_id_key(reserved_ids: &[usize], value: &mut serde_json::Value) -> Result<(), String> {
+    if let Some(id) = value.as_i64()
+        && id.is_negative()
+    {
+        *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
+    } else if let serde_json::Value::Array(array_of_ids) = value {
+        handle_array_of_ids(reserved_ids, array_of_ids)?;
+    }
+
+    Ok(())
+}
+
+/// Loops over an Vec of IDs and replaces negative ones with their reserved counterpart.
+fn handle_array_of_ids(reserved_ids: &[usize], array_of_ids: &mut [serde_json::Value]) -> Result<(), String> {
+    for item in array_of_ids.iter_mut() {
+        if let Some(id) = item.as_i64()
+            && id.is_negative()
+        {
+            *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Uses the negative_id to index for its reserved id and put it into a serde_json::Value.
+fn get_reserved_id_as_value_for_negative_id(
+    reserved_ids: &[usize],
+    negative_id: i64,
+) -> Result<serde_json::Value, String> {
+    // If `negative_id` is -1 which is the first possible negative ID, then `-1 - -1 = 0`.
+    // Which is the first possible item in the reserved ID list.
+    let index: usize = (-1 - negative_id).try_into().map_err(|error| format!("could not convert number to usize: {error}"))?;
+
+    Ok(serde_json::Value::Number(serde_json::Number::from(
+        reserved_ids[index],
+    )))
+}
+
+/// Looks at the items in an array and if they're an object tries to replace negative IDs in that
+/// object, and if they are an array it searches for objects or arrays within that object which
+/// might have negative IDs to replace.
+fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serde_json::Value]) -> Result<(), String> {
+    for item in array_of_values.iter_mut() {
+        if let serde_json::Value::Object(object) = item {
+            replace_negative_ids_in_variables(reserved_ids, object)?;
+        } else if let serde_json::Value::Array(array) = item {
+            handle_array_of_values(reserved_ids, array)?;
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, PartialEq)]
@@ -429,19 +546,39 @@ fn capture_mutation_test() {
 
     ctx.start_capture().unwrap();
 
-    assert_eq!(ctx.request(String::from(r#"
+    assert_eq!(
+        ctx.request(
+            String::from(
+                r#"
     mutation ($input: userInput, $validationSets: [String]) {
         createuser(input: $input, validationSets: $validationSets) {
             id
         }
-    }"#), String::from(r#"{"id": 1}"#)).unwrap().as_str(), r#"{"data": {"createuser": {"id": "1"}}}"#);
+    }"#
+            ),
+            String::from(r#"{"id": 1}"#)
+        )
+        .unwrap()
+        .as_str(),
+        r#"{"data": {"createuser": {"id": "1"}}}"#
+    );
 
-    assert_eq!(ctx.request(String::from(r#"
+    assert_eq!(
+        ctx.request(
+            String::from(
+                r#"
     mutation ($input: userInput, $validationSets: [String]) {
         deleteuser(input: $input, validationSets: $validationSets) {
             id
         }
-    }"#), String::from(r#"{"id": 1}"#)).unwrap().as_str(), r#"{"data": {"deleteuser": {"id": "1"}}}"#);
+    }"#
+            ),
+            String::from(r#"{"id": 1}"#)
+        )
+        .unwrap()
+        .as_str(),
+        r#"{"data": {"deleteuser": {"id": "1"}}}"#
+    );
 
     ctx.apply_capture().unwrap();
 }

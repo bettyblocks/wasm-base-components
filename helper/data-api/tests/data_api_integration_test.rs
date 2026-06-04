@@ -10,11 +10,11 @@ use std::{
 };
 use tokio::task;
 use tonic::metadata::MetadataMap;
-use tonic::{transport::Server, Request, Response};
+use tonic::{Request, Response, transport::Server};
 use tracing::info;
 use uuid::Uuid;
-use wash_runtime::host::http::{DevRouter, HttpServer};
 use wash_runtime::host::HostApi;
+use wash_runtime::host::http::{DevRouter, HttpServer};
 use wash_runtime::types::{Component, LocalResources, Workload, WorkloadStartRequest};
 use wash_runtime::wit::WitInterface;
 use wash_runtime::{
@@ -27,9 +27,9 @@ pub mod data_grpc {
 
 use data_grpc::DataApiRequest;
 use data_grpc::{
+    DataApiResult,
     data_api_result::Status,
     data_api_server::{DataApi, DataApiServer},
-    DataApiResult,
 };
 
 #[path = "common/mod.rs"]
