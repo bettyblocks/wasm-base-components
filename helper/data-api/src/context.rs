@@ -1,8 +1,12 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use crate::exports::betty_blocks::data_api::data_api::{self, GuestDataApi, JsonString};
 use crate::{Config, inner_request};
+
+type ModelName = String;
+type InternalId = isize;
+type RealId = i32;
 
 pub struct DataAPIContext {
     application_id: String,
@@ -12,19 +16,25 @@ pub struct DataAPIContext {
     action_id: String,
     /// jwt of the customer (so not the jaws jwt used for authenticating the server to server communication)
     jwt: Option<String>,
-    capture_stack: Arc<Mutex<Vec<MassMutateEntries>>>,
+    capture_data: Arc<Mutex<CaptureData>>,
+}
+
+#[derive(Debug, Default)]
+pub struct CaptureData {
+    model_names_of_local_ids: Vec<ModelName>,
+    reserve_id_count_per_model: HashMap<ModelName, usize>,
+    capture_stack: Vec<MassMutateEntries>,
 }
 
 #[derive(Default, Debug)]
 pub struct MassMutateEntries {
     create: VecDeque<MassMutateEntry>,
     update: VecDeque<MassMutateEntry>,
-    upsert: VecDeque<MassMutateEntry>,
     delete: VecDeque<MassMutateEntry>,
 }
 
 impl MassMutateEntries {
-    fn as_pending_mutations(&self) -> [Vec<data_api::PendingMutation>; 4] {
+    fn as_pending_mutations(&self) -> [Vec<data_api::PendingMutation>; 3] {
         [
             self.create
                 .iter()
@@ -33,10 +43,6 @@ impl MassMutateEntries {
             self.update
                 .iter()
                 .map(|x| x.as_pending_mutation(DataMutation::Update))
-                .collect(),
-            self.upsert
-                .iter()
-                .map(|x| x.as_pending_mutation(DataMutation::Upsert))
                 .collect(),
             self.delete
                 .iter()
@@ -62,6 +68,22 @@ impl MassMutateEntry {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ReserveIdMutationResult {
+    data: ReserveIdResult,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ReserveIdResult {
+    #[serde(rename = "reserveRecords")]
+    reserved_ids: ReservedIds
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ReservedIds {
+    ids: VecDeque<u32>
+}
+
 fn format_mutation(model_name: &str, operation: &DataMutation) -> String {
     format!(
         "mutation {{ {}{model_name}(input: $input) {{ id }} }}",
@@ -77,24 +99,48 @@ fn generate_delayed_id(id: &str, mutation_name: &str) -> JsonString {
     format!(r#"{{"data": {{"{mutation_name}": {{"id": "{id}"}}}}}}"#)
 }
 
+fn reserve_ids(data_api_context: &impl GuestDataApi, (model_name, id_count): (ModelName, usize)) -> Result<(ModelName, VecDeque<u32>), String> {
+    let query = 
+                r#"mutation ($model: String!, $amount: Int!) {
+                    reserveRecords(model: $model, amount: $amount) {
+                    ids
+                    }
+                }"#;
+
+                let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
+
+                let res = data_api_context.request_raw(query.to_string(), variables)?;
+
+                let ReserveIdMutationResult{data: ReserveIdResult { reserved_ids: ReservedIds { ids } }} = serde_json::from_str(&res).map_err(|_| String::from("could not parse data api result for reserving ids"))?;
+
+                Ok((model_name, ids))
+}
+
 impl GuestDataApi for DataAPIContext {
     fn new(application_id: String, action_id: String, jwt: Option<String>) -> Self {
         DataAPIContext {
             application_id,
             action_id,
             jwt,
-            capture_stack: Default::default(),
+            capture_data: Default::default(),
         }
     }
 
     fn apply_capture(&self) -> Result<String, String> {
+        let mut capture_data = self
+            .capture_data
+            .lock()
+            .map_err(|_| String::from("capture stack lock poisoned"))?;
         if let Some(MassMutateEntries {
             create,
             update,
-            upsert,
             delete,
-        }) = self.capture_stack.lock().expect("lock is poisoned").pop()
+        }) = capture_data.capture_stack.pop()
         {
+            let mut reserved_id_map = capture_data.reserve_id_count_per_model.drain().map(|entry| reserve_ids(self, entry)).collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
+
+            let reserved_ids = capture_data.model_names_of_local_ids.iter().map(|model_name| Ok(reserved_id_map.get_mut(model_name).ok_or_else(|| format!("ids for model {model_name} were not properly reserved"))?.pop_front().ok_or_else(|| format!("not enough ids were reserved for model {model_name}"))?)).collect::<Result<Vec<u32>, String>>()?;
+
             /* TODO: resolve ids
             Locally generated ids need to be distinguishable from normal ids after being sent back to the caller and then sent here as for example a related row.
             This will probably be done with negative numbered ids? Unless we have a better way of distinguising them.
@@ -112,19 +158,20 @@ impl GuestDataApi for DataAPIContext {
 
             // If we want to be able to specify a unique by for the upsert we would want to handle them separately,
             // but this is left out of cope for now.
-            let upsert_manys = [create, update, upsert].into_iter().flatten().fold(
-                HashMap::new(),
-                |mut map, mut item| {
-                    // TODO: Add reserved_ids.
-                    // TODO: Remove unwrap.
-                    replace_negative_ids_in_variables(&vec![], &mut item.variables).unwrap();
+            let upsert_manys =
+                [create, update]
+                    .into_iter()
+                    .flatten()
+                    .fold(HashMap::new(), |mut map, mut item| {
+                        // TODO: Add reserved_ids.
+                        // TODO: Remove unwrap.
+                        replace_negative_ids_in_variables(&vec![], &mut item.variables).unwrap();
 
-                    map.entry(item.model_name)
-                        .or_insert(Vec::new())
-                        .push(item.variables);
-                    map
-                },
-            );
+                        map.entry(item.model_name)
+                            .or_insert(Vec::new())
+                            .push(item.variables);
+                        map
+                    });
 
             // TODO: Do we want to delete entries before they get upserted where possible?
             // Would mean less unnecessary mutations in the data api, but likely worse performance if we need to check for that here.
@@ -136,13 +183,13 @@ impl GuestDataApi for DataAPIContext {
             //     }
             // }
 
-            for (model_name, all_variables) in upsert_manys {
+            for (model_name, variables) in upsert_manys {
                 let query =
                     format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
 
                 let variables = format!(
                     "{{\"input\": {}}}",
-                    serde_json::to_string(&all_variables)
+                    serde_json::to_string(&variables)
                         .map_err(|_| String::from("could not format input variables"))?
                 );
 
@@ -177,7 +224,13 @@ impl GuestDataApi for DataAPIContext {
     }
 
     fn discard_capture(&self) -> Result<String, String> {
-        if let Some(_) = self.capture_stack.lock().expect("lock is poisoned").pop() {
+        if let Some(_) = self
+            .capture_data
+            .lock()
+            .expect("lock is poisoned")
+            .capture_stack
+            .pop()
+        {
             return Ok(format!("deleted most recent capture stack entry"));
         }
 
@@ -185,15 +238,22 @@ impl GuestDataApi for DataAPIContext {
     }
 
     fn start_capture(&self) -> Result<(), String> {
-        self.capture_stack
+        self.capture_data
             .lock()
             .map_err(|_| String::from("capture stack lock poisoned"))?
-            .push(MassMutateEntries::default());
+            .capture_stack
+            .push(Default::default());
         Ok(())
     }
 
     fn pending_capture(&self) -> Result<Vec<Vec<data_api::PendingMutation>>, String> {
-        if let Some(entries) = self.capture_stack.lock().expect("lock is poisoned").last() {
+        if let Some(entries) = self
+            .capture_data
+            .lock()
+            .expect("lock is poisoned")
+            .capture_stack
+            .last()
+        {
             return Ok(entries.as_pending_mutations().to_vec());
         }
 
@@ -201,45 +261,86 @@ impl GuestDataApi for DataAPIContext {
     }
 
     fn request(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
-        if let Ok(mut capture_stack) = self.capture_stack.lock() {
-            if let Some(entries) = capture_stack.last_mut() {
-                let query_remainder = match query.split_once("mutation") {
-                    Some((_, remainder)) => remainder,
-                    None => return self.request_raw(query, variables),
-                };
+        if let Ok(mut capture_data) = self.capture_data.lock()
+            && capture_data.capture_stack.len() != 0
+        {
+            let query_remainder = match query.split_once("mutation") {
+                Some((_, remainder)) => remainder,
+                None => return self.request_raw(query, variables),
+            };
 
-                let query_remainder = query_remainder
-                    .split_once('{')
-                    .ok_or_else(|| String::from("query is improperly formatted"))?
-                    .1
-                    .trim();
+            let query_remainder = query_remainder
+                .split_once('{')
+                .ok_or_else(|| String::from("query is improperly formatted"))?
+                .1
+                .trim();
 
-                if query_remainder[6..10] == *"Many" {
-                    return self.request_raw(query, variables);
-                }
-
-                let mutation_name = query_remainder
-                    .split_once(|c: char| c.is_whitespace() || c == '(')
-                    .ok_or_else(|| String::from("query is improperly formatted"))?
-                    .0;
-
-                match &query_remainder[0..6] {
-                    "create" => &mut entries.create,
-                    "update" => &mut entries.update,
-                    "upsert" => &mut entries.upsert,
-                    "delete" => &mut entries.delete,
-                    _ => return self.request_raw(query, variables),
-                }
-                .push_back(MassMutateEntry {
-                    model_name: mutation_name[6..].to_string(),
-                    variables: serde_json::from_str(&variables)
-                        .map_err(|_| String::from("could not parse variables"))?,
-                });
-
-                // TODO: Generate a local id that will be resolved to a real id later.
-                // Read more about this logic in [[Self::apply_capture]]
-                return Ok(generate_delayed_id("1", mutation_name));
+            if query_remainder[6..10] == *"Many" {
+                return self.request_raw(query, variables);
             }
+
+            let mutation_name = query_remainder
+                .split_once(|c: char| c.is_whitespace() || c == '(')
+                .ok_or_else(|| String::from("query is improperly formatted"))?
+                .0;
+
+            let model_name = mutation_name[6..].to_string();
+
+            let mass_mutate_entry = MassMutateEntry {
+                model_name: model_name.clone(),
+                variables: serde_json::from_str(&variables)
+                    .map_err(|_| String::from("could not parse variables"))?,
+            };
+
+            // It is safe to unwrap the capture stack last_mut here because we checked the length to be non-zero before. This looks a bit wack but is necessary to not mutably borrow capture_data multiple times.
+            let id: isize = match &query_remainder[0..6] {
+                "create" => {
+                    // TODO: you could specify an id with a create, that isn't handled yet.
+                    capture_data
+                        .model_names_of_local_ids
+                        .push(model_name.clone());
+                    capture_data
+                        .reserve_id_count_per_model
+                        .entry(model_name)
+                        .and_modify(|x| *x += 1);
+                    capture_data
+                        .capture_stack
+                        .last_mut()
+                        .unwrap()
+                        .create
+                        .push_back(mass_mutate_entry);
+                    -capture_data
+                        .capture_stack
+                        .len()
+                        .try_into()
+                        .map_err(|_| String::from("ran out of internal ids"))?
+                }
+                "update" => {
+                    capture_data
+                        .capture_stack
+                        .last_mut()
+                        .unwrap()
+                        .update
+                        .push_back(mass_mutate_entry);
+                    // TODO: find the id and return it.
+                    1isize
+                }
+                "delete" => {
+                    capture_data
+                        .capture_stack
+                        .last_mut()
+                        .unwrap()
+                        .delete
+                        .push_back(mass_mutate_entry);
+                    // TODO: find the id and return it.
+                    1isize
+                }
+                _ => return self.request_raw(query, variables),
+            };
+
+            // TODO: Generate a local id that will be resolved to a real id later.
+            // Read more about this logic in [[Self::apply_capture]]
+            return Ok(generate_delayed_id(&id.to_string(), mutation_name));
         }
 
         self.request_raw(query, variables)
@@ -349,7 +450,6 @@ fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serd
 pub enum DataMutation {
     Create,
     Update,
-    Upsert,
     Delete,
 }
 
@@ -360,7 +460,6 @@ impl DataMutation {
         match self {
             Create => "create",
             Update => "update",
-            Upsert => "upsert",
             Delete => "delete",
         }
     }
@@ -386,14 +485,6 @@ impl Instruction {
         Instruction {
             name,
             operator: DataMutation::Update,
-            data: None,
-        }
-    }
-
-    pub fn upsert(name: String) -> Self {
-        Instruction {
-            name,
-            operator: DataMutation::Upsert,
             data: None,
         }
     }
@@ -556,7 +647,7 @@ fn capture_mutation_test() {
         }
     }"#
             ),
-            String::from(r#"{"id": 1}"#)
+            String::from(r#"{"input": {"id": 1}}"#)
         )
         .unwrap()
         .as_str(),
@@ -573,7 +664,7 @@ fn capture_mutation_test() {
         }
     }"#
             ),
-            String::from(r#"{"id": 1}"#)
+            String::from(r#"{"input": {"id": 1}}"#)
         )
         .unwrap()
         .as_str(),
