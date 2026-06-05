@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use crate::exports::betty_blocks::data_api::data_api::{self, GuestDataApi, JsonString};
@@ -28,6 +28,7 @@ pub struct CaptureData {
 
 #[derive(Default, Debug)]
 pub struct MassMutateEntries {
+    // TODO: We are probably able to turn these into Vecs because we iterate through them front-to-back anyway
     create: VecDeque<MassMutateEntry>,
     update: VecDeque<MassMutateEntry>,
     delete: VecDeque<MassMutateEntry>,
@@ -76,12 +77,24 @@ pub struct ReserveIdMutationResult {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ReserveIdResult {
     #[serde(rename = "reserveRecords")]
-    reserved_ids: ReservedIds
+    reserved_ids: ReservedIds,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ReservedIds {
-    ids: VecDeque<u32>
+    ids: VecDeque<u32>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct MutationInput {
+    input: MutationInputVariable,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct MutationInputVariable {
+    id: InternalId,
+    #[serde(flatten)]
+    other_inputs: HashMap<String, serde_json::Value>,
 }
 
 fn format_mutation(model_name: &str, operation: &DataMutation) -> String {
@@ -95,25 +108,32 @@ fn format_mutation_name(model_name: &str, operation: &DataMutation) -> String {
     format!("{}{model_name}", operation.as_static_str())
 }
 
-fn generate_delayed_id(id: &str, mutation_name: &str) -> JsonString {
+fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {
     format!(r#"{{"data": {{"{mutation_name}": {{"id": "{id}"}}}}}}"#)
 }
 
-fn reserve_ids(data_api_context: &impl GuestDataApi, (model_name, id_count): (ModelName, usize)) -> Result<(ModelName, VecDeque<u32>), String> {
-    let query = 
-                r#"mutation ($model: String!, $amount: Int!) {
+fn reserve_ids(
+    data_api_context: &impl GuestDataApi,
+    (model_name, id_count): (ModelName, usize),
+) -> Result<(ModelName, VecDeque<u32>), String> {
+    let query = r#"mutation ($model: String!, $amount: Int!) {
                     reserveRecords(model: $model, amount: $amount) {
                     ids
                     }
                 }"#;
 
-                let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
+    let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
 
-                let res = data_api_context.request_raw(query.to_string(), variables)?;
+    let res = data_api_context.request_raw(query.to_string(), variables)?;
 
-                let ReserveIdMutationResult{data: ReserveIdResult { reserved_ids: ReservedIds { ids } }} = serde_json::from_str(&res).map_err(|_| String::from("could not parse data api result for reserving ids"))?;
+    let ReserveIdMutationResult {
+        data: ReserveIdResult {
+            reserved_ids: ReservedIds { ids },
+        },
+    } = serde_json::from_str(&res)
+        .map_err(|_| String::from("could not parse data api result for reserving ids"))?;
 
-                Ok((model_name, ids))
+    Ok((model_name, ids))
 }
 
 impl GuestDataApi for DataAPIContext {
@@ -137,11 +157,29 @@ impl GuestDataApi for DataAPIContext {
             delete,
         }) = capture_data.capture_stack.pop()
         {
-            let mut reserved_id_map = capture_data.reserve_id_count_per_model.drain().map(|entry| reserve_ids(self, entry)).collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
+            let mut reserved_id_map = capture_data
+                .reserve_id_count_per_model
+                .drain()
+                .map(|entry| reserve_ids(self, entry))
+                .collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
 
-            let reserved_ids = capture_data.model_names_of_local_ids.iter().map(|model_name| Ok(reserved_id_map.get_mut(model_name).ok_or_else(|| format!("ids for model {model_name} were not properly reserved"))?.pop_front().ok_or_else(|| format!("not enough ids were reserved for model {model_name}"))?)).collect::<Result<Vec<u32>, String>>()?;
+            let reserved_ids = capture_data
+                .model_names_of_local_ids
+                .iter()
+                .map(|model_name| {
+                    Ok(reserved_id_map
+                        .get_mut(model_name)
+                        .ok_or_else(|| {
+                            format!("ids for model {model_name} were not properly reserved")
+                        })?
+                        .pop_front()
+                        .ok_or_else(|| {
+                            format!("not enough ids were reserved for model {model_name}")
+                        })? as RealId)
+                })
+                .collect::<Result<Vec<RealId>, String>>()?;
 
-            /* TODO: resolve ids
+            /*
             Locally generated ids need to be distinguishable from normal ids after being sent back to the caller and then sent here as for example a related row.
             This will probably be done with negative numbered ids? Unless we have a better way of distinguising them.
             Preferrably the caller wouldn't be able to distinguish them.
@@ -156,32 +194,23 @@ impl GuestDataApi for DataAPIContext {
             These can be clustered by model, so we can do upsertManyUser but not upsertManyUserAndRole.
             */
 
+            let mut upsert_manys = HashMap::new();
+
             // If we want to be able to specify a unique by for the upsert we would want to handle them separately,
-            // but this is left out of cope for now.
-            let upsert_manys =
-                [create, update]
-                    .into_iter()
-                    .flatten()
-                    .fold(HashMap::new(), |mut map, mut item| {
-                        // TODO: Add reserved_ids.
-                        // TODO: Remove unwrap.
-                        replace_negative_ids_in_variables(&vec![], &mut item.variables).unwrap();
+            // but this is left out of scope for now.
 
-                        map.entry(item.model_name)
-                            .or_insert(Vec::new())
-                            .push(item.variables);
-                        map
-                    });
+            for MassMutateEntry {
+                model_name,
+                mut variables,
+            } in [create, update].into_iter().flatten()
+            {
+                replace_negative_ids_in_variables(&reserved_ids, &mut variables).unwrap();
 
-            // TODO: Do we want to delete entries before they get upserted where possible?
-            // Would mean less unnecessary mutations in the data api, but likely worse performance if we need to check for that here.
-            // It would look something like this.
-            // for entry in delete {
-            //     if let Some(id) = entry.variables.get("id") && let Some(model_entry) = x.get_mut(&entry.model_name) {
-            //         model_entry.retain(|v| !v.get("id").is_some_and(|y| y == id))
-            //         // Still need to delete if this doesn't match anything
-            //     }
-            // }
+                upsert_manys
+                    .entry(model_name)
+                    .or_insert(Vec::new())
+                    .push(variables);
+            }
 
             for (model_name, variables) in upsert_manys {
                 let query =
@@ -193,8 +222,8 @@ impl GuestDataApi for DataAPIContext {
                         .map_err(|_| String::from("could not format input variables"))?
                 );
 
-                // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys.
-                // self.request_raw(query, variables)?;
+                // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys and reserve ids.
+                self.request_raw(query, variables)?;
             }
 
             let delete_manys = delete
@@ -216,7 +245,7 @@ impl GuestDataApi for DataAPIContext {
                         .map_err(|_| String::from("could not format input variables"))?
                 );
 
-                // self.request_raw(query, variables)?;
+                self.request_raw(query, variables)?;
             }
         }
 
@@ -224,14 +253,15 @@ impl GuestDataApi for DataAPIContext {
     }
 
     fn discard_capture(&self) -> Result<String, String> {
-        if let Some(_) = self
+        if self
             .capture_data
             .lock()
             .expect("lock is poisoned")
             .capture_stack
             .pop()
+            .is_some()
         {
-            return Ok(format!("deleted most recent capture stack entry"));
+            return Ok(String::from("deleted most recent capture stack entry"));
         }
 
         Ok(String::from("nothing to do"))
@@ -262,7 +292,7 @@ impl GuestDataApi for DataAPIContext {
 
     fn request(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
         if let Ok(mut capture_data) = self.capture_data.lock()
-            && capture_data.capture_stack.len() != 0
+            && !capture_data.capture_stack.is_empty()
         {
             let query_remainder = match query.split_once("mutation") {
                 Some((_, remainder)) => remainder,
@@ -294,53 +324,74 @@ impl GuestDataApi for DataAPIContext {
 
             // It is safe to unwrap the capture stack last_mut here because we checked the length to be non-zero before. This looks a bit wack but is necessary to not mutably borrow capture_data multiple times.
             let id: isize = match &query_remainder[0..6] {
-                "create" => {
-                    // TODO: you could specify an id with a create, that isn't handled yet.
-                    capture_data
-                        .model_names_of_local_ids
-                        .push(model_name.clone());
-                    capture_data
-                        .reserve_id_count_per_model
-                        .entry(model_name)
-                        .and_modify(|x| *x += 1);
-                    capture_data
-                        .capture_stack
-                        .last_mut()
-                        .unwrap()
-                        .create
-                        .push_back(mass_mutate_entry);
-                    -capture_data
-                        .capture_stack
-                        .len()
-                        .try_into()
-                        .map_err(|_| String::from("ran out of internal ids"))?
-                }
+                "create" => match serde_json::from_str(&variables) {
+                    Ok(MutationInput {
+                        input: MutationInputVariable { id, .. },
+                    }) => {
+                        capture_data
+                            .capture_stack
+                            .last_mut()
+                            .unwrap()
+                            .create
+                            .push_back(mass_mutate_entry);
+
+                        id
+                    }
+                    Err(_) => {
+                        capture_data
+                            .model_names_of_local_ids
+                            .push(model_name.clone());
+                        *capture_data
+                            .reserve_id_count_per_model
+                            .entry(model_name)
+                            .or_default() += 1;
+                        capture_data
+                            .capture_stack
+                            .last_mut()
+                            .unwrap()
+                            .create
+                            .push_back(mass_mutate_entry);
+                        -capture_data
+                            .capture_stack
+                            .len()
+                            .try_into()
+                            .map_err(|_| String::from("ran out of internal ids"))?
+                    }
+                },
                 "update" => {
+                    let MutationInput {
+                        input: MutationInputVariable { id, .. },
+                    } = serde_json::from_str(&variables)
+                        .map_err(|_| String::from("could not find id input for update query"))?;
+
                     capture_data
                         .capture_stack
                         .last_mut()
                         .unwrap()
                         .update
                         .push_back(mass_mutate_entry);
-                    // TODO: find the id and return it.
-                    1isize
+
+                    id
                 }
                 "delete" => {
+                    let MutationInput {
+                        input: MutationInputVariable { id, .. },
+                    } = serde_json::from_str(&variables)
+                        .map_err(|_| String::from("could not find id input for delete query"))?;
+
                     capture_data
                         .capture_stack
                         .last_mut()
                         .unwrap()
                         .delete
                         .push_back(mass_mutate_entry);
-                    // TODO: find the id and return it.
-                    1isize
+
+                    id
                 }
                 _ => return self.request_raw(query, variables),
             };
 
-            // TODO: Generate a local id that will be resolved to a real id later.
-            // Read more about this logic in [[Self::apply_capture]]
-            return Ok(generate_delayed_id(&id.to_string(), mutation_name));
+            return Ok(generate_delayed_id_response(&id.to_string(), mutation_name));
         }
 
         self.request_raw(query, variables)
@@ -375,7 +426,7 @@ impl GuestDataApi for DataAPIContext {
 /// Loops through the entries of a serde_json::Map and replaces all the negative IDs with their
 /// reserved counterparts.
 fn replace_negative_ids_in_variables(
-    reserved_ids: &Vec<usize>,
+    reserved_ids: &[RealId],
     variables: &mut serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
     for (key, value) in variables.iter_mut() {
@@ -392,7 +443,7 @@ fn replace_negative_ids_in_variables(
 }
 
 /// Replaces the negative ID or IDs with their reserved counterpart.
-fn handle_id_key(reserved_ids: &[usize], value: &mut serde_json::Value) -> Result<(), String> {
+fn handle_id_key(reserved_ids: &[RealId], value: &mut serde_json::Value) -> Result<(), String> {
     if let Some(id) = value.as_i64()
         && id.is_negative()
     {
@@ -405,7 +456,10 @@ fn handle_id_key(reserved_ids: &[usize], value: &mut serde_json::Value) -> Resul
 }
 
 /// Loops over an Vec of IDs and replaces negative ones with their reserved counterpart.
-fn handle_array_of_ids(reserved_ids: &[usize], array_of_ids: &mut [serde_json::Value]) -> Result<(), String> {
+fn handle_array_of_ids(
+    reserved_ids: &[RealId],
+    array_of_ids: &mut [serde_json::Value],
+) -> Result<(), String> {
     for item in array_of_ids.iter_mut() {
         if let Some(id) = item.as_i64()
             && id.is_negative()
@@ -419,12 +473,14 @@ fn handle_array_of_ids(reserved_ids: &[usize], array_of_ids: &mut [serde_json::V
 
 /// Uses the negative_id to index for its reserved id and put it into a serde_json::Value.
 fn get_reserved_id_as_value_for_negative_id(
-    reserved_ids: &[usize],
+    reserved_ids: &[RealId],
     negative_id: i64,
 ) -> Result<serde_json::Value, String> {
     // If `negative_id` is -1 which is the first possible negative ID, then `-1 - -1 = 0`.
     // Which is the first possible item in the reserved ID list.
-    let index: usize = (-1 - negative_id).try_into().map_err(|error| format!("could not convert number to usize: {error}"))?;
+    let index: usize = (-1 - negative_id)
+        .try_into()
+        .map_err(|error| format!("could not convert number to usize: {error}"))?;
 
     Ok(serde_json::Value::Number(serde_json::Number::from(
         reserved_ids[index],
@@ -434,7 +490,10 @@ fn get_reserved_id_as_value_for_negative_id(
 /// Looks at the items in an array and if they're an object tries to replace negative IDs in that
 /// object, and if they are an array it searches for objects or arrays within that object which
 /// might have negative IDs to replace.
-fn handle_array_of_values(reserved_ids: &Vec<usize>, array_of_values: &mut [serde_json::Value]) -> Result<(), String> {
+fn handle_array_of_values(
+    reserved_ids: &[RealId],
+    array_of_values: &mut [serde_json::Value],
+) -> Result<(), String> {
     for item in array_of_values.iter_mut() {
         if let serde_json::Value::Object(object) = item {
             replace_negative_ids_in_variables(reserved_ids, object)?;
@@ -508,71 +567,62 @@ pub fn parse_graphql_to_intruction(graphql: &str) -> Result<Option<Instruction>,
 
     for def in document.definitions {
         match def {
-            graphql_parser::query::Definition::Operation(operation) => match operation {
-                graphql_parser::query::OperationDefinition::Mutation(mutation) => {
-                    if mutation.selection_set.items.len() > 1 {
-                        return Ok(None);
-                    }
+            graphql_parser::query::Definition::Operation(
+                graphql_parser::query::OperationDefinition::Mutation(mutation),
+            ) => {
+                if mutation.selection_set.items.len() > 1 {
+                    return Ok(None);
+                }
 
-                    for item in mutation.selection_set.items {
-                        match item {
-                            graphql_parser::query::Selection::Field(field)
-                                if field.name.starts_with("create")
-                                    && !field.name.starts_with("createMany") =>
-                            {
-                                let name = field.name.split_at("create".len()).1.to_string();
-                                let mut new_instruction = Instruction::create(name);
+                for item in mutation.selection_set.items {
+                    match item {
+                        graphql_parser::query::Selection::Field(field)
+                            if field.name.starts_with("create")
+                                && !field.name.starts_with("createMany") =>
+                        {
+                            let name = field.name.split_at("create".len()).1.to_string();
+                            let mut new_instruction = Instruction::create(name);
 
-                                extract_values_from_gql_argument(
-                                    &mut new_instruction,
-                                    field.arguments,
-                                );
+                            extract_values_from_gql_argument(&mut new_instruction, field.arguments);
 
-                                instruction = Some(new_instruction);
-                            }
-                            graphql_parser::query::Selection::Field(field)
-                                if field.name.starts_with("update")
-                                    && !field.name.starts_with("updateMany") =>
-                            {
-                                let name = field.name.split_at("update".len()).1.to_string();
-                                let mut new_instruction = Instruction::update(name);
-
-                                extract_values_from_gql_argument(
-                                    &mut new_instruction,
-                                    field.arguments,
-                                );
-
-                                instruction = Some(new_instruction);
-                            }
-                            graphql_parser::query::Selection::Field(field)
-                                if field.name.starts_with("delete")
-                                    && !field.name.starts_with("deleteMany") =>
-                            {
-                                let name = field.name.split_at("delete".len()).1.to_string();
-                                let mut new_instruction = Instruction::delete(name);
-
-                                extract_values_from_gql_argument(
-                                    &mut new_instruction,
-                                    field.arguments,
-                                );
-
-                                instruction = Some(new_instruction);
-                            }
-                            _ => {}
+                            instruction = Some(new_instruction);
                         }
+                        graphql_parser::query::Selection::Field(field)
+                            if field.name.starts_with("update")
+                                && !field.name.starts_with("updateMany") =>
+                        {
+                            let name = field.name.split_at("update".len()).1.to_string();
+                            let mut new_instruction = Instruction::update(name);
+
+                            extract_values_from_gql_argument(&mut new_instruction, field.arguments);
+
+                            instruction = Some(new_instruction);
+                        }
+                        graphql_parser::query::Selection::Field(field)
+                            if field.name.starts_with("delete")
+                                && !field.name.starts_with("deleteMany") =>
+                        {
+                            let name = field.name.split_at("delete".len()).1.to_string();
+                            let mut new_instruction = Instruction::delete(name);
+
+                            extract_values_from_gql_argument(&mut new_instruction, field.arguments);
+
+                            instruction = Some(new_instruction);
+                        }
+                        _ => {}
                     }
                 }
-                graphql_parser::query::OperationDefinition::SelectionSet(set) => {
-                    for item in set.items {
-                        match item {
-                            graphql_parser::query::Selection::Field(field)
-                                if field.name == "id" => {}
-                            _ => {}
-                        }
+            }
+            graphql_parser::query::Definition::Operation(
+                graphql_parser::query::OperationDefinition::SelectionSet(set),
+            ) => {
+                for item in set.items {
+                    match item {
+                        graphql_parser::query::Selection::Field(field) if field.name == "id" => {}
+                        _ => {}
                     }
                 }
-                _ => {}
-            },
+            }
             _ => {}
         }
     }
@@ -597,27 +647,21 @@ fn extract_values_from_gql_argument(
 
 fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serde_json::Value> {
     match val {
-        graphql_parser::query::Value::Variable(_) => return None,
-        graphql_parser::query::Value::Boolean(b) => return Some(serde_json::Value::Bool(b)),
-        graphql_parser::query::Value::String(s) => {
-            return Some(serde_json::Value::String(s));
-        }
+        graphql_parser::query::Value::Variable(_) => None,
+        graphql_parser::query::Value::Boolean(b) => Some(serde_json::Value::Bool(b)),
+        graphql_parser::query::Value::String(s) => Some(serde_json::Value::String(s)),
         graphql_parser::query::Value::Int(i) => {
             let num = i.as_i64()?;
-            return Some(serde_json::Value::Number(num.into()));
+            Some(serde_json::Value::Number(num.into()))
         }
         graphql_parser::query::Value::Float(f) => {
-            return Some(serde_json::Value::Number(Number::from_f64(f)?));
+            Some(serde_json::Value::Number(Number::from_f64(f)?))
         }
-        graphql_parser::query::Value::Null => {
-            return Some(serde_json::Value::Null);
-        }
-        graphql_parser::query::Value::Enum(s) => {
-            return Some(serde_json::Value::String(s));
-        }
+        graphql_parser::query::Value::Null => Some(serde_json::Value::Null),
+        graphql_parser::query::Value::Enum(s) => Some(serde_json::Value::String(s)),
         graphql_parser::query::Value::List(l) => {
             let list = l.into_iter().flat_map(graphql_to_json).collect();
-            return Some(serde_json::Value::Array(list));
+            Some(serde_json::Value::Array(list))
         }
         graphql_parser::query::Value::Object(m) => {
             let mut map = serde_json::Map::new();
@@ -626,7 +670,7 @@ fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serd
                     map.insert(k, json);
                 }
             }
-            return Some(serde_json::Value::Object(map));
+            Some(serde_json::Value::Object(map))
         }
     }
 }
@@ -647,11 +691,11 @@ fn capture_mutation_test() {
         }
     }"#
             ),
-            String::from(r#"{"input": {"id": 1}}"#)
+            String::from(r#"{"input": {"id": 2}}"#)
         )
         .unwrap()
         .as_str(),
-        r#"{"data": {"createuser": {"id": "1"}}}"#
+        r#"{"data": {"createuser": {"id": "2"}}}"#
     );
 
     assert_eq!(
@@ -664,11 +708,11 @@ fn capture_mutation_test() {
         }
     }"#
             ),
-            String::from(r#"{"input": {"id": 1}}"#)
+            String::from(r#"{"input": {"id": 2}}"#)
         )
         .unwrap()
         .as_str(),
-        r#"{"data": {"deleteuser": {"id": "1"}}}"#
+        r#"{"data": {"deleteuser": {"id": "2"}}}"#
     );
 
     ctx.apply_capture().unwrap();
