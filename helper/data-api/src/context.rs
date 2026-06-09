@@ -157,6 +157,10 @@ impl GuestDataApi for DataAPIContext {
             delete,
         }) = capture_data.capture_stack.pop()
         {
+            // TODO
+            // Problem: This will currently not work when reserving ids for a higher scoped capture, because the reserved ids will be dropped by the time they're needed.
+            // Solution: Save the reserved ids in the capture data until the capture data is empty.
+            // if stack_is_empty {clear} else {extend; return extended_vec}
             let mut reserved_id_map = capture_data
                 .reserve_id_count_per_model
                 .drain()
@@ -223,6 +227,7 @@ impl GuestDataApi for DataAPIContext {
                 );
 
                 // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys and reserve ids.
+                // TODO: implement chunking so that this doesn't break when we have too many queries.
                 self.request_raw(query, variables)?;
             }
 
