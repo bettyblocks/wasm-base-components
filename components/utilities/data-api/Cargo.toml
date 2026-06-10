@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = "1.0.100"
 wit-bindgen = "0.48.0"
-wasmcloud-grpc-client = { git = "https://github.com/Aditya1404Sal/wasmcloud-grpc-client.git", branch="master" }
+wasmcloud-grpc-client = { git = "https://github.com/Aditya1404Sal/wasmcloud-grpc-client.git", rev="1d2cadd203a38e5ce8379770c051c9604cbd48cf" }
 wasmcloud-component = "0.2.0"
 tokio = { version = "1.48.0", features = ["rt"] }
 prost = "0.13"
