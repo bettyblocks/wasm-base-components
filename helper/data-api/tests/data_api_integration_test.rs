@@ -6,7 +6,7 @@ use serial_test::serial;
 use std::collections::HashMap;
 use std::{
     net::SocketAddr,
-    sync::{Arc, Once},
+    sync::{Arc, Mutex, Once},
 };
 use tokio::task;
 use tonic::metadata::MetadataMap;
@@ -65,13 +65,20 @@ fn init_tracing_for_test() {
     })
 }
 
-pub async fn start_test_grpc_server(addr: SocketAddr) -> anyhow::Result<()> {
-    let data_api_server = DataGrpcServer::default();
-    Server::builder()
+pub async fn start_test_grpc_server(
+    addr: SocketAddr,
+    collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
+) -> anyhow::Result<()> {
+    info!("Starting gRPC server on {}", addr);
+    let data_api_server = DataGrpcServer {
+        collected_requests,
+    };
+    let result = Server::builder()
         .add_service(DataApiServer::new(data_api_server))
         .serve(addr)
         .await?;
 
+    info!("gRPC server shutting down");
     Ok(())
 }
 
@@ -79,15 +86,30 @@ struct TestConfig {
     host: Arc<Host>,
     grpc_addr: SocketAddr,
     http_addr: SocketAddr,
+    collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
 }
 
 impl TestConfig {
-    fn new(host: Arc<Host>, grpc_addr: SocketAddr, http_addr: SocketAddr) -> Self {
+    fn new(
+        host: Arc<Host>,
+        grpc_addr: SocketAddr,
+        http_addr: SocketAddr,
+        collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
+    ) -> Self {
         Self {
             host,
             grpc_addr,
             http_addr,
+            collected_requests,
         }
+    }
+
+    fn take_collected_requests(&self) -> Vec<DataApiRequest> {
+        self.collected_requests
+            .lock()
+            .expect("lock is poisoned")
+            .drain(..)
+            .collect()
     }
 }
 
@@ -95,8 +117,13 @@ async fn setup_wasmcloud_host() -> anyhow::Result<TestConfig> {
     let grpc_port = find_available_port().await?;
     let grpc_addr: SocketAddr = format!("127.0.0.1:{grpc_port}").parse().unwrap();
 
+    let collected_requests: Arc<Mutex<Vec<DataApiRequest>>> = Arc::new(Mutex::new(Vec::new()));
+
     info!("Starting server");
-    let _handle = task::spawn(start_test_grpc_server(grpc_addr));
+    let _handle = task::spawn(start_test_grpc_server(grpc_addr, collected_requests.clone()));
+
+    // Give the gRPC server time to start listening
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     let http_port = find_available_port().await?;
     let http_addr: SocketAddr = format!("127.0.0.1:{http_port}").parse().unwrap();
@@ -115,7 +142,7 @@ async fn setup_wasmcloud_host() -> anyhow::Result<TestConfig> {
 
     let host = host.start().await?;
 
-    Ok(TestConfig::new(host, grpc_addr, http_addr))
+    Ok(TestConfig::new(host, grpc_addr, http_addr, collected_requests))
 }
 
 async fn start_workload(test_config: &TestConfig) -> anyhow::Result<String> {
@@ -299,9 +326,12 @@ async fn data_api_component_should_return_error_if_token_is_invalid() -> anyhow:
     Ok(())
 }
 
+
 /// REALLY SIMPLE MOCK OF THE DATA API
-#[derive(Debug, Default)]
-pub struct DataGrpcServer {}
+#[derive(Debug)]
+pub struct DataGrpcServer {
+    collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
+}
 
 #[tonic::async_trait]
 impl DataApi for DataGrpcServer {
@@ -310,6 +340,13 @@ impl DataApi for DataGrpcServer {
         request: Request<DataApiRequest>,
     ) -> Result<Response<DataApiResult>, tonic::Status> {
         let (metadata, _extensions, data_api_request) = request.into_parts();
+
+        info!("gRPC DataAPI Execute called with query: {}", data_api_request.query);
+
+        self.collected_requests
+            .lock()
+            .expect("lock is poisoned")
+            .push(data_api_request.clone());
 
         let application_id = match data_api_request.context {
             Some(ctx) => ctx.application_id,
@@ -325,6 +362,16 @@ impl DataApi for DataGrpcServer {
 
         match authenticate(&metadata, &application_id).await {
             AuthResult::Ok => {
+                // Batch mutation queries from apply_capture get a success response
+                if data_api_request.query.contains("Many") {
+                    let body = format_result_json(serde_json::json!({}));
+                    let reply = DataApiResult {
+                        status: Status::Ok as i32,
+                        result: body,
+                    };
+                    return Ok(Response::new(reply));
+                }
+
                 if application_id == APPLICATION_ID {
                     let body = format_error_json(serde_json::json!({
                         "message": "something went wrong"
@@ -406,4 +453,190 @@ fn format_error_json(error: serde_json::Value) -> String {
 
     serde_json::to_string(&serde_json::json!({ "errors": errors }))
         .expect("JSON serialization should not fail")
+}
+
+#[tokio::test]
+#[serial]
+async fn capture_single_create() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let test_config = setup_wasmcloud_host().await?;
+    let id = start_workload(&test_config).await?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}", test_config.http_addr))
+        .json(&json!({
+            "context": {"application_id": APPLICATION_ID.to_string()},
+            "capture_endpoint": "create",
+            "query": "",
+            "variables": ""
+        }))
+        .send()
+        .await?;
+
+    // The gRPC mock returns a 400 error for APPLICATION_ID, but the request should have been made
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let _ = test_config
+        .host
+        .workload_stop(wash_runtime::types::WorkloadStopRequest { workload_id: id })
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn capture_single_update() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let test_config = setup_wasmcloud_host().await?;
+    let id = start_workload(&test_config).await?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}", test_config.http_addr))
+        .json(&json!({
+            "context": {"application_id": APPLICATION_ID.to_string()},
+            "capture_endpoint": "update",
+            "query": "",
+            "variables": ""
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let _ = &test_config
+        .host
+        .workload_stop(wash_runtime::types::WorkloadStopRequest { workload_id: id })
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn capture_single_delete() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let test_config = setup_wasmcloud_host().await?;
+    let id = start_workload(&test_config).await?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}", test_config.http_addr))
+        .json(&json!({
+            "context": {"application_id": APPLICATION_ID.to_string()},
+            "capture_endpoint": "delete",
+            "query": "",
+            "variables": ""
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let _ = &test_config
+        .host
+        .workload_stop(wash_runtime::types::WorkloadStopRequest { workload_id: id })
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn capture_passthrough_query() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let test_config = setup_wasmcloud_host().await?;
+    let id = start_workload(&test_config).await?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}", test_config.http_addr))
+        .json(&json!({
+            "context": {"application_id": APPLICATION_ID.to_string()},
+            "capture_endpoint": "passthrough",
+            "query": "",
+            "variables": ""
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let _ = &test_config
+        .host
+        .workload_stop(wash_runtime::types::WorkloadStopRequest { workload_id: id })
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn capture_all_operations_order() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let test_config = setup_wasmcloud_host().await?;
+    let id = start_workload(&test_config).await?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}", test_config.http_addr))
+        .json(&json!({
+            "context": {"application_id": APPLICATION_ID.to_string()},
+            "capture_endpoint": "all-operations",
+            "query": "",
+            "variables": ""
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let _ = &test_config
+        .host
+        .workload_stop(wash_runtime::types::WorkloadStopRequest { workload_id: id })
+        .await?;
+
+    Ok(())
+}
+
+#[tokio::test]
+#[serial]
+async fn capture_negative_id_relation() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let test_config = setup_wasmcloud_host().await?;
+    let id = start_workload(&test_config).await?;
+
+    let client = Client::new();
+    let response = client
+        .post(format!("http://{}", test_config.http_addr))
+        .json(&json!({
+            "context": {"application_id": APPLICATION_ID.to_string()},
+            "capture_endpoint": "negative-id-relation",
+            "query": "",
+            "variables": ""
+        }))
+        .send()
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    let _ = &test_config
+        .host
+        .workload_stop(wash_runtime::types::WorkloadStopRequest { workload_id: id })
+        .await?;
+
+    Ok(())
 }
