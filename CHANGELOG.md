@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.1...v1.13.2) (2026-06-10)
+
+
+### Bug Fixes
+
+* stream the chunks in 4kb ([590aaca](https://github.com/bettyblocks/wasm-base-components/commit/590aaca70dfe57a9c706ca1eea724e810fb1abd1))
+
 ## [1.13.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.0...v1.13.1) (2026-05-27)
 
 
