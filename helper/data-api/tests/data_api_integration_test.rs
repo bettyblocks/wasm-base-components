@@ -6,7 +6,7 @@ use serial_test::serial;
 use std::collections::HashMap;
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex, Once},
+    sync::{Arc, Once},
 };
 use tokio::task;
 use tonic::metadata::MetadataMap;
@@ -67,13 +67,11 @@ fn init_tracing_for_test() {
 
 pub async fn start_test_grpc_server(
     addr: SocketAddr,
-    collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
 ) -> anyhow::Result<()> {
     info!("Starting gRPC server on {}", addr);
     let data_api_server = DataGrpcServer {
-        collected_requests,
     };
-    let result = Server::builder()
+    Server::builder()
         .add_service(DataApiServer::new(data_api_server))
         .serve(addr)
         .await?;
@@ -86,7 +84,6 @@ struct TestConfig {
     host: Arc<Host>,
     grpc_addr: SocketAddr,
     http_addr: SocketAddr,
-    collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
 }
 
 impl TestConfig {
@@ -94,22 +91,12 @@ impl TestConfig {
         host: Arc<Host>,
         grpc_addr: SocketAddr,
         http_addr: SocketAddr,
-        collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
     ) -> Self {
         Self {
             host,
             grpc_addr,
             http_addr,
-            collected_requests,
         }
-    }
-
-    fn take_collected_requests(&self) -> Vec<DataApiRequest> {
-        self.collected_requests
-            .lock()
-            .expect("lock is poisoned")
-            .drain(..)
-            .collect()
     }
 }
 
@@ -117,10 +104,8 @@ async fn setup_wasmcloud_host() -> anyhow::Result<TestConfig> {
     let grpc_port = find_available_port().await?;
     let grpc_addr: SocketAddr = format!("127.0.0.1:{grpc_port}").parse().unwrap();
 
-    let collected_requests: Arc<Mutex<Vec<DataApiRequest>>> = Arc::new(Mutex::new(Vec::new()));
-
     info!("Starting server");
-    let _handle = task::spawn(start_test_grpc_server(grpc_addr, collected_requests.clone()));
+    let _handle = task::spawn(start_test_grpc_server(grpc_addr));
 
     // Give the gRPC server time to start listening
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -142,7 +127,7 @@ async fn setup_wasmcloud_host() -> anyhow::Result<TestConfig> {
 
     let host = host.start().await?;
 
-    Ok(TestConfig::new(host, grpc_addr, http_addr, collected_requests))
+    Ok(TestConfig::new(host, grpc_addr, http_addr))
 }
 
 async fn start_workload(test_config: &TestConfig) -> anyhow::Result<String> {
@@ -326,11 +311,9 @@ async fn data_api_component_should_return_error_if_token_is_invalid() -> anyhow:
     Ok(())
 }
 
-
 /// REALLY SIMPLE MOCK OF THE DATA API
 #[derive(Debug)]
 pub struct DataGrpcServer {
-    collected_requests: Arc<Mutex<Vec<DataApiRequest>>>,
 }
 
 #[tonic::async_trait]
@@ -342,11 +325,6 @@ impl DataApi for DataGrpcServer {
         let (metadata, _extensions, data_api_request) = request.into_parts();
 
         info!("gRPC DataAPI Execute called with query: {}", data_api_request.query);
-
-        self.collected_requests
-            .lock()
-            .expect("lock is poisoned")
-            .push(data_api_request.clone());
 
         let application_id = match data_api_request.context {
             Some(ctx) => ctx.application_id,
