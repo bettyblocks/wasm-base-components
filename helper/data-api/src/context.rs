@@ -22,8 +22,36 @@ pub struct DataAPIContext {
 #[derive(Debug, Default)]
 pub struct CaptureData {
     model_names_of_local_ids: Vec<ModelName>,
-    reserve_id_count_per_model: HashMap<ModelName, usize>,
+    reserve_id_count_per_model: HashMap<ModelName, u32>,
+    reserved_ids: Vec<RealId>,
     capture_stack: Vec<MassMutateEntries>,
+}
+
+impl CaptureData {
+    fn reserve_ids(&mut self, data_api_context: &DataAPIContext) -> Result<Vec<RealId>, String> {
+        let mut reserved_id_map = self
+            .reserve_id_count_per_model
+            .drain()
+            .map(|entry| data_api_context.reserve_ids(entry))
+            .collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
+
+        for model_name in self.model_names_of_local_ids.drain(..) {
+            let reserved_ids_for_model = reserved_id_map
+                .get_mut(&model_name)
+                .ok_or_else(|| format!("ids for model {model_name} were not properly reserved"))?
+                .pop_front()
+                .ok_or_else(|| format!("not enough ids were reserved for model {model_name}"))?
+                as RealId;
+
+            self.reserved_ids.push(reserved_ids_for_model);
+        }
+
+        if self.capture_stack.is_empty() {
+            Ok(std::mem::take(&mut self.reserved_ids))
+        } else {
+            Ok(self.reserved_ids.clone())
+        }
+    }
 }
 
 #[derive(Default, Debug)]
@@ -112,28 +140,30 @@ fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {
     format!(r#"{{"data": {{"{mutation_name}": {{"id": "{id}"}}}}}}"#)
 }
 
-fn reserve_ids(
-    data_api_context: &impl GuestDataApi,
-    (model_name, id_count): (ModelName, usize),
-) -> Result<(ModelName, VecDeque<u32>), String> {
-    let query = r#"mutation ($model: String!, $amount: Int!) {
+impl DataAPIContext {
+    fn reserve_ids(
+        &self,
+        (model_name, id_count): (ModelName, u32),
+    ) -> Result<(ModelName, VecDeque<u32>), String> {
+        let query = r#"mutation ($model: String!, $amount: Int!) {
                     reserveRecords(model: $model, amount: $amount) {
                     ids
                     }
                 }"#;
 
-    let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
+        let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
 
-    let res = data_api_context.request_raw(query.to_string(), variables)?;
+        let res = self.request_raw(query.to_string(), variables)?;
 
-    let ReserveIdMutationResult {
-        data: ReserveIdResult {
-            reserved_ids: ReservedIds { ids },
-        },
-    } = serde_json::from_str(&res)
-        .map_err(|_| String::from("could not parse data api result for reserving ids"))?;
+        let ReserveIdMutationResult {
+            data: ReserveIdResult {
+                reserved_ids: ReservedIds { ids },
+            },
+        } = serde_json::from_str(&res)
+            .map_err(|_| String::from("could not parse data api result for reserving ids"))?;
 
-    Ok((model_name, ids))
+        Ok((model_name, ids))
+    }
 }
 
 impl GuestDataApi for DataAPIContext {
@@ -157,31 +187,7 @@ impl GuestDataApi for DataAPIContext {
             delete,
         }) = capture_data.capture_stack.pop()
         {
-            // TODO
-            // Problem: This will currently not work when reserving ids for a higher scoped capture, because the reserved ids will be dropped by the time they're needed.
-            // Solution: Save the reserved ids in the capture data until the capture data is empty.
-            // if stack_is_empty {clear} else {extend; return extended_vec}
-            let mut reserved_id_map = capture_data
-                .reserve_id_count_per_model
-                .drain()
-                .map(|entry| reserve_ids(self, entry))
-                .collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
-
-            let reserved_ids = capture_data
-                .model_names_of_local_ids
-                .iter()
-                .map(|model_name| {
-                    Ok(reserved_id_map
-                        .get_mut(model_name)
-                        .ok_or_else(|| {
-                            format!("ids for model {model_name} were not properly reserved")
-                        })?
-                        .pop_front()
-                        .ok_or_else(|| {
-                            format!("not enough ids were reserved for model {model_name}")
-                        })? as RealId)
-                })
-                .collect::<Result<Vec<RealId>, String>>()?;
+            let reserved_ids = capture_data.reserve_ids(self)?;
 
             /*
             Locally generated ids need to be distinguishable from normal ids after being sent back to the caller and then sent here as for example a related row.
@@ -199,9 +205,6 @@ impl GuestDataApi for DataAPIContext {
             */
 
             let mut upsert_manys = HashMap::new();
-
-            // If we want to be able to specify a unique by for the upsert we would want to handle them separately,
-            // but this is left out of scope for now.
 
             for MassMutateEntry {
                 model_name,
