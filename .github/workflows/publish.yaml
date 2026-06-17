@@ -21,9 +21,8 @@ on:
         type: string
 
 jobs:
-  publish:
+  push-ghcr:
     runs-on: ubuntu-latest
-    # Only run if workflow_run succeeded or if manually triggered
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
@@ -146,3 +145,82 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### View Packages" >> $GITHUB_STEP_SUMMARY
           echo "Visit: [GitHub Packages](https://github.com/orgs/${REPO_OWNER}/packages)" >> $GITHUB_STEP_SUMMARY
+
+  push-azure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "INPUT_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            echo "INPUT_VERSION=$LATEST_TAG" >> $GITHUB_ENV
+          fi
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wkg
+
+      - name: Prepare environment
+        run: |
+          VERSION="${INPUT_VERSION}"
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Download artifacts from workflow run
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: release.yaml
+          name: wasm-components-v${{ env.VERSION }}
+          path: ./artifacts
+          if_no_artifact_found: fail
+          search_artifacts: true
+
+      - name: Organize artifacts
+        run: |
+          if [ -d artifacts/components ]; then
+            cp -r artifacts/components/* components/ 2>/dev/null || true
+          fi
+          if [ -d artifacts/target ]; then
+            cp -r artifacts/target/* target/ 2>/dev/null || true
+          fi
+
+      - name: Log in to Azure registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.AZURE_REGISTRY }}
+          username: ${{ secrets.AZURE_USERNAME }}
+          password: ${{ secrets.AZURE_PASSWORD }}
+
+      - name: Push components to Azure registry
+        run: |
+          EXIT_CODE=0
+          for world_file in $(find components -name "world.wit" -path "*/wit/*" -not -path "*/deps/*" -not -path "*/test-component/*"); do
+            component_directory=$(dirname "$(dirname "$world_file")")
+            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+
+            wasm_file=$(find "$component_directory/build" -name "*.wasm" 2>/dev/null | head -1)
+            if [ -z "$wasm_file" ]; then
+              wasm_file=$(find target/wasm32-wasip2/release -name "*.wasm" 2>/dev/null | head -1)
+            fi
+
+            if [ -z "$wasm_file" ]; then
+              echo "::warning::Skipped $name (no .wasm artifact found)"
+              continue
+            fi
+
+            IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
+            wkg oci push "${IMAGE_NAME}:${VERSION}" "$wasm_file" || EXIT_CODE=1
+
+            echo "Published: ${IMAGE_NAME}:${VERSION}"
+          done
+          exit $EXIT_CODE

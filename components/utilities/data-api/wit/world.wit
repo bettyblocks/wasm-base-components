@@ -1,4 +1,4 @@
-package betty-blocks:data-api;
+package betty-blocks-utilities:data-api;
 
 interface data-api {
     // TODO : Will be renamed to `data-api-context` after https://github.com/bettyblocks/wasm-base-components/pull/18 (mass mutate) is merged
