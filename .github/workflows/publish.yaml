@@ -201,6 +201,35 @@ jobs:
           username: ${{ secrets.AZURE_USERNAME }}
           password: ${{ secrets.AZURE_PASSWORD }}
 
+      - name: Build and push WIT typings packages to Azure registry
+        run: |
+          EXIT_CODE=0
+          for wit_file in wit/*.wit; do
+            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
+            temp_directory=$(mktemp -d)
+            cp "$wit_file" "$temp_directory/"
+
+            # Create overrides for any local WIT dependencies.
+            dependencies=$(grep -oP 'betty-blocks-utilities:\K[a-z0-9-]+' "$wit_file" | grep -v "$name" || true)
+            if [ -n "$dependencies" ]; then
+              echo "[overrides]" > "$temp_directory/wkg.toml"
+              for dependency in $dependencies; do
+                echo "\"betty-blocks-utilities:$dependency\" = { path = \"$(realpath wit)\" }" >> "$temp_directory/wkg.toml"
+              done
+            fi
+
+            wasm_file=$(wkg wit build --wit-dir "$temp_directory" -o "$temp_directory/$name.wasm" 2>&1)
+            if [ $? -ne 0 ]; then
+              echo "::warning::Failed to build WIT package $name: $wasm_file"
+              EXIT_CODE=1
+              continue
+            fi
+
+            IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
+            wkg oci push "${IMAGE_NAME}:${VERSION}" "$temp_directory/$name.wasm" || EXIT_CODE=1
+          done
+          exit $EXIT_CODE
+
       - name: Push components to Azure registry
         run: |
           EXIT_CODE=0
@@ -220,7 +249,5 @@ jobs:
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
             wkg oci push "${IMAGE_NAME}:${VERSION}" "$wasm_file" || EXIT_CODE=1
-
-            echo "Published: ${IMAGE_NAME}:${VERSION}"
           done
           exit $EXIT_CODE
