@@ -8,6 +8,5 @@ wit_world = "upload"
 wasm_target = "wasm32-wasip2"
 
 [overrides]
-"betty-blocks:data-api" = { path = "./../../../wit/data-api.wit" }
-"betty-blocks:file" = { path = "./../../../wit/file.wit" }
+"betty-blocks:data-api" = { path = "./../data-api/wit/world.wit" }
 "betty-blocks:types" = { path = "./../../../wit/types.wit" }
