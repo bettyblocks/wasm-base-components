@@ -14,3 +14,8 @@ interface jwt {
   allowed-to-list: func(headers: request-headers, mcp-id: string) -> result<_, auth-error>;
 }
 
+world auth {
+  import wasi:config/store@0.2.0-rc.1;
+
+  export jwt;
+}
