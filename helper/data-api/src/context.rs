@@ -9,6 +9,8 @@ type ModelName = String;
 type InternalId = isize;
 type RealId = i32;
 
+const CHUNK_SIZE: usize = 100_000;
+
 pub struct DataAPIContext {
     application_id: String,
 
@@ -278,15 +280,16 @@ impl GuestDataApi for DataAPIContext {
                 let query =
                     format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
 
-                let variables = format!(
-                    "{{\"input\": {}, \"validationSets: {validation_sets}\"}}",
-                    serde_json::to_string(&input_variables)
-                        .map_err(|_| String::from("could not format input variables"))?
-                );
+                for input_chunk in input_variables.chunks(CHUNK_SIZE) {
+                    let variables = format!(
+                        "{{\"input\": {}, \"validationSets: {validation_sets}\"}}",
+                        serde_json::to_string(&input_chunk)
+                            .map_err(|_| String::from("could not format input variables"))?
+                    );
 
-                // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys and reserve ids.
-                // TODO: implement chunking so that this doesn't break when we have too many queries.
-                self.request_raw(query, variables)?;
+                    // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys and reserve ids.
+                    self.request_raw(query.clone(), variables)?;
+                }
             }
 
             let delete_manys = delete
