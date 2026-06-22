@@ -11,6 +11,8 @@ type RealId = i32;
 
 const CHUNK_SIZE: usize = 100_000;
 
+const RESERVE_ID_QUERY: &'static str = "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }";
+
 pub struct DataAPIContext {
     application_id: String,
 
@@ -31,11 +33,11 @@ pub struct CaptureData {
 }
 
 impl CaptureData {
-    fn reserve_ids(&mut self, data_api_context: &impl GuestDataApi) -> Result<Vec<RealId>, String> {
+    fn reserve_ids(&mut self, request_sender: &impl RequestRaw) -> Result<Vec<RealId>, String> {
         let mut reserved_id_map = self
             .reserve_id_count_per_model
             .drain()
-            .map(|entry| Self::request_reserved_ids(data_api_context, entry))
+            .map(|entry| Self::request_reserved_ids(request_sender, entry))
             .collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
 
         for model_name in self.model_names_of_local_ids.drain(..) {
@@ -57,18 +59,12 @@ impl CaptureData {
     }
 
     fn request_reserved_ids(
-        data_api_context: &impl GuestDataApi,
+        request_sender: &impl RequestRaw,
         (model_name, id_count): (ModelName, u32),
     ) -> Result<(ModelName, VecDeque<u32>), String> {
-        let query = r#"mutation ($model: String!, $amount: Int!) {
-                    reserveRecords(model: $model, amount: $amount) {
-                    ids
-                    }
-                }"#;
-
         let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
 
-        let res = data_api_context.request_raw(query.to_string(), variables)?;
+        let res = request_sender.request_raw(RESERVE_ID_QUERY.to_string(), variables)?;
 
         let ReserveIdMutationResult {
             data: ReserveIdResult {
@@ -229,15 +225,21 @@ fn generate_upsert_many_inputs(
 
 fn generate_delete_many_inputs(
     delete_entries: VecDeque<MassMutateEntry<DeleteInput>>,
-) -> HashMap<String, Vec<InternalId>> {
-    delete_entries
-        .into_iter()
-        .fold(HashMap::new(), |mut map, item| {
-            map.entry(item.model_name)
-                .or_insert(Vec::new())
-                .push(item.variables.id);
-            map
-        })
+    reserved_ids: &[RealId],
+) -> Result<HashMap<String, Vec<InternalId>>, String> {
+    let mut delete_ids = HashMap::new();
+
+    for MassMutateEntry {
+        model_name,
+        variables: DeleteInput { mut id },
+    } in delete_entries
+    {
+        replace_id(reserved_ids, &mut id)?;
+
+        delete_ids.entry(model_name).or_insert(Vec::new()).push(id);
+    }
+
+    Ok(delete_ids)
 }
 
 fn send_upsert_many_mutations(
@@ -245,11 +247,13 @@ fn send_upsert_many_mutations(
     request_sender: &impl RequestRaw,
 ) -> Result<(), String> {
     for (model_name, (validation_sets, input_variables)) in upsert_many_inputs {
-        let query = format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
+        let query = format!(
+            "mutation {{ upsertMany{model_name}(input: $input, validationSets: $validationSets) {{ id }} }}"
+        );
 
         for input_chunk in input_variables.chunks(CHUNK_SIZE) {
             let variables = format!(
-                "{{\"input\": {}, \"validationSets: {validation_sets}\"}}",
+                "{{\"input\": {}, \"validationSets\": \"{validation_sets}\"}}",
                 serde_json::to_string(&input_chunk)
                     .map_err(|_| String::from("could not format input variables"))?
             );
@@ -268,13 +272,15 @@ fn send_delete_many_mutations(
     for (model_name, variables) in delete_many_inputs {
         let query = format!("mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}");
 
-        let variables = format!(
-            "{{\"input\": {{\"ids\": {}}}}}",
-            serde_json::to_string(&variables)
-                .map_err(|_| String::from("could not format input variables"))?
-        );
+        for input_chunk in variables.chunks(CHUNK_SIZE) {
+            let variables = format!(
+                "{{\"input\": {{\"ids\": {}}}}}",
+                serde_json::to_string(&input_chunk)
+                    .map_err(|_| String::from("could not format input variables"))?
+            );
 
-        request_sender.request_raw(query, variables)?;
+            request_sender.request_raw(query.clone(), variables)?;
+        }
     }
 
     Ok(())
@@ -333,7 +339,7 @@ impl GuestDataApi for DataAPIContext {
                 self,
             )?;
 
-            send_delete_many_mutations(generate_delete_many_inputs(delete), self)?;
+            send_delete_many_mutations(generate_delete_many_inputs(delete, &reserved_ids)?, self)?;
         }
 
         Ok(())
@@ -445,7 +451,12 @@ fn extract_mutation_data(
     // It is safe to unwrap the capture stack last_mut here because we checked the length to be non-zero before. This looks a bit wack but is necessary to not mutably borrow capture_data multiple times.
     let id: isize = match &mutation_name[..6] {
         "create" => match serde_json::from_str(&variables) {
-            Ok(variables @ MutationInput { input: MutationInputVariable { id, .. }, .. }) => {
+            Ok(
+                variables @ MutationInput {
+                    input: MutationInputVariable { id, .. },
+                    ..
+                },
+            ) => {
                 capture_data
                     .capture_stack
                     .last_mut()
@@ -495,14 +506,19 @@ fn extract_mutation_data(
                     .create
                     .push_back(MassMutateEntry {
                         model_name,
-                        variables: serde_json::from_value(variables).map_err(|_| String::from("mutation variables are improperly formatted"))?,
+                        variables: serde_json::from_value(variables).map_err(|_| {
+                            String::from("mutation variables are improperly formatted")
+                        })?,
                     });
 
                 internal_id
             }
         },
         "update" => {
-            let variables @ MutationInput { input: MutationInputVariable { id, .. }, .. } = serde_json::from_str(&variables)
+            let variables @ MutationInput {
+                input: MutationInputVariable { id, .. },
+                ..
+            } = serde_json::from_str(&variables)
                 .map_err(|_| String::from("could not find id input for update query"))?;
 
             capture_data
@@ -511,9 +527,9 @@ fn extract_mutation_data(
                 .unwrap()
                 .update
                 .push_back(MassMutateEntry {
-                        model_name,
-                        variables,
-                    });
+                    model_name,
+                    variables,
+                });
 
             id
         }
@@ -527,9 +543,9 @@ fn extract_mutation_data(
                 .unwrap()
                 .delete
                 .push_back(MassMutateEntry {
-                        model_name,
-                        variables,
-                    });
+                    model_name,
+                    variables,
+                });
 
             id
         }
@@ -543,6 +559,14 @@ fn replace_negative_ids_in_mutation_input(
     reserved_ids: &[RealId],
     MutationInputVariable { id, other_inputs }: &mut MutationInputVariable,
 ) -> Result<(), String> {
+    replace_id(reserved_ids, id)?;
+
+    replace_negative_ids_in_object(reserved_ids, other_inputs)?;
+
+    Ok(())
+}
+
+fn replace_id(reserved_ids: &[RealId], id: &mut isize) -> Result<(), String> {
     if id.is_negative() {
         let index: usize = (-1 - *id)
             .try_into()
@@ -552,8 +576,6 @@ fn replace_negative_ids_in_mutation_input(
             .try_into()
             .map_err(|error| format!("could not convert number to isize: {error}"))?;
     }
-
-    replace_negative_ids_in_object(reserved_ids, other_inputs)?;
 
     Ok(())
 }
@@ -583,24 +605,6 @@ fn handle_id_key(reserved_ids: &[RealId], value: &mut serde_json::Value) -> Resu
         && id.is_negative()
     {
         *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
-    } else if let serde_json::Value::Array(array_of_ids) = value {
-        handle_array_of_ids(reserved_ids, array_of_ids)?;
-    }
-
-    Ok(())
-}
-
-/// Loops over an Vec of IDs and replaces negative ones with their reserved counterpart.
-fn handle_array_of_ids(
-    reserved_ids: &[RealId],
-    array_of_ids: &mut [serde_json::Value],
-) -> Result<(), String> {
-    for item in array_of_ids.iter_mut() {
-        if let Some(id) = item.as_i64()
-            && id.is_negative()
-        {
-            *item = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
-        }
     }
 
     Ok(())
@@ -813,7 +817,7 @@ fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serd
 #[cfg(test)]
 mod tests {
     use std::assert_matches;
-    use std::cell::{RefCell, RefMut};
+    use std::cell::RefCell;
 
     use super::*;
 
@@ -854,26 +858,6 @@ mod tests {
                 responses: RefCell::new(responses),
             }
         }
-
-        fn with_responses(responses: VecDeque<Result<JsonString, String>>) -> Self {
-            Self {
-                should_expect: false,
-                expected_requests: Default::default(),
-                responses: RefCell::new(responses),
-            }
-        }
-
-        fn set_should_expect(&mut self, should_expect: bool) {
-            self.should_expect = should_expect
-        }
-
-        fn expected_requests_mut(&mut self) -> RefMut<'_, VecDeque<(String, JsonString)>> {
-            self.expected_requests.borrow_mut()
-        }
-
-        fn responses_mut(&mut self) -> RefMut<'_, VecDeque<Result<JsonString, String>>> {
-            self.responses.borrow_mut()
-        }
     }
 
     impl RequestRaw for RequestRawMock {
@@ -883,27 +867,87 @@ mod tests {
                     self.expected_requests.borrow_mut().pop_front()
                 {
                     if expected_query != query || expected_variables != variables {
-                        return Err(format!(
-                            "Unexpected request_raw call.\nExpected:\n{expected_query:?}\nwith variables:\n{expected_variables:?}\nGot:\n{query:?}\nwith variables:\n{variables:?}"
-                        ));
+                        panic!(
+                            "Unexpected request_raw call.\nExpected:\n{expected_query}\nwith variables:\n{expected_variables}\nGot:\n{query}\nwith variables:\n{variables}"
+                        );
                     }
                 } else {
-                    return Err(format!(
-                        "Unexpected request_raw call.\nExpected nothing\nGot:\n{query:?}\nwith variables:\n{variables:?}"
-                    ));
+                    panic!(
+                        "Unexpected request_raw call.\nExpected nothing\nGot:\n{query}\nwith variables:\n{variables}"
+                    );
                 }
             }
 
             self.responses
                 .borrow_mut()
                 .pop_front()
-                .ok_or_else(|| String::default())
+                .ok_or_else(|| String::from("Default mock response"))
                 .flatten()
         }
     }
 
     #[test]
-    fn capture_mutation_test() {
+    fn ignore_unsupported_queries_test() {
+        let mut capture_data = CaptureData::default();
+        capture_data.capture_stack.push(Default::default());
+
+        let request_raw_mock = RequestRawMock::default();
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from("query {createUser(input: $input) {id}}"),
+                String::from("irrelevant")
+            )
+            .unwrap_err()
+            .as_str(),
+            "Default mock response"
+        );
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from(
+                    "mutation {createManyUser(input: $input, validationSets: $validationSets) {id}}"
+                ),
+                String::from("irrelevant")
+            )
+            .unwrap_err()
+            .as_str(),
+            "Default mock response"
+        );
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from("mutation {reserveRecords(input: $input) {id}}"),
+                String::from("irrelevant")
+            )
+            .unwrap_err()
+            .as_str(),
+            "Default mock response"
+        );
+
+        let MassMutateEntries {
+            create,
+            update,
+            delete,
+        } = capture_data.capture_stack.pop().unwrap();
+
+        assert!(capture_data.reserved_ids.is_empty());
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+
+        assert!(create.is_empty());
+        assert!(update.is_empty());
+        assert!(delete.is_empty());
+    }
+
+    #[test]
+    fn real_id_extraction_test() {
         let mut capture_data = CaptureData::default();
         capture_data.capture_stack.push(Default::default());
 
@@ -970,6 +1014,460 @@ mod tests {
         assert_eq!(delete_model_name.as_str(), "User");
         assert_matches!(delete_variables, DeleteInput { id: 2 });
         assert!(update.is_empty());
+    }
+
+    #[test]
+    fn internal_id_generation_test() {
+        let mut capture_data = CaptureData::default();
+        capture_data.capture_stack.push(Default::default());
+
+        let request_raw_mock = RequestRawMock::with_expect(Default::default(), Default::default());
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from(
+                    r#"
+    mutation ($input: userInput, $validationSets: [String]) {
+        createUser(input: $input, validationSets: $validationSets) {
+            id
+        }
+    }"#
+                ),
+                String::from(r#"{"input": {}}"#)
+            )
+            .unwrap()
+            .as_str(),
+            r#"{"data": {"createUser": {"id": "-1"}}}"#
+        );
+
+        let MassMutateEntries {
+            mut create,
+            update,
+            delete,
+        } = capture_data.capture_stack.pop().unwrap();
+
+        assert!(capture_data.reserved_ids.is_empty());
+        assert_eq!(
+            capture_data
+                .model_names_of_local_ids
+                .pop()
+                .unwrap()
+                .as_str(),
+            "User"
+        );
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+        assert_eq!(
+            capture_data
+                .reserve_id_count_per_model
+                .remove("User")
+                .unwrap(),
+            1
+        );
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+
+        let MassMutateEntry {
+            model_name: create_model_name,
+            variables: create_variables,
+        } = create.pop_front().unwrap();
+        assert_eq!(create_model_name.as_str(), "User");
+        assert_matches!(create_variables, MutationInput { input: MutationInputVariable { id: -1, other_inputs }, validation_sets: None } if other_inputs.is_empty());
+        assert!(delete.is_empty());
+        assert!(update.is_empty());
+    }
+
+    #[test]
+    fn negative_id_replacement_test() {
+        let mut mutation_input: MutationInput = serde_json::from_str(r#"{"input": {"id": -3, "key": "value", "relation": {"_replace": [{"id": -1}, {"id": 1}]}, "relation2": {"_add": [{"id": -2}]}}}"#).unwrap();
+
+        replace_negative_ids_in_mutation_input(&[2, 3, 4], &mut mutation_input.input).unwrap();
+
+        assert_eq!(mutation_input.input.id, 4);
+        assert_eq!(
+            mutation_input.input.other_inputs.remove("key").unwrap(),
+            "value"
+        );
+        let serde_json::Value::Object(mut relation) = mutation_input
+            .input
+            .other_inputs
+            .remove("relation")
+            .unwrap()
+        else {
+            panic!("mutation input relation was not an object")
+        };
+        let serde_json::Value::Array(mut replace) = relation.remove("_replace").unwrap() else {
+            panic!("mutation input relation replace was not an array")
+        };
+        let serde_json::Value::Object(mut id1) = replace.pop().unwrap() else {
+            panic!("mutation input relation replace pop was not an object")
+        };
+        assert_eq!(id1.remove("id").unwrap(), 1);
+        assert!(id1.is_empty());
+        let serde_json::Value::Object(mut id2) = replace.pop().unwrap() else {
+            panic!("mutation input relation replace pop was not an object")
+        };
+        assert_eq!(id2.remove("id").unwrap(), 2);
+        assert!(id2.is_empty());
+        assert!(replace.is_empty());
+        assert!(relation.is_empty());
+        let serde_json::Value::Object(mut relation2) = mutation_input
+            .input
+            .other_inputs
+            .remove("relation2")
+            .unwrap()
+        else {
+            panic!("mutation input relation2 was not an object")
+        };
+        let serde_json::Value::Array(mut add) = relation2.remove("_add").unwrap() else {
+            panic!("mutation input relation2 add was not an array")
+        };
+        let serde_json::Value::Object(mut id3) = add.pop().unwrap() else {
+            panic!("mutation input relation2 add pop was not an object")
+        };
+        assert_eq!(id3.remove("id").unwrap(), 3);
+        assert!(id3.is_empty());
+        assert!(add.is_empty());
+        assert!(relation2.is_empty());
+    }
+
+    #[test]
+    fn reserve_ids_test() {
+        let capture_stack = Vec::default();
+        let reserve_id_count_per_model =
+            HashMap::from([(String::from("Oozer"), 2), (String::from("User"), 2)]);
+
+        let mut expected_requests = VecDeque::default();
+        let mut responses = VecDeque::default();
+
+        for key in reserve_id_count_per_model.keys() {
+            match key.as_str() {
+                "User" => {
+                    expected_requests.push_back((
+                        String::from(RESERVE_ID_QUERY),
+                        String::from(r#"{"model": "User", "amount": 2}"#),
+                    ));
+                    responses.push_back(Ok(String::from(
+                        r#"{"data": {"reserveRecords": {"ids": [1, 2]}}}"#,
+                    )));
+                }
+                "Oozer" => {
+                    expected_requests.push_back((
+                        String::from(RESERVE_ID_QUERY),
+                        String::from(r#"{"model": "Oozer", "amount": 2}"#),
+                    ));
+                    responses.push_back(Ok(String::from(
+                        r#"{"data": {"reserveRecords": {"ids": [3, 4]}}}"#,
+                    )));
+                }
+                _ => panic!("Unexpected request model"),
+            }
+        }
+
+        let mut capture_data = CaptureData {
+            model_names_of_local_ids: vec![
+                String::from("Oozer"),
+                String::from("User"),
+                String::from("User"),
+                String::from("Oozer"),
+            ],
+            reserve_id_count_per_model,
+            reserved_ids: Vec::new(),
+            capture_stack,
+        };
+
+        let request_raw_mock = RequestRawMock::with_expect(expected_requests, responses);
+
+        let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
+
+        assert_matches!(real_ids.as_slice(), [3, 1, 2, 4]);
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+        assert!(capture_data.reserved_ids.is_empty());
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+    }
+
+    #[test]
+    fn reserve_ids_saves_stacks_test() {
+        let capture_stack = Vec::from([MassMutateEntries::default()]);
+        let reserve_id_count_per_model = HashMap::from([(String::from("User"), 1)]);
+
+        let expected_requests = VecDeque::from([
+            (
+                String::from(RESERVE_ID_QUERY),
+                String::from(r#"{"model": "User", "amount": 1}"#),
+            ),
+            (
+                String::from(RESERVE_ID_QUERY),
+                String::from(r#"{"model": "User", "amount": 2}"#),
+            ),
+            (
+                String::from(RESERVE_ID_QUERY),
+                String::from(r#"{"model": "User", "amount": 1}"#),
+            ),
+        ]);
+        let responses = VecDeque::from([
+            Ok(String::from(
+                r#"{"data": {"reserveRecords": {"ids": [1]}}}"#,
+            )),
+            Ok(String::from(
+                r#"{"data": {"reserveRecords": {"ids": [2, 3]}}}"#,
+            )),
+            Ok(String::from(
+                r#"{"data": {"reserveRecords": {"ids": [4]}}}"#,
+            )),
+        ]);
+
+        let mut capture_data = CaptureData {
+            model_names_of_local_ids: vec![String::from("User")],
+            reserve_id_count_per_model,
+            reserved_ids: Vec::new(),
+            capture_stack,
+        };
+
+        let request_raw_mock = RequestRawMock::with_expect(expected_requests, responses);
+
+        let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
+
+        assert_matches!(real_ids.as_slice(), [1]);
+        assert_matches!(capture_data.reserved_ids.as_slice(), [1]);
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+
+        capture_data
+            .reserve_id_count_per_model
+            .insert(String::from("User"), 2);
+        capture_data
+            .model_names_of_local_ids
+            .push(String::from("User"));
+        capture_data
+            .model_names_of_local_ids
+            .push(String::from("User"));
+
+        let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
+
+        assert_matches!(real_ids.as_slice(), [1, 2, 3]);
+        assert_matches!(capture_data.reserved_ids.as_slice(), [1, 2, 3]);
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+
+        capture_data.capture_stack.pop();
+
+        capture_data
+            .reserve_id_count_per_model
+            .insert(String::from("User"), 1);
+        capture_data
+            .model_names_of_local_ids
+            .push(String::from("User"));
+
+        let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
+
+        assert_matches!(real_ids.as_slice(), [1, 2, 3, 4]);
+        assert!(capture_data.reserved_ids.is_empty());
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+    }
+
+    #[test]
+    fn upsert_many_input_formatting_test() {
+        let mut upsert_many_inputs = generate_upsert_many_inputs(
+            VecDeque::from([
+                MassMutateEntry {
+                    model_name: String::from("User"),
+                    variables: MutationInput {
+                        input: MutationInputVariable {
+                            id: 1,
+                            other_inputs: serde_json::Map::new(),
+                        },
+                        validation_sets: Some(ValidationSets::Default),
+                    },
+                },
+                MassMutateEntry {
+                    model_name: String::from("User"),
+                    variables: MutationInput {
+                        input: MutationInputVariable {
+                            id: 2,
+                            other_inputs: serde_json::Map::new(),
+                        },
+                        validation_sets: None,
+                    },
+                },
+                MassMutateEntry {
+                    model_name: String::from("Oozer"),
+                    variables: MutationInput {
+                        input: MutationInputVariable {
+                            id: -1,
+                            other_inputs: serde_json::Map::new(),
+                        },
+                        validation_sets: None,
+                    },
+                },
+            ]),
+            VecDeque::from([MassMutateEntry {
+                model_name: String::from("User"),
+                variables: MutationInput {
+                    input: MutationInputVariable {
+                        id: 1,
+                        other_inputs: serde_json::Map::from_iter(
+                            [(
+                                String::from("key"),
+                                serde_json::Value::String(String::from("value")),
+                            )]
+                            .into_iter(),
+                        ),
+                    },
+                    validation_sets: Some(ValidationSets::Empty),
+                },
+            }]),
+            &[1],
+        )
+        .unwrap();
+
+        let (user_validation_sets, mut user_input) = upsert_many_inputs.remove("User").unwrap();
+
+        assert_matches!(user_validation_sets, ValidationSets::Empty);
+
+        let mut update_input = user_input.pop().unwrap();
+
+        assert_eq!(update_input.id, 1);
+        assert_eq!(update_input.other_inputs.remove("key").unwrap(), "value");
+        assert!(update_input.other_inputs.is_empty());
+
+        let create_input2 = user_input.pop().unwrap();
+        assert_eq!(create_input2.id, 2);
+        assert!(create_input2.other_inputs.is_empty());
+
+        let create_input = user_input.pop().unwrap();
+        assert_eq!(create_input.id, 1);
+        assert!(create_input.other_inputs.is_empty());
+
+        assert!(user_input.is_empty());
+
+        let (oozer_validation_sets, mut oozer_input) = upsert_many_inputs.remove("Oozer").unwrap();
+
+        assert_matches!(oozer_validation_sets, ValidationSets::Default);
+
+        let create_input3 = oozer_input.pop().unwrap();
+
+        assert_eq!(create_input3.id, 1);
+        assert!(create_input3.other_inputs.is_empty());
+
+        assert!(oozer_input.is_empty());
+
+        assert!(upsert_many_inputs.is_empty());
+    }
+
+    #[test]
+    fn upsert_many_sending_test() {
+        let upsert_many_inputs = HashMap::from([
+            (
+                String::from("User"),
+                (
+                    ValidationSets::Empty,
+                    vec![
+                        MutationInputVariable {
+                            id: 1,
+                            other_inputs: serde_json::Map::default(),
+                        },
+                        MutationInputVariable {
+                            id: 2,
+                            other_inputs: serde_json::Map::from_iter(
+                                [(
+                                    String::from("key"),
+                                    serde_json::Value::String(String::from("value")),
+                                )]
+                                .into_iter(),
+                            ),
+                        },
+                    ],
+                ),
+            ),
+            (
+                String::from("Oozer"),
+                (
+                    ValidationSets::Default,
+                    vec![MutationInputVariable {
+                        id: 1,
+                        other_inputs: serde_json::Map::default(),
+                    }],
+                ),
+            ),
+        ]);
+
+        let mut expected_requests = VecDeque::default();
+        let responses = VecDeque::from([Ok(String::default()), Ok(String::default())]);
+
+        for key in upsert_many_inputs.keys() {
+            match key.as_str() {
+                "User" => 
+                    expected_requests.push_back((String::from("mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }"), String::from(r#"{"input": [{"id":1},{"id":2,"key":"value"}], "validationSets": "empty"}"#))),
+                "Oozer" => 
+                    expected_requests.push_back((String::from("mutation { upsertManyOozer(input: $input, validationSets: $validationSets) { id } }"), String::from(r#"{"input": [{"id":1}], "validationSets": "default"}"#))),
+                _ => panic!("Unexpected request model")
+            }
+        }
+
+        let request_raw_mock = RequestRawMock::with_expect(expected_requests, responses);
+
+        send_upsert_many_mutations(upsert_many_inputs, &request_raw_mock).unwrap();
+    }
+
+    #[test]
+    fn delete_many_input_formatting_test() {
+        let mut delete_many_inputs = generate_delete_many_inputs(
+            VecDeque::from([
+                MassMutateEntry {
+                    model_name: String::from("User"),
+                    variables: DeleteInput { id: 1 },
+                },
+                MassMutateEntry {
+                    model_name: String::from("User"),
+                    variables: DeleteInput { id: 3 },
+                },
+                MassMutateEntry {
+                    model_name: String::from("Oozer"),
+                    variables: DeleteInput { id: -1 },
+                },
+            ]),
+            &[1],
+        )
+        .unwrap();
+
+        assert_matches!(
+            delete_many_inputs.remove("User").unwrap().as_slice(),
+            [1, 3]
+        );
+        assert_matches!(delete_many_inputs.remove("Oozer").unwrap().as_slice(), [1]);
+
+        assert!(delete_many_inputs.is_empty());
+    }
+
+    #[test]
+    fn delete_many_sending_test() {
+        let delete_many_inputs: HashMap<String, Vec<isize>> = HashMap::from([
+            (String::from("User"), vec![1, 2]),
+            (String::from("Oozer"), vec![1]),
+        ]);
+
+        let mut expected_requests = VecDeque::default();
+        let responses = VecDeque::from([Ok(String::default()), Ok(String::default())]);
+
+        for key in delete_many_inputs.keys() {
+            match key.as_str() {
+                "User" => expected_requests.push_back((
+                    String::from("mutation { deleteManyUser(input: $input) { id } }"),
+                    String::from(r#"{"input": {"ids": [1,2]}}"#),
+                )),
+                "Oozer" => expected_requests.push_back((
+                    String::from("mutation { deleteManyOozer(input: $input) { id } }"),
+                    String::from(r#"{"input": {"ids": [1]}}"#),
+                )),
+                _ => panic!("Unexpected request model"),
+            }
+        }
+
+        let request_raw_mock = RequestRawMock::with_expect(expected_requests, responses);
+
+        send_delete_many_mutations(delete_many_inputs, &request_raw_mock).unwrap();
     }
 }
 
