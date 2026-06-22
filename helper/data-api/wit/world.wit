@@ -23,7 +23,7 @@ interface data-api {
         discard-capture: func() -> result<string, string>;
         // or flush or commit ?
         /// apply all the captured mutations
-        apply-capture: func() -> result<string, string>;
+        apply-capture: func() -> result<_, string>;
 
         /// returns the current pending capture, grouped by the order how they need to be applied
         pending-capture: func() -> result<list<list<pending-mutation>>, string>;
