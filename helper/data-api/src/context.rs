@@ -31,11 +31,11 @@ pub struct CaptureData {
 }
 
 impl CaptureData {
-    fn reserve_ids(&mut self, data_api_context: &DataAPIContext) -> Result<Vec<RealId>, String> {
+    fn reserve_ids(&mut self, data_api_context: &impl GuestDataApi) -> Result<Vec<RealId>, String> {
         let mut reserved_id_map = self
             .reserve_id_count_per_model
             .drain()
-            .map(|entry| data_api_context.reserve_ids(entry))
+            .map(|entry| Self::request_reserved_ids(data_api_context, entry))
             .collect::<Result<HashMap<ModelName, VecDeque<u32>>, String>>()?;
 
         for model_name in self.model_names_of_local_ids.drain(..) {
@@ -54,6 +54,30 @@ impl CaptureData {
         } else {
             Ok(self.reserved_ids.clone())
         }
+    }
+
+    fn request_reserved_ids(
+        data_api_context: &impl GuestDataApi,
+        (model_name, id_count): (ModelName, u32),
+    ) -> Result<(ModelName, VecDeque<u32>), String> {
+        let query = r#"mutation ($model: String!, $amount: Int!) {
+                    reserveRecords(model: $model, amount: $amount) {
+                    ids
+                    }
+                }"#;
+
+        let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
+
+        let res = data_api_context.request_raw(query.to_string(), variables)?;
+
+        let ReserveIdMutationResult {
+            data: ReserveIdResult {
+                reserved_ids: ReservedIds { ids },
+            },
+        } = serde_json::from_str(&res)
+            .map_err(|_| String::from("could not parse data api result for reserving ids"))?;
+
+        Ok((model_name, ids))
     }
 }
 
@@ -190,29 +214,111 @@ fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {
     format!(r#"{{"data": {{"{mutation_name}": {{"id": "{id}"}}}}}}"#)
 }
 
-impl DataAPIContext {
-    fn reserve_ids(
-        &self,
-        (model_name, id_count): (ModelName, u32),
-    ) -> Result<(ModelName, VecDeque<u32>), String> {
-        let query = r#"mutation ($model: String!, $amount: Int!) {
-                    reserveRecords(model: $model, amount: $amount) {
-                    ids
-                    }
-                }"#;
+fn generate_upsert_many_inputs(
+    create_entries: VecDeque<MassMutateEntry>,
+    update_entries: VecDeque<MassMutateEntry>,
+    reserved_ids: &[RealId],
+) -> Result<
+    HashMap<
+        String,
+        (
+            ValidationSets,
+            Vec<serde_json::Map<String, serde_json::Value>>,
+        ),
+    >,
+    String,
+> {
+    let mut upsert_manys: HashMap<String, (ValidationSets, Vec<_>)> = HashMap::new();
 
-        let variables = format!(r#"{{"model": "{model_name}", "amount": {id_count}}}"#);
+    for MassMutateEntry {
+        model_name,
+        mut variables,
+    } in [create_entries, update_entries].into_iter().flatten()
+    {
+        let inputs = variables
+            .remove("input")
+            .ok_or_else(|| String::from("mutation did not have an input variable"))?;
 
-        let res = self.request_raw(query.to_string(), variables)?;
+        if let serde_json::Value::Object(mut input_variables) = inputs {
+            replace_negative_ids_in_variables(&reserved_ids, &mut input_variables).unwrap();
 
-        let ReserveIdMutationResult {
-            data: ReserveIdResult {
-                reserved_ids: ReservedIds { ids },
-            },
-        } = serde_json::from_str(&res)
-            .map_err(|_| String::from("could not parse data api result for reserving ids"))?;
+            let (validation_sets, input_vec) = upsert_manys.entry(model_name).or_default();
 
-        Ok((model_name, ids))
+            validation_sets.set_by_mutation_variables(&variables);
+
+            input_vec.push(input_variables);
+        }
+    }
+
+    Ok(upsert_manys)
+}
+
+fn generate_delete_many_inputs(
+    delete_entries: VecDeque<MassMutateEntry>,
+) -> HashMap<String, Vec<serde_json::Value>> {
+    delete_entries
+        .into_iter()
+        .fold(HashMap::new(), |mut map, mut item| {
+            if let Some(id) = item.variables.remove("id") {
+                map.entry(item.model_name).or_insert(Vec::new()).push(id);
+            }
+            map
+        })
+}
+
+fn send_upsert_many_mutations(
+    upsert_many_inputs: HashMap<
+        String,
+        (
+            ValidationSets,
+            Vec<serde_json::Map<String, serde_json::Value>>,
+        ),
+    >,
+    request_sender: &impl RequestRaw,
+) -> Result<(), String> {
+    for (model_name, (validation_sets, input_variables)) in upsert_many_inputs {
+        let query = format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
+
+        for input_chunk in input_variables.chunks(CHUNK_SIZE) {
+            let variables = format!(
+                "{{\"input\": {}, \"validationSets: {validation_sets}\"}}",
+                serde_json::to_string(&input_chunk)
+                    .map_err(|_| String::from("could not format input variables"))?
+            );
+
+            request_sender.request_raw(query.clone(), variables)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn send_delete_many_mutations(
+    delete_many_inputs: HashMap<String, Vec<serde_json::Value>>,
+    request_sender: &impl RequestRaw,
+) -> Result<(), String> {
+    for (model_name, variables) in delete_many_inputs {
+        let query = format!("mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}");
+
+        let variables = format!(
+            "{{\"input\": {{\"ids\": {}}}}}",
+            serde_json::to_string(&variables)
+                .map_err(|_| String::from("could not format input variables"))?
+        );
+
+        request_sender.request_raw(query, variables)?;
+    }
+
+    Ok(())
+}
+
+trait RequestRaw {
+    fn request_raw(&self, query: String, variables: JsonString) -> Result<JsonString, String>;
+}
+
+impl<T: GuestDataApi> RequestRaw for T {
+    fn request_raw(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
+        GuestDataApi::request_raw(self, query, variables)
     }
 }
 
@@ -226,7 +332,7 @@ impl GuestDataApi for DataAPIContext {
         }
     }
 
-    fn apply_capture(&self) -> Result<String, String> {
+    fn apply_capture(&self) -> Result<(), String> {
         let mut capture_data = self
             .capture_data
             .lock()
@@ -254,68 +360,15 @@ impl GuestDataApi for DataAPIContext {
             These can be clustered by model, so we can do upsertManyUser but not upsertManyUserAndRole.
             */
 
-            let mut upsert_manys: HashMap<String, (ValidationSets, Vec<_>)> = HashMap::new();
+            send_upsert_many_mutations(
+                generate_upsert_many_inputs(create, update, &reserved_ids)?,
+                self,
+            )?;
 
-            for MassMutateEntry {
-                model_name,
-                mut variables,
-            } in [create, update].into_iter().flatten()
-            {
-                let inputs = variables
-                    .remove("input")
-                    .ok_or_else(|| String::from("mutation did not have an input variable"))?;
-
-                if let serde_json::Value::Object(mut input_variables) = inputs {
-                    replace_negative_ids_in_variables(&reserved_ids, &mut input_variables).unwrap();
-
-                    let (validation_sets, input_vec) = upsert_manys.entry(model_name).or_default();
-
-                    validation_sets.set_by_mutation_variables(&variables);
-
-                    input_vec.push(input_variables);
-                }
-            }
-
-            for (model_name, (validation_sets, input_variables)) in upsert_manys {
-                let query =
-                    format!("mutation {{ upsertMany{model_name}(input: $input) {{ id }} }}");
-
-                for input_chunk in input_variables.chunks(CHUNK_SIZE) {
-                    let variables = format!(
-                        "{{\"input\": {}, \"validationSets: {validation_sets}\"}}",
-                        serde_json::to_string(&input_chunk)
-                            .map_err(|_| String::from("could not format input variables"))?
-                    );
-
-                    // TODO: set up some kind of mocking so this doesn't break when testing. Same goes for the delete manys and reserve ids.
-                    self.request_raw(query.clone(), variables)?;
-                }
-            }
-
-            let delete_manys = delete
-                .into_iter()
-                .fold(HashMap::new(), |mut map, mut item| {
-                    if let Some(id) = item.variables.remove("id") {
-                        map.entry(item.model_name).or_insert(Vec::new()).push(id);
-                    }
-                    map
-                });
-
-            for (model_name, variables) in delete_manys {
-                let query =
-                    format!("mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}");
-
-                let variables = format!(
-                    "{{\"input\": {{\"ids\": {}}}}}",
-                    serde_json::to_string(&variables)
-                        .map_err(|_| String::from("could not format input variables"))?
-                );
-
-                self.request_raw(query, variables)?;
-            }
+            send_delete_many_mutations(generate_delete_many_inputs(delete), self)?;
         }
 
-        Ok(String::from("nothing to do"))
+        Ok(())
     }
 
     fn discard_capture(&self) -> Result<String, String> {
@@ -360,108 +413,10 @@ impl GuestDataApi for DataAPIContext {
         if let Ok(mut capture_data) = self.capture_data.lock()
             && !capture_data.capture_stack.is_empty()
         {
-            let query_remainder = match query.split_once("mutation") {
-                Some((_, remainder)) => remainder,
-                None => return self.request_raw(query, variables),
-            };
-
-            let query_remainder = query_remainder
-                .split_once('{')
-                .ok_or_else(|| String::from("query is improperly formatted"))?
-                .1
-                .trim();
-
-            if query_remainder[6..10] == *"Many" {
-                return self.request_raw(query, variables);
-            }
-
-            let (mutation_name_with_whitespace, _) = query_remainder
-                .split_once('(')
-                .ok_or_else(|| String::from("query is improperly formatted"))?;
-
-            let mutation_name = mutation_name_with_whitespace.trim();
-
-            let model_name = mutation_name[6..].to_string();
-
-            let mass_mutate_entry = MassMutateEntry {
-                model_name: model_name.clone(),
-                variables: serde_json::from_str(&variables)
-                    .map_err(|_| String::from("could not parse variables"))?,
-            };
-
-            // It is safe to unwrap the capture stack last_mut here because we checked the length to be non-zero before. This looks a bit wack but is necessary to not mutably borrow capture_data multiple times.
-            let id: isize = match &mutation_name[..6] {
-                "create" => match serde_json::from_str(&variables) {
-                    Ok(MutationInput {
-                        input: MutationInputVariable { id, .. },
-                        ..
-                    }) => {
-                        capture_data
-                            .capture_stack
-                            .last_mut()
-                            .unwrap()
-                            .create
-                            .push_back(mass_mutate_entry);
-
-                        id
-                    }
-                    Err(_) => {
-                        capture_data
-                            .model_names_of_local_ids
-                            .push(model_name.clone());
-                        *capture_data
-                            .reserve_id_count_per_model
-                            .entry(model_name)
-                            .or_default() += 1;
-                        capture_data
-                            .capture_stack
-                            .last_mut()
-                            .unwrap()
-                            .create
-                            .push_back(mass_mutate_entry);
-                        -capture_data
-                            .capture_stack
-                            .len()
-                            .try_into()
-                            .map_err(|_| String::from("ran out of internal ids"))?
-                    }
-                },
-                "update" => {
-                    let MutationInput {
-                        input: MutationInputVariable { id, .. },
-                        ..
-                    } = serde_json::from_str(&variables)
-                        .map_err(|_| String::from("could not find id input for update query"))?;
-
-                    capture_data
-                        .capture_stack
-                        .last_mut()
-                        .unwrap()
-                        .update
-                        .push_back(mass_mutate_entry);
-
-                    id
-                }
-                "delete" => {
-                    let DeleteInput { id } = serde_json::from_str(&variables)
-                        .map_err(|_| String::from("could not find id input for delete query"))?;
-
-                    capture_data
-                        .capture_stack
-                        .last_mut()
-                        .unwrap()
-                        .delete
-                        .push_back(mass_mutate_entry);
-
-                    id
-                }
-                _ => return self.request_raw(query, variables),
-            };
-
-            return Ok(generate_delayed_id_response(&id.to_string(), mutation_name));
+            extract_mutation_data(self, &mut capture_data, query, variables)
+        } else {
+            RequestRaw::request_raw(self, query, variables)
         }
-
-        self.request_raw(query, variables)
     }
 
     fn request_raw(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
@@ -488,6 +443,113 @@ impl GuestDataApi for DataAPIContext {
             ))
             .map_err(|e| format!("{e:#}"))
     }
+}
+
+fn extract_mutation_data(
+    request_sender: &impl RequestRaw,
+    capture_data: &mut CaptureData,
+    query: String,
+    variables: JsonString,
+) -> Result<JsonString, String> {
+    let query_remainder = match query.split_once("mutation") {
+        Some((_, remainder)) => remainder,
+        None => return request_sender.request_raw(query, variables),
+    };
+
+    let query_remainder = query_remainder
+        .split_once('{')
+        .ok_or_else(|| String::from("query is improperly formatted"))?
+        .1
+        .trim();
+
+    if query_remainder[6..10] == *"Many" {
+        return request_sender.request_raw(query, variables);
+    }
+
+    let (mutation_name_with_whitespace, _) = query_remainder
+        .split_once('(')
+        .ok_or_else(|| String::from("query is improperly formatted"))?;
+
+    let mutation_name = mutation_name_with_whitespace.trim();
+
+    let model_name = mutation_name[6..].to_string();
+
+    let mass_mutate_entry = MassMutateEntry {
+        model_name: model_name.clone(),
+        variables: serde_json::from_str(&variables)
+            .map_err(|_| String::from("could not parse variables"))?,
+    };
+
+    // It is safe to unwrap the capture stack last_mut here because we checked the length to be non-zero before. This looks a bit wack but is necessary to not mutably borrow capture_data multiple times.
+    let id: isize = match &mutation_name[..6] {
+        "create" => match serde_json::from_str(&variables) {
+            Ok(MutationInput {
+                input: MutationInputVariable { id, .. },
+                ..
+            }) => {
+                capture_data
+                    .capture_stack
+                    .last_mut()
+                    .unwrap()
+                    .create
+                    .push_back(mass_mutate_entry);
+
+                id
+            }
+            Err(_) => {
+                capture_data
+                    .model_names_of_local_ids
+                    .push(model_name.clone());
+                *capture_data
+                    .reserve_id_count_per_model
+                    .entry(model_name)
+                    .or_default() += 1;
+                capture_data
+                    .capture_stack
+                    .last_mut()
+                    .unwrap()
+                    .create
+                    .push_back(mass_mutate_entry);
+                -capture_data
+                    .capture_stack
+                    .len()
+                    .try_into()
+                    .map_err(|_| String::from("ran out of internal ids"))?
+            }
+        },
+        "update" => {
+            let MutationInput {
+                input: MutationInputVariable { id, .. },
+                ..
+            } = serde_json::from_str(&variables)
+                .map_err(|_| String::from("could not find id input for update query"))?;
+
+            capture_data
+                .capture_stack
+                .last_mut()
+                .unwrap()
+                .update
+                .push_back(mass_mutate_entry);
+
+            id
+        }
+        "delete" => {
+            let DeleteInput { id } = serde_json::from_str(&variables)
+                .map_err(|_| String::from("could not find id input for delete query"))?;
+
+            capture_data
+                .capture_stack
+                .last_mut()
+                .unwrap()
+                .delete
+                .push_back(mass_mutate_entry);
+
+            id
+        }
+        _ => return request_sender.request_raw(query, variables),
+    };
+
+    return Ok(generate_delayed_id_response(&id.to_string(), mutation_name));
 }
 
 /// Loops through the entries of a serde_json::Map and replaces all the negative IDs with their
@@ -742,47 +804,166 @@ fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serd
     }
 }
 
-#[test]
-fn capture_mutation_test() {
-    let ctx = DataAPIContext::new(String::new(), String::new(), Some(String::new()));
+#[cfg(test)]
+mod tests {
+    use std::assert_matches;
+    use std::cell::{RefCell, RefMut};
 
-    ctx.start_capture().unwrap();
+    use super::*;
 
-    assert_eq!(
-        ctx.request(
-            String::from(
-                r#"
+    impl Default for DataAPIContext {
+        fn default() -> Self {
+            DataAPIContext::new(Default::default(), Default::default(), Default::default())
+        }
+    }
+
+    struct RequestRawMock {
+        should_expect: bool,
+        expected_requests: RefCell<VecDeque<(String, JsonString)>>,
+        responses: RefCell<VecDeque<Result<JsonString, String>>>,
+    }
+
+    impl Default for RequestRawMock {
+        fn default() -> Self {
+            Self::without_expect()
+        }
+    }
+
+    impl RequestRawMock {
+        fn without_expect() -> Self {
+            Self {
+                should_expect: false,
+                expected_requests: Default::default(),
+                responses: Default::default(),
+            }
+        }
+
+        fn with_expect(
+            expected_requests: VecDeque<(String, JsonString)>,
+            responses: VecDeque<Result<JsonString, String>>,
+        ) -> Self {
+            Self {
+                should_expect: true,
+                expected_requests: RefCell::new(expected_requests),
+                responses: RefCell::new(responses),
+            }
+        }
+
+        fn with_responses(responses: VecDeque<Result<JsonString, String>>) -> Self {
+            Self {
+                should_expect: false,
+                expected_requests: Default::default(),
+                responses: RefCell::new(responses),
+            }
+        }
+
+        fn set_should_expect(&mut self, should_expect: bool) {
+            self.should_expect = should_expect
+        }
+
+        fn expected_requests_mut(&mut self) -> RefMut<'_, VecDeque<(String, JsonString)>> {
+            self.expected_requests.borrow_mut()
+        }
+
+        fn responses_mut(&mut self) -> RefMut<'_, VecDeque<Result<JsonString, String>>> {
+            self.responses.borrow_mut()
+        }
+    }
+
+    impl RequestRaw for RequestRawMock {
+        fn request_raw(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
+            if self.should_expect {
+                if let Some((expected_query, expected_variables)) =
+                    self.expected_requests.borrow_mut().pop_front()
+                {
+                    if expected_query != query || expected_variables != variables {
+                        return Err(format!(
+                            "Unexpected request_raw call.\nExpected:\n{expected_query:?}\nwith variables:\n{expected_variables:?}\nGot:\n{query:?}\nwith variables:\n{variables:?}"
+                        ));
+                    }
+                } else {
+                    return Err(format!(
+                        "Unexpected request_raw call.\nExpected nothing\nGot:\n{query:?}\nwith variables:\n{variables:?}"
+                    ));
+                }
+            }
+
+            self.responses
+                .borrow_mut()
+                .pop_front()
+                .ok_or_else(|| String::default())
+                .flatten()
+        }
+    }
+
+    #[test]
+    fn capture_mutation_test() {
+        let mut capture_data = CaptureData::default();
+        capture_data.capture_stack.push(Default::default());
+
+        let request_raw_mock = RequestRawMock::with_expect(Default::default(), Default::default());
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from(
+                    r#"
     mutation ($input: userInput, $validationSets: [String]) {
-        createuser(input: $input, validationSets: $validationSets) {
+        createUser(input: $input, validationSets: $validationSets) {
             id
         }
     }"#
-            ),
-            String::from(r#"{"input": {"id": 2}}"#)
-        )
-        .unwrap()
-        .as_str(),
-        r#"{"data": {"createuser": {"id": "2"}}}"#
-    );
+                ),
+                String::from(r#"{"input": {"id": 2}}"#)
+            )
+            .unwrap()
+            .as_str(),
+            r#"{"data": {"createUser": {"id": "2"}}}"#
+        );
 
-    assert_eq!(
-        ctx.request(
-            String::from(
-                r#"
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from(
+                    r#"
     mutation ($input: userInput, $validationSets: [String]) {
-        deleteuser(input: $input, validationSets: $validationSets) {
+        deleteUser(input: $input, validationSets: $validationSets) {
             id
         }
     }"#
-            ),
-            String::from(r#"{"input": {"id": 2}}"#)
-        )
-        .unwrap()
-        .as_str(),
-        r#"{"data": {"deleteuser": {"id": "2"}}}"#
-    );
+                ),
+                String::from(r#"{"id": 2}"#)
+            )
+            .unwrap()
+            .as_str(),
+            r#"{"data": {"deleteUser": {"id": "2"}}}"#
+        );
 
-    ctx.apply_capture().unwrap();
+        let MassMutateEntries {
+            mut create,
+            update,
+            mut delete,
+        } = capture_data.capture_stack.pop().unwrap();
+
+        assert!(capture_data.reserved_ids.is_empty());
+        assert!(capture_data.model_names_of_local_ids.is_empty());
+        assert!(capture_data.reserve_id_count_per_model.is_empty());
+
+        let MassMutateEntry {
+            model_name: create_model_name,
+            variables: _create_variables,
+        } = create.pop_front().unwrap();
+        assert_eq!(create_model_name.as_str(), "User");
+        // TODO: make better way to match variables
+        let MassMutateEntry {
+            model_name: delete_model_name,
+            variables: _delete_variables,
+        } = delete.pop_front().unwrap();
+        assert_eq!(delete_model_name.as_str(), "User");
+        assert!(update.is_empty());
+    }
 }
 
 #[test]
