@@ -84,9 +84,9 @@ impl CaptureData {
 #[derive(Default, Debug)]
 pub struct MassMutateEntries {
     // TODO: We are probably able to turn these into Vecs because we iterate through them front-to-back anyway
-    create: VecDeque<MassMutateEntry>,
-    update: VecDeque<MassMutateEntry>,
-    delete: VecDeque<MassMutateEntry>,
+    create: VecDeque<MassMutateEntry<MutationInput>>,
+    update: VecDeque<MassMutateEntry<MutationInput>>,
+    delete: VecDeque<MassMutateEntry<DeleteInput>>,
 }
 
 impl MassMutateEntries {
@@ -109,12 +109,12 @@ impl MassMutateEntries {
 }
 
 #[derive(Debug)]
-pub struct MassMutateEntry {
+pub struct MassMutateEntry<T: serde::Serialize> {
     model_name: String,
-    variables: serde_json::Map<String, serde_json::Value>,
+    variables: T,
 }
 
-impl MassMutateEntry {
+impl<T: serde::Serialize> MassMutateEntry<T> {
     fn as_pending_mutation(&self, operation: DataMutation) -> data_api::PendingMutation {
         data_api::PendingMutation {
             mutation_name: format_mutation_name(&self.model_name, &operation),
@@ -142,26 +142,27 @@ pub struct ReservedIds {
     ids: VecDeque<u32>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct MutationInput {
     input: MutationInputVariable,
     #[serde(rename = "validationSets")]
-    validation_sets: Option<String>,
+    validation_sets: Option<ValidationSets>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct MutationInputVariable {
     id: InternalId,
     #[serde(flatten)]
-    other_inputs: HashMap<String, serde_json::Value>,
+    other_inputs: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct DeleteInput {
     id: InternalId,
 }
 
-#[derive(Default)]
+#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[serde(untagged)]
 pub enum ValidationSets {
     Empty,
     #[default]
@@ -169,22 +170,6 @@ pub enum ValidationSets {
 }
 
 impl ValidationSets {
-    fn set_by_mutation_variables(
-        &mut self,
-        variables: &serde_json::Map<String, serde_json::Value>,
-    ) {
-        match self {
-            Self::Default
-                if variables
-                    .get("validationSets")
-                    .is_some_and(|validation_set| validation_set == "empty") =>
-            {
-                *self = Self::Empty
-            }
-            _ => (),
-        }
-    }
-
     fn as_str(&self) -> &'static str {
         match self {
             ValidationSets::Default => "default",
@@ -215,19 +200,10 @@ fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {
 }
 
 fn generate_upsert_many_inputs(
-    create_entries: VecDeque<MassMutateEntry>,
-    update_entries: VecDeque<MassMutateEntry>,
+    create_entries: VecDeque<MassMutateEntry<MutationInput>>,
+    update_entries: VecDeque<MassMutateEntry<MutationInput>>,
     reserved_ids: &[RealId],
-) -> Result<
-    HashMap<
-        String,
-        (
-            ValidationSets,
-            Vec<serde_json::Map<String, serde_json::Value>>,
-        ),
-    >,
-    String,
-> {
+) -> Result<HashMap<String, (ValidationSets, Vec<MutationInputVariable>)>, String> {
     let mut upsert_manys: HashMap<String, (ValidationSets, Vec<_>)> = HashMap::new();
 
     for MassMutateEntry {
@@ -235,45 +211,37 @@ fn generate_upsert_many_inputs(
         mut variables,
     } in [create_entries, update_entries].into_iter().flatten()
     {
-        let inputs = variables
-            .remove("input")
-            .ok_or_else(|| String::from("mutation did not have an input variable"))?;
+        replace_negative_ids_in_mutation_input(reserved_ids, &mut variables.input)?;
 
-        if let serde_json::Value::Object(mut input_variables) = inputs {
-            replace_negative_ids_in_variables(&reserved_ids, &mut input_variables).unwrap();
+        let (validation_sets, input_vec) = upsert_manys.entry(model_name).or_default();
 
-            let (validation_sets, input_vec) = upsert_manys.entry(model_name).or_default();
-
-            validation_sets.set_by_mutation_variables(&variables);
-
-            input_vec.push(input_variables);
+        if let ValidationSets::Default = validation_sets
+            && let Some(ValidationSets::Empty) = variables.validation_sets
+        {
+            *validation_sets = ValidationSets::Empty
         }
+
+        input_vec.push(variables.input);
     }
 
     Ok(upsert_manys)
 }
 
 fn generate_delete_many_inputs(
-    delete_entries: VecDeque<MassMutateEntry>,
-) -> HashMap<String, Vec<serde_json::Value>> {
+    delete_entries: VecDeque<MassMutateEntry<DeleteInput>>,
+) -> HashMap<String, Vec<InternalId>> {
     delete_entries
         .into_iter()
-        .fold(HashMap::new(), |mut map, mut item| {
-            if let Some(id) = item.variables.remove("id") {
-                map.entry(item.model_name).or_insert(Vec::new()).push(id);
-            }
+        .fold(HashMap::new(), |mut map, item| {
+            map.entry(item.model_name)
+                .or_insert(Vec::new())
+                .push(item.variables.id);
             map
         })
 }
 
 fn send_upsert_many_mutations(
-    upsert_many_inputs: HashMap<
-        String,
-        (
-            ValidationSets,
-            Vec<serde_json::Map<String, serde_json::Value>>,
-        ),
-    >,
+    upsert_many_inputs: HashMap<String, (ValidationSets, Vec<MutationInputVariable>)>,
     request_sender: &impl RequestRaw,
 ) -> Result<(), String> {
     for (model_name, (validation_sets, input_variables)) in upsert_many_inputs {
@@ -294,7 +262,7 @@ fn send_upsert_many_mutations(
 }
 
 fn send_delete_many_mutations(
-    delete_many_inputs: HashMap<String, Vec<serde_json::Value>>,
+    delete_many_inputs: HashMap<String, Vec<isize>>,
     request_sender: &impl RequestRaw,
 ) -> Result<(), String> {
     for (model_name, variables) in delete_many_inputs {
@@ -474,25 +442,19 @@ fn extract_mutation_data(
 
     let model_name = mutation_name[6..].to_string();
 
-    let mass_mutate_entry = MassMutateEntry {
-        model_name: model_name.clone(),
-        variables: serde_json::from_str(&variables)
-            .map_err(|_| String::from("could not parse variables"))?,
-    };
-
     // It is safe to unwrap the capture stack last_mut here because we checked the length to be non-zero before. This looks a bit wack but is necessary to not mutably borrow capture_data multiple times.
     let id: isize = match &mutation_name[..6] {
         "create" => match serde_json::from_str(&variables) {
-            Ok(MutationInput {
-                input: MutationInputVariable { id, .. },
-                ..
-            }) => {
+            Ok(variables @ MutationInput { input: MutationInputVariable { id, .. }, .. }) => {
                 capture_data
                     .capture_stack
                     .last_mut()
                     .unwrap()
                     .create
-                    .push_back(mass_mutate_entry);
+                    .push_back(MassMutateEntry {
+                        model_name,
+                        variables,
+                    });
 
                 id
             }
@@ -502,26 +464,45 @@ fn extract_mutation_data(
                     .push(model_name.clone());
                 *capture_data
                     .reserve_id_count_per_model
-                    .entry(model_name)
+                    .entry(model_name.clone())
                     .or_default() += 1;
+
+                let internal_id: isize = -capture_data
+                    .capture_stack
+                    .len()
+                    .try_into()
+                    .map_err(|_| String::from("ran out of internal ids"))?;
+
+                let mut variables: serde_json::Value = serde_json::from_str(&variables)
+                    .map_err(|_| String::from("could not parse variables"))?;
+
+                variables
+                    .get_mut("input")
+                    .ok_or_else(|| String::from("create mutation was missing input"))?
+                    .as_object_mut()
+                    .ok_or_else(|| String::from("create mutation input was not an object"))?
+                    .insert(
+                        String::from("id"),
+                        serde_json::Value::Number(
+                            serde_json::Number::from_i128(internal_id as i128).unwrap(),
+                        ),
+                    );
+
                 capture_data
                     .capture_stack
                     .last_mut()
                     .unwrap()
                     .create
-                    .push_back(mass_mutate_entry);
-                -capture_data
-                    .capture_stack
-                    .len()
-                    .try_into()
-                    .map_err(|_| String::from("ran out of internal ids"))?
+                    .push_back(MassMutateEntry {
+                        model_name,
+                        variables: serde_json::from_value(variables).map_err(|_| String::from("mutation variables are improperly formatted"))?,
+                    });
+
+                internal_id
             }
         },
         "update" => {
-            let MutationInput {
-                input: MutationInputVariable { id, .. },
-                ..
-            } = serde_json::from_str(&variables)
+            let variables @ MutationInput { input: MutationInputVariable { id, .. }, .. } = serde_json::from_str(&variables)
                 .map_err(|_| String::from("could not find id input for update query"))?;
 
             capture_data
@@ -529,12 +510,15 @@ fn extract_mutation_data(
                 .last_mut()
                 .unwrap()
                 .update
-                .push_back(mass_mutate_entry);
+                .push_back(MassMutateEntry {
+                        model_name,
+                        variables,
+                    });
 
             id
         }
         "delete" => {
-            let DeleteInput { id } = serde_json::from_str(&variables)
+            let variables @ DeleteInput { id } = serde_json::from_str(&variables)
                 .map_err(|_| String::from("could not find id input for delete query"))?;
 
             capture_data
@@ -542,19 +526,41 @@ fn extract_mutation_data(
                 .last_mut()
                 .unwrap()
                 .delete
-                .push_back(mass_mutate_entry);
+                .push_back(MassMutateEntry {
+                        model_name,
+                        variables,
+                    });
 
             id
         }
         _ => return request_sender.request_raw(query, variables),
     };
 
-    return Ok(generate_delayed_id_response(&id.to_string(), mutation_name));
+    Ok(generate_delayed_id_response(&id.to_string(), mutation_name))
+}
+
+fn replace_negative_ids_in_mutation_input(
+    reserved_ids: &[RealId],
+    MutationInputVariable { id, other_inputs }: &mut MutationInputVariable,
+) -> Result<(), String> {
+    if id.is_negative() {
+        let index: usize = (-1 - *id)
+            .try_into()
+            .map_err(|error| format!("could not convert number to usize: {error}"))?;
+
+        *id = reserved_ids[index]
+            .try_into()
+            .map_err(|error| format!("could not convert number to isize: {error}"))?;
+    }
+
+    replace_negative_ids_in_object(reserved_ids, other_inputs)?;
+
+    Ok(())
 }
 
 /// Loops through the entries of a serde_json::Map and replaces all the negative IDs with their
 /// reserved counterparts.
-fn replace_negative_ids_in_variables(
+fn replace_negative_ids_in_object(
     reserved_ids: &[RealId],
     variables: &mut serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
@@ -562,7 +568,7 @@ fn replace_negative_ids_in_variables(
         if key == "id" {
             handle_id_key(reserved_ids, value)?;
         } else if let serde_json::Value::Object(object) = value {
-            replace_negative_ids_in_variables(reserved_ids, object)?;
+            replace_negative_ids_in_object(reserved_ids, object)?;
         } else if let serde_json::Value::Array(array_of_values) = value {
             handle_array_of_values(reserved_ids, array_of_values)?;
         }
@@ -625,7 +631,7 @@ fn handle_array_of_values(
 ) -> Result<(), String> {
     for item in array_of_values.iter_mut() {
         if let serde_json::Value::Object(object) = item {
-            replace_negative_ids_in_variables(reserved_ids, object)?;
+            replace_negative_ids_in_object(reserved_ids, object)?;
         } else if let serde_json::Value::Array(array) = item {
             handle_array_of_values(reserved_ids, array)?;
         }
@@ -953,15 +959,16 @@ mod tests {
 
         let MassMutateEntry {
             model_name: create_model_name,
-            variables: _create_variables,
+            variables: create_variables,
         } = create.pop_front().unwrap();
         assert_eq!(create_model_name.as_str(), "User");
-        // TODO: make better way to match variables
+        assert_matches!(create_variables, MutationInput { input: MutationInputVariable { id: 2, other_inputs }, validation_sets: None } if other_inputs.is_empty());
         let MassMutateEntry {
             model_name: delete_model_name,
-            variables: _delete_variables,
+            variables: delete_variables,
         } = delete.pop_front().unwrap();
         assert_eq!(delete_model_name.as_str(), "User");
+        assert_matches!(delete_variables, DeleteInput { id: 2 });
         assert!(update.is_empty());
     }
 }
