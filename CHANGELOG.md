@@ -1,3 +1,17 @@
+# [1.14.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.2...v1.14.0) (2026-06-22)
+
+
+### Bug Fixes
+
+* fix WIT typings to WASM in publish pipline ([a8cd534](https://github.com/bettyblocks/wasm-base-components/commit/a8cd534daa0de4976fc8407538bed88ccbcbc786))
+
+
+### Features
+
+* add pipeline job for building and pushing WIT typing packages ([a67c503](https://github.com/bettyblocks/wasm-base-components/commit/a67c5039b4484fc814bfa9a92b1beb5bd3fd6a3e))
+* add publish job for publishing components to Azure registry ([1f7889d](https://github.com/bettyblocks/wasm-base-components/commit/1f7889d65b15c0c67d325c03fa862c53a0180f38))
+* rename WIT namespace in all components from betty-blocks to betty-blocks-utilities ([56b1636](https://github.com/bettyblocks/wasm-base-components/commit/56b16367259da74795d74e06068378148c1f35f9))
+
 ## [1.13.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.1...v1.13.2) (2026-06-10)
 
 
