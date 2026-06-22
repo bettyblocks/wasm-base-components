@@ -166,9 +166,7 @@ jobs:
             echo "INPUT_VERSION=$LATEST_TAG" >> $GITHUB_ENV
           fi
 
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: wkg
+      - uses: wasco-dev/workflows/.github/actions/install-wkg@main
 
       - name: Prepare environment
         run: |
@@ -214,11 +212,14 @@ jobs:
             if [ -n "$dependencies" ]; then
               echo "[overrides]" > "$temp_directory/wkg.toml"
               for dependency in $dependencies; do
-                echo "\"betty-blocks-utilities:$dependency\" = { path = \"$(realpath wit)\" }" >> "$temp_directory/wkg.toml"
+                dependency_directory="$temp_directory/deps/$dependency"
+                mkdir -p "$dependency_directory"
+                cp "wit/$dependency.wit" "$dependency_directory/"
+                echo "\"betty-blocks-utilities:$dependency\" = { path = \"$dependency_directory\" }" >> "$temp_directory/wkg.toml"
               done
             fi
 
-            wasm_file=$(wkg wit build --wit-dir "$temp_directory" -o "$temp_directory/$name.wasm" 2>&1)
+            wasm_file=$(cd "$temp_directory" && wkg wit build --wit-dir "." -o "$name.wasm" 2>&1)
             if [ $? -ne 0 ]; then
               echo "::warning::Failed to build WIT package $name: $wasm_file"
               EXIT_CODE=1
