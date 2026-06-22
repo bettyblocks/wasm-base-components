@@ -6,9 +6,9 @@ use tracing::{debug, error};
 use wstd::http::{Body, Client, Request};
 
 use crate::bindings::{
-    betty_blocks::data_api::data_api::{self, HelperContext},
-    betty_blocks::types::types::{Model, Property},
-    exports::betty_blocks::file::upload_file::UploadResult,
+    betty_blocks_utilities::data_api::data_api::{self, HelperContext},
+    betty_blocks_utilities::types::types::{Model, Property},
+    exports::betty_blocks_utilities::upload_file::upload_file::UploadResult,
 };
 
 const GENERATE_FILE_UPLOAD_URL_REQUEST: &str = r#"

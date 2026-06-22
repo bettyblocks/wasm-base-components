@@ -7,4 +7,4 @@ type = "component"
 wasm_target = "wasm32-wasip2"
 
 [overrides]
-"betty-blocks:types" = { path = "../../wit/types.wit" }
+"betty-blocks-utilities:types" = { path = "../../wit/types.wit" }

@@ -37,7 +37,9 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just, wash, wkg
+          tool: just, wash
+
+      - uses: wasco-dev/workflows/.github/actions/install-wkg@main
 
       - name: Run component linting
         run: |

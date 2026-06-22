@@ -1,7 +1,7 @@
-package betty-blocks:test-component;
+package betty-blocks-utilities:test-component;
 
 world http-provider {
-    import betty-blocks:logs-writer/debug-logging;
+    import betty-blocks-utilities:logs-writer/debug-logging;
 
     export wasi:http/incoming-handler@0.2.2;
 }

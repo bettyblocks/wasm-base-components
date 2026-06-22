@@ -1,9 +1,11 @@
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks::data_api::data_api::request;
-use crate::betty_blocks::data_api::data_api::HelperContext;
-use crate::betty_blocks::types::types::{Property, PropertyMap, PropertyPath};
-use crate::exports::betty_blocks::crud::crud::{Guest, JsonString, Model, PropertyMapping};
+use crate::betty_blocks_utilities::data_api::data_api::request;
+use crate::betty_blocks_utilities::data_api::data_api::HelperContext;
+use crate::betty_blocks_utilities::types::types::{Property, PropertyMap, PropertyPath};
+use crate::exports::betty_blocks_utilities::crud::crud::{
+    Guest, JsonString, Model, PropertyMapping,
+};
 
 #[derive(Debug, PartialEq)]
 enum PropertyKind {
@@ -552,7 +554,7 @@ mod tests {
     use super::*;
 
     mod parse_to_gql_fragment {
-        use crate::betty_blocks::types::types::Property;
+        use crate::betty_blocks_utilities::types::types::Property;
         use serde_json::json;
 
         use super::*;

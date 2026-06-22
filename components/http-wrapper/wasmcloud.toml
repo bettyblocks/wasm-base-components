@@ -8,5 +8,5 @@ wit_world = "main"
 wasm_target = "wasm32-wasip2"
 
 [overrides]
-"betty-blocks:actions" = { path = "../../wit/actions.wit" }
-"betty-blocks:types" = { path = "../../wit/types.wit" }
+"betty-blocks-utilities:actions" = { path = "../../wit/actions.wit" }
+"betty-blocks-utilities:types" = { path = "../../wit/types.wit" }

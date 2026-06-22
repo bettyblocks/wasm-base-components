@@ -7,8 +7,10 @@ pub mod bindings {
 }
 
 use bindings::{
-    betty_blocks::data_api::data_api::HelperContext,
-    exports::betty_blocks::file::upload_file::{Guest as UploadFileGuest, Input, UploadResult},
+    betty_blocks_utilities::data_api::data_api::HelperContext,
+    exports::betty_blocks_utilities::upload_file::upload_file::{
+        Guest as UploadFileGuest, Input, UploadResult,
+    },
 };
 
 use crate::upload::upload_bytes_internal;

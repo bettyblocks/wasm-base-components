@@ -1,4 +1,4 @@
-package betty-blocks:log-to-stdout@0.1.0;
+package betty-blocks-utilities:log-to-stdout@0.1.0;
 
 
 world main {

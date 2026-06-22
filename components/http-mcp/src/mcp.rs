@@ -1,5 +1,5 @@
 use crate::actions;
-use crate::betty_blocks::auth::jwt::{allowed_to_call, allowed_to_list, AuthError};
+use crate::betty_blocks_utilities::auth::jwt::{allowed_to_call, allowed_to_list, AuthError};
 use crate::config;
 use crate::types::McpServerConfig;
 use rust_mcp_schema::{

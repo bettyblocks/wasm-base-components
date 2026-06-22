@@ -3,7 +3,7 @@ use wasmcloud_component::http;
 
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks::data_api::data_api::{
+use crate::betty_blocks_utilities::data_api::data_api::{
     request as data_api_request, HelperContext as DataApiContext,
 };
 
