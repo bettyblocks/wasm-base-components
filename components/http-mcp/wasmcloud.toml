@@ -1,0 +1,12 @@
+name = "mcp-component"
+version = "0.1.0"
+language = "rust"
+type = "component"
+
+[component]
+wit_world = "mcp"
+wasm_target = "wasm32-wasip2"
+
+[overrides]
+"betty-blocks-utilities:auth" = { path = "../utilities/auth/wit/world.wit" }
+"betty-blocks-utilities:types" = { path = "../../wit/types.wit" }

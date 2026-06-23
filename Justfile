@@ -16,9 +16,6 @@ build-all:
 
 build: build-all
 
-build-test:
-  wash build --config-path integration-test/components/fetcher
-
 deploy env version:
   cd deploy && bun install
   cd deploy && bun run publish {{env}} {{version}}
@@ -67,5 +64,8 @@ format-ci:
         echo "--- Running formatter in $dir ---"
         just --working-directory "$dir" --justfile "$justfile" formatting --check
     done
+
+integration-test:
+    cd components/http-mcp && cargo test --test integration_test_mcp -- --nocapture
 
 all: test-all lint-all clippy-all format-all

@@ -13,17 +13,19 @@ jobs:
         with:
           cache-all-crates: "true"
           cache-directories: |
-            helper/http-wrapper/target
-            helper/data-api/target
-            helper/data-api/test-component/target
-            helper/crud/target
-            helper/log-to-stdout/target
-            providers/smtp-provider/target
-            providers/smtp-provider/component
+            components/http-mcp/target
+            components/http-wrapper/target
+            components/logs-writer/target
+            components/logs-writer/test-component/target
+            components/utilities/auth/target
+            components/utilities/data-api/target
+            components/utilities/data-api/test-component/target
+            components/utilities/crud/target
+            components/utilities/log-to-stdout/target
 
       - name: Install stable Rust toolchain
         # uses: dtolnay/rust-toolchain@stable
-        uses: dtolnay/rust-toolchain@1.88.0
+        uses: dtolnay/rust-toolchain@1.92.0
         with:
           targets: wasm32-wasip2
           components: clippy, rustfmt
@@ -35,7 +37,9 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just, wash, wkg
+          tool: just, wash
+
+      - uses: wasco-dev/workflows/.github/actions/install-wkg@main
 
       - name: Run component linting
         run: |
@@ -59,7 +63,7 @@ jobs:
 
       - name: Run component integration tests
         run: |
-          for justfile in $(find helper providers integration-test -name Justfile 2>/dev/null); do
+          for justfile in $(find components -name Justfile 2>/dev/null); do
             echo "--- Running integration tests in $(dirname "$justfile") ---"
             (cd "$(dirname "$justfile")" && just integration-test)
           done

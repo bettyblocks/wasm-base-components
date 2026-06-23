@@ -1,0 +1,10 @@
+name = "crud-component"
+language = "rust"
+type = "component"
+
+[component]
+wasm_target = "wasm32-wasip2"
+
+[overrides]
+"betty-blocks-utilities:data-api" = { path = "../data-api/wit/world.wit" }
+"betty-blocks-utilities:types" = { path = "../../../wit/types.wit" }

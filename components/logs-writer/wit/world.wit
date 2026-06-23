@@ -1,0 +1,13 @@
+package betty-blocks-utilities:logs-writer;
+
+interface debug-logging {
+    type json-string = string;
+
+    send-log-and-variables: func(messages: list<json-string>, variables: json-string);
+}
+
+world main {
+    import wasi:http/outgoing-handler@0.2.2;
+
+    export debug-logging;
+}

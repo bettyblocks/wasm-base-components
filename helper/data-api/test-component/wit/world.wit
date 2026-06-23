@@ -1,7 +1,0 @@
-package betty-blocks:test-component;
-
-world http-provider {
-    import betty-blocks:data-api/data-api;
-
-    export wasi:http/incoming-handler@0.2.2;
-}

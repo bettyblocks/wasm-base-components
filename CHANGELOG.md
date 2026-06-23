@@ -1,3 +1,189 @@
+# [1.14.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.2...v1.14.0) (2026-06-22)
+
+
+### Bug Fixes
+
+* fix WIT typings to WASM in publish pipline ([a8cd534](https://github.com/bettyblocks/wasm-base-components/commit/a8cd534daa0de4976fc8407538bed88ccbcbc786))
+
+
+### Features
+
+* add pipeline job for building and pushing WIT typing packages ([a67c503](https://github.com/bettyblocks/wasm-base-components/commit/a67c5039b4484fc814bfa9a92b1beb5bd3fd6a3e))
+* add publish job for publishing components to Azure registry ([1f7889d](https://github.com/bettyblocks/wasm-base-components/commit/1f7889d65b15c0c67d325c03fa862c53a0180f38))
+* rename WIT namespace in all components from betty-blocks to betty-blocks-utilities ([56b1636](https://github.com/bettyblocks/wasm-base-components/commit/56b16367259da74795d74e06068378148c1f35f9))
+
+## [1.13.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.1...v1.13.2) (2026-06-10)
+
+
+### Bug Fixes
+
+* stream the chunks in 4kb ([590aaca](https://github.com/bettyblocks/wasm-base-components/commit/590aaca70dfe57a9c706ca1eea724e810fb1abd1))
+
+## [1.13.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.0...v1.13.1) (2026-05-27)
+
+
+### Bug Fixes
+
+* allow notification messages to not have an id ([18e9336](https://github.com/bettyblocks/wasm-base-components/commit/18e9336c357daa71b501650f05826f47ac6b6616))
+
+# [1.13.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.12.1...v1.13.0) (2026-05-22)
+
+
+### Features
+
+* empty feat to bump wasm version number to resolve conflict ([35cdc1b](https://github.com/bettyblocks/wasm-base-components/commit/35cdc1bab17f5db769de1dbae8c25c4d2805d627))
+
+## [1.12.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.12.0...v1.12.1) (2026-05-22)
+
+
+### Bug Fixes
+
+* update file WIT definition ([14e3ef0](https://github.com/bettyblocks/wasm-base-components/commit/14e3ef0d87f8517271895a6c748559a99381d612))
+
+# [1.12.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.2...v1.12.0) (2026-05-21)
+
+
+### Features
+
+* add upsert to crud component ([ee51e64](https://github.com/bettyblocks/wasm-base-components/commit/ee51e644cc69d25b0b490b73a0440dd73f99b0f8))
+
+## [1.11.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.1...v1.11.2) (2026-05-20)
+
+
+### Bug Fixes
+
+* add multipart/form-data content-type for file upload for upload-file ([5f39cca](https://github.com/bettyblocks/wasm-base-components/commit/5f39cca2e079c5eb4be3976cb9b483ebf0e32d22))
+
+## [1.11.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.11.0...v1.11.1) (2026-05-20)
+
+
+### Bug Fixes
+
+* set contentType as empty as it is required for the query ([7d18059](https://github.com/bettyblocks/wasm-base-components/commit/7d1805959397092088b8eac1e2fd6ba5ac35276a))
+
+# [1.11.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.10.0...v1.11.0) (2026-05-18)
+
+
+### Features
+
+* ignore notifications/initialized ([3276190](https://github.com/bettyblocks/wasm-base-components/commit/32761909e3f0ebf1811b6dddddb38e3ee56e343c))
+
+# [1.10.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.3...v1.10.0) (2026-05-12)
+
+
+### Features
+
+* add file.wit to global WIT files ([e4af22a](https://github.com/bettyblocks/wasm-base-components/commit/e4af22a2b94a2abc3146a2d74c9164c8b14572f3))
+* update upload-file to only use base64 ([3c2948f](https://github.com/bettyblocks/wasm-base-components/commit/3c2948f96de6f9908fd9c24d072f81c358b9ac65))
+
+## [1.9.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.2...v1.9.3) (2026-04-16)
+
+
+### Bug Fixes
+
+* fmt ([e067e59](https://github.com/bettyblocks/wasm-base-components/commit/e067e594555db1ab1e86205cd1e5ccb3bbff71b7))
+* improve array handling in get_assigned_value function ([91862cb](https://github.com/bettyblocks/wasm-base-components/commit/91862cb3e47e0e59915e04c89d76b0e4b6152059))
+
+## [1.9.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.1...v1.9.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* enhance empty array handling in as_collection function ([290ddd5](https://github.com/bettyblocks/wasm-base-components/commit/290ddd5370a01708c54d57a1e36e33b900676dc8))
+* improve handling of empty arrays in GraphQL fragments ([34fa915](https://github.com/bettyblocks/wasm-base-components/commit/34fa9157d8fb74f350eca8b7b749d523c5866c04))
+
+## [1.9.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.9.0...v1.9.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* handle empty arrays in as_collection ([5e2a41c](https://github.com/bettyblocks/wasm-base-components/commit/5e2a41ca6c9f78844b628ca0e8565c87b64f6d2c))
+
+# [1.9.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.8.0...v1.9.0) (2026-04-09)
+
+
+### Features
+
+* add betty config to mcp component ([e1333e1](https://github.com/bettyblocks/wasm-base-components/commit/e1333e15df95b35329ca959a2070e56a272a82c9))
+
+# [1.8.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.7.1...v1.8.0) (2026-03-24)
+
+
+### Features
+
+* add auth component to mcp server component ([a859852](https://github.com/bettyblocks/wasm-base-components/commit/a85985249c5c32cae15b9bf5130d43c3f79b825a))
+* sync auth component with actions-compiler implementation ([a1eab4a](https://github.com/bettyblocks/wasm-base-components/commit/a1eab4a6081552fcc4be3b0b66243c25aefb62f2))
+* sync auth component with actions-compiler implementation ([0991a6d](https://github.com/bettyblocks/wasm-base-components/commit/0991a6d2b026e6731febdd9a947e5ff396dcbb3d))
+
+## [1.7.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.7.0...v1.7.1) (2026-03-13)
+
+
+### Bug Fixes
+
+* forward actions error message ([d7e3e1c](https://github.com/bettyblocks/wasm-base-components/commit/d7e3e1ca70894ad78863ab7d2b41d266ae0ae522))
+
+# [1.7.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.6.0...v1.7.0) (2026-03-12)
+
+
+### Features
+
+* add conventional commit check step to ci ([73cc502](https://github.com/bettyblocks/wasm-base-components/commit/73cc5029cb4c92a2eff09dd9f32943038b0e55bd))
+
+# [1.6.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.5.2...v1.6.0) (2026-03-12)
+
+
+### Features
+
+* blank commit for semantic release ([983493c](https://github.com/bettyblocks/wasm-base-components/commit/983493c70ba623a1d0f197125ca1572cc006d008))
+
+## [1.5.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.5.1...v1.5.2) (2026-03-05)
+
+
+### Bug Fixes
+
+* call action via http request instead of direct wasm call ([56b31aa](https://github.com/bettyblocks/wasm-base-components/commit/56b31aa0291e974b09670cecf6cf5c347cf9ceff))
+* use x-route-host header since host header is prohibited by WASI ([ea5c1d9](https://github.com/bettyblocks/wasm-base-components/commit/ea5c1d907eb09cd4174acbee7e42534aa6817189))
+
+## [1.5.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.5.0...v1.5.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* correct implementation of initialize ([2620360](https://github.com/bettyblocks/wasm-base-components/commit/2620360d917a91ae1dbf5f7d8d8caf71e09a9f37))
+
+# [1.5.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.4.0...v1.5.0) (2026-03-03)
+
+
+### Bug Fixes
+
+* changed the auth wit, addressed review ([56a85c0](https://github.com/bettyblocks/wasm-base-components/commit/56a85c010008c30df6c81120efef5eeeafaa7715))
+* update mcp & auth components based on new specs ([28d880c](https://github.com/bettyblocks/wasm-base-components/commit/28d880ceac0f25cd408541d911e7612381c11e23))
+* use jsonschema in validation ([ab0df74](https://github.com/bettyblocks/wasm-base-components/commit/ab0df74b6a85751caee60a0c0e685e3038f207c5))
+
+
+### Features
+
+* add mcp and auth component with auth wit ([6c32199](https://github.com/bettyblocks/wasm-base-components/commit/6c321991a54894e6af39ced016bd421ac8f2da7b))
+
+# [1.4.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.3.3...v1.4.0) (2026-02-25)
+
+
+### Features
+
+* implement debug logging component ([d6142a3](https://github.com/bettyblocks/wasm-base-components/commit/d6142a3b3be5f48148b91809aa464d878d0543ff))
+
+## [1.3.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.3.2...v1.3.3) (2026-01-30)
+
+
+### Bug Fixes
+
+* ci cache directory update & readme modified to show updated repo structure ([315e419](https://github.com/bettyblocks/wasm-base-components/commit/315e4196c552f701e79ad00c78fb3c33b72a25ad))
+
+
+### Reverts
+
+* property-path has list of property as well as base name & kind ([aa51270](https://github.com/bettyblocks/wasm-base-components/commit/aa5127005105f5864ffa6d4ee3a99301b54e5c14))
+
 ## [1.3.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.3.1...v1.3.2) (2026-01-22)
 
 
