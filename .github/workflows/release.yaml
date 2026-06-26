@@ -3,7 +3,7 @@ name: Build WASM Components
 on:
   push:
     branches:
-      - "main"
+      - "dev"
 
 jobs:
   build-and-release:
