@@ -7,7 +7,7 @@ on:
     types:
       - completed
     branches:
-      - main
+      - dev
   workflow_dispatch:
     inputs:
       version:
@@ -149,6 +149,7 @@ jobs:
   push-azure:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: dev
     permissions:
       contents: read
 
