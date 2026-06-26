@@ -26,18 +26,9 @@ serde_json = "1.0.145"
 serde = { version = "1.0.228", features = ["derive"] }
 
 [dev-dependencies]
-wash-runtime = { git = "https://github.com/bettyblocks/wasmCloud.git", rev = "54376a3d0470dc0527e0592faa170f9c0afd861f" }
-tonic = { version = "0.13", default-features = false, features = [
-  "codegen",
-  "prost",
-  "transport",
+wasmtime-testing-helper = { git = "https://github.com/bettyblocks/wasmtime-testing-helper", features = [
+  "http",
 ] }
-serde_json = "1.0.145"
-bytes = "1.11.0"
-semver = "1.0.27"
-reqwest = { version = "0.12.24", default-features = false, features = ["json"] }
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-serial_test = "3.2.0"
 
 [build-dependencies]
 tonic-build = "0.13"

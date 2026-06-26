@@ -90,7 +90,6 @@ pub async fn inner_request(
         .context("Failed to parse GRPC_SERVER_URI")?;
 
     let endpoint = GrpcEndpoint::new(endpoint_uri);
-    debug!("Creating new gRPC client");
     let mut client = DataApiClient::new(endpoint);
 
     let mut request = Request::new(DataApiRequest {
@@ -112,7 +111,6 @@ pub async fn inner_request(
             .context("Failed to create valid bearer header")?,
     );
 
-    debug!("Executing gRPC request");
     let response = client.execute(request).await.context("gRPC call failed")?;
 
     match response.into_inner() {

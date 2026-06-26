@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
 
-use crate::exports::betty_blocks::data_api::data_api::{self, GuestDataApi, JsonString};
+use crate::exports::betty_blocks_utilities::data_api::data_api::{self, GuestDataApi, JsonString};
 use crate::{Config, inner_request};
 
 type ModelName = String;
@@ -11,7 +11,7 @@ type RealId = i32;
 
 const CHUNK_SIZE: usize = 100_000;
 
-const RESERVE_ID_QUERY: &'static str = "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }";
+const RESERVE_ID_QUERY: &str = "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }";
 
 pub struct DataAPIContext {
     application_id: String,
@@ -478,11 +478,11 @@ fn extract_mutation_data(
                     .entry(model_name.clone())
                     .or_default() += 1;
 
-                let internal_id: isize = -capture_data
-                    .capture_stack
-                    .len()
-                    .try_into()
-                    .map_err(|_| String::from("ran out of internal ids"))?;
+                let capture = capture_data.capture_stack.last_mut().unwrap();
+
+                let internal_id = -1
+                    - TryInto::<isize>::try_into(capture.create.len())
+                        .map_err(|_| String::from("ran out of internal ids"))?;
 
                 let mut variables: serde_json::Value = serde_json::from_str(&variables)
                     .map_err(|_| String::from("could not parse variables"))?;
@@ -499,17 +499,11 @@ fn extract_mutation_data(
                         ),
                     );
 
-                capture_data
-                    .capture_stack
-                    .last_mut()
-                    .unwrap()
-                    .create
-                    .push_back(MassMutateEntry {
-                        model_name,
-                        variables: serde_json::from_value(variables).map_err(|_| {
-                            String::from("mutation variables are improperly formatted")
-                        })?,
-                    });
+                capture.create.push_back(MassMutateEntry {
+                    model_name,
+                    variables: serde_json::from_value(variables)
+                        .map_err(|_| String::from("mutation variables are improperly formatted"))?,
+                });
 
                 internal_id
             }
@@ -816,7 +810,6 @@ fn graphql_to_json(val: graphql_parser::query::Value<'_, String>) -> Option<serd
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
     use std::cell::RefCell;
 
     use super::*;
@@ -1006,13 +999,15 @@ mod tests {
             variables: create_variables,
         } = create.pop_front().unwrap();
         assert_eq!(create_model_name.as_str(), "User");
-        assert_matches!(create_variables, MutationInput { input: MutationInputVariable { id: 2, other_inputs }, validation_sets: None } if other_inputs.is_empty());
+        assert!(
+            matches!(create_variables, MutationInput { input: MutationInputVariable { id: 2, other_inputs }, validation_sets: None } if other_inputs.is_empty())
+        );
         let MassMutateEntry {
             model_name: delete_model_name,
             variables: delete_variables,
         } = delete.pop_front().unwrap();
         assert_eq!(delete_model_name.as_str(), "User");
-        assert_matches!(delete_variables, DeleteInput { id: 2 });
+        assert!(matches!(delete_variables, DeleteInput { id: 2 }));
         assert!(update.is_empty());
     }
 
@@ -1042,6 +1037,25 @@ mod tests {
             r#"{"data": {"createUser": {"id": "-1"}}}"#
         );
 
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                String::from(
+                    r#"
+    mutation ($input: userInput, $validationSets: [String]) {
+        createUser(input: $input, validationSets: $validationSets) {
+            id
+        }
+    }"#
+                ),
+                String::from(r#"{"input": {}}"#)
+            )
+            .unwrap()
+            .as_str(),
+            r#"{"data": {"createUser": {"id": "-2"}}}"#
+        );
+
         let MassMutateEntries {
             mut create,
             update,
@@ -1057,13 +1071,21 @@ mod tests {
                 .as_str(),
             "User"
         );
+        assert_eq!(
+            capture_data
+                .model_names_of_local_ids
+                .pop()
+                .unwrap()
+                .as_str(),
+            "User"
+        );
         assert!(capture_data.model_names_of_local_ids.is_empty());
         assert_eq!(
             capture_data
                 .reserve_id_count_per_model
                 .remove("User")
                 .unwrap(),
-            1
+            2
         );
         assert!(capture_data.reserve_id_count_per_model.is_empty());
 
@@ -1072,7 +1094,18 @@ mod tests {
             variables: create_variables,
         } = create.pop_front().unwrap();
         assert_eq!(create_model_name.as_str(), "User");
-        assert_matches!(create_variables, MutationInput { input: MutationInputVariable { id: -1, other_inputs }, validation_sets: None } if other_inputs.is_empty());
+        assert!(
+            matches!(create_variables, MutationInput { input: MutationInputVariable { id: -1, other_inputs }, validation_sets: None } if other_inputs.is_empty())
+        );
+        let MassMutateEntry {
+            model_name: create_model_name,
+            variables: create_variables,
+        } = create.pop_front().unwrap();
+        assert_eq!(create_model_name.as_str(), "User");
+        assert!(
+            matches!(create_variables, MutationInput { input: MutationInputVariable { id: -2, other_inputs }, validation_sets: None } if other_inputs.is_empty())
+        );
+        assert!(create.is_empty());
         assert!(delete.is_empty());
         assert!(update.is_empty());
     }
@@ -1180,7 +1213,7 @@ mod tests {
 
         let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
 
-        assert_matches!(real_ids.as_slice(), [3, 1, 2, 4]);
+        assert_eq!(real_ids.as_slice(), [3, 1, 2, 4]);
         assert!(capture_data.reserve_id_count_per_model.is_empty());
         assert!(capture_data.reserved_ids.is_empty());
         assert!(capture_data.model_names_of_local_ids.is_empty());
@@ -1228,8 +1261,8 @@ mod tests {
 
         let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
 
-        assert_matches!(real_ids.as_slice(), [1]);
-        assert_matches!(capture_data.reserved_ids.as_slice(), [1]);
+        assert_eq!(real_ids.as_slice(), [1]);
+        assert_eq!(capture_data.reserved_ids.as_slice(), [1]);
         assert!(capture_data.reserve_id_count_per_model.is_empty());
         assert!(capture_data.model_names_of_local_ids.is_empty());
 
@@ -1245,8 +1278,8 @@ mod tests {
 
         let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
 
-        assert_matches!(real_ids.as_slice(), [1, 2, 3]);
-        assert_matches!(capture_data.reserved_ids.as_slice(), [1, 2, 3]);
+        assert_eq!(real_ids.as_slice(), [1, 2, 3]);
+        assert_eq!(capture_data.reserved_ids.as_slice(), [1, 2, 3]);
         assert!(capture_data.reserve_id_count_per_model.is_empty());
         assert!(capture_data.model_names_of_local_ids.is_empty());
 
@@ -1261,7 +1294,7 @@ mod tests {
 
         let real_ids = capture_data.reserve_ids(&request_raw_mock).unwrap();
 
-        assert_matches!(real_ids.as_slice(), [1, 2, 3, 4]);
+        assert_eq!(real_ids.as_slice(), [1, 2, 3, 4]);
         assert!(capture_data.reserved_ids.is_empty());
         assert!(capture_data.reserve_id_count_per_model.is_empty());
         assert!(capture_data.model_names_of_local_ids.is_empty());
@@ -1324,7 +1357,7 @@ mod tests {
 
         let (user_validation_sets, mut user_input) = upsert_many_inputs.remove("User").unwrap();
 
-        assert_matches!(user_validation_sets, ValidationSets::Empty);
+        assert!(matches!(user_validation_sets, ValidationSets::Empty));
 
         let mut update_input = user_input.pop().unwrap();
 
@@ -1344,7 +1377,7 @@ mod tests {
 
         let (oozer_validation_sets, mut oozer_input) = upsert_many_inputs.remove("Oozer").unwrap();
 
-        assert_matches!(oozer_validation_sets, ValidationSets::Default);
+        assert!(matches!(oozer_validation_sets, ValidationSets::Default));
 
         let create_input3 = oozer_input.pop().unwrap();
 
@@ -1432,11 +1465,11 @@ mod tests {
         )
         .unwrap();
 
-        assert_matches!(
+        assert_eq!(
             delete_many_inputs.remove("User").unwrap().as_slice(),
             [1, 3]
         );
-        assert_matches!(delete_many_inputs.remove("Oozer").unwrap().as_slice(), [1]);
+        assert_eq!(delete_many_inputs.remove("Oozer").unwrap().as_slice(), [1]);
 
         assert!(delete_many_inputs.is_empty());
     }

@@ -2,18 +2,18 @@
 build:
     wash build
 
-test:
+unit-test:
     wash wit deps
     cargo test --lib --bins
 
 integration-test:
     wash wit deps
-    cd ./test-component/ && wash wit deps
-    cargo test --tests '*'
+    cargo test --test '*'
+
+test: unit-test && integration-test
 
 lint:
     wash wit deps
-    cd ./test-component/ && wash wit deps
     cargo check
 
 formatting *args:
