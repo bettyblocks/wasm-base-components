@@ -15,9 +15,7 @@ const RESERVE_ID_QUERY: &str = "mutation ($model: String!, $amount: Int!) { rese
 
 pub struct DataAPIContext {
     application_id: String,
-
-    // TODO: Check if this is still dead
-    #[allow(dead_code)]
+    #[expect(dead_code, reason = "Will be used for logging in the future")]
     action_id: String,
     /// jwt of the customer (so not the jaws jwt used for authenticating the server to server communication)
     jwt: Option<String>,
@@ -79,10 +77,9 @@ impl CaptureData {
 
 #[derive(Default, Debug)]
 pub struct MassMutateEntries {
-    // TODO: We are probably able to turn these into Vecs because we iterate through them front-to-back anyway
-    create: VecDeque<MassMutateEntry<MutationInput>>,
-    update: VecDeque<MassMutateEntry<MutationInput>>,
-    delete: VecDeque<MassMutateEntry<DeleteInput>>,
+    create: Vec<MassMutateEntry<MutationInput>>,
+    update: Vec<MassMutateEntry<MutationInput>>,
+    delete: Vec<MassMutateEntry<DeleteInput>>,
 }
 
 impl MassMutateEntries {
@@ -90,15 +87,15 @@ impl MassMutateEntries {
         [
             self.create
                 .iter()
-                .map(|x| x.as_pending_mutation(DataMutation::Create))
+                .map(|x| x.as_pending_mutation("create"))
                 .collect(),
             self.update
                 .iter()
-                .map(|x| x.as_pending_mutation(DataMutation::Update))
+                .map(|x| x.as_pending_mutation("update"))
                 .collect(),
             self.delete
                 .iter()
-                .map(|x| x.as_pending_mutation(DataMutation::Delete))
+                .map(|x| x.as_pending_mutation("delete"))
                 .collect(),
         ]
     }
@@ -111,55 +108,53 @@ pub struct MassMutateEntry<T: serde::Serialize> {
 }
 
 impl<T: serde::Serialize> MassMutateEntry<T> {
-    fn as_pending_mutation(&self, operation: DataMutation) -> data_api::PendingMutation {
+    fn as_pending_mutation(&self, operation: &str) -> data_api::PendingMutation {
         data_api::PendingMutation {
-            mutation_name: format_mutation_name(&self.model_name, &operation),
-            mutation: format_mutation(&self.model_name, &operation),
+            mutation_name: format_mutation_name(&self.model_name, operation),
+            mutation: format_mutation(&self.model_name, operation),
             variables: serde_json::to_string(&self.variables).expect("incorrect variables"),
         }
     }
 }
 
-// TODO: These don't need to all be public, but might have to be pub(crate) for testing.
-
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct ReserveIdMutationResult {
+struct ReserveIdMutationResult {
     data: ReserveIdResult,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct ReserveIdResult {
+struct ReserveIdResult {
     #[serde(rename = "reserveRecords")]
     reserved_ids: ReservedIds,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct ReservedIds {
+struct ReservedIds {
     ids: VecDeque<u32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct MutationInput {
+struct MutationInput {
     input: MutationInputVariable,
     #[serde(rename = "validationSets")]
     validation_sets: Option<ValidationSets>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct MutationInputVariable {
+struct MutationInputVariable {
     id: InternalId,
     #[serde(flatten)]
     other_inputs: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
-pub struct DeleteInput {
+struct DeleteInput {
     id: InternalId,
 }
 
 #[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone)]
 #[serde(untagged)]
-pub enum ValidationSets {
+enum ValidationSets {
     Empty,
     #[default]
     Default,
@@ -180,15 +175,15 @@ impl Display for ValidationSets {
     }
 }
 
-fn format_mutation(model_name: &str, operation: &DataMutation) -> String {
+fn format_mutation(model_name: &str, operation: &str) -> String {
     format!(
         "mutation {{ {}{model_name}(input: $input) {{ id }} }}",
-        operation.as_static_str()
+        operation
     )
 }
 
-fn format_mutation_name(model_name: &str, operation: &DataMutation) -> String {
-    format!("{}{model_name}", operation.as_static_str())
+fn format_mutation_name(model_name: &str, operation: &str) -> String {
+    format!("{}{model_name}", operation)
 }
 
 fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {
@@ -196,8 +191,8 @@ fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {
 }
 
 fn generate_upsert_many_inputs(
-    create_entries: VecDeque<MassMutateEntry<MutationInput>>,
-    update_entries: VecDeque<MassMutateEntry<MutationInput>>,
+    create_entries: Vec<MassMutateEntry<MutationInput>>,
+    update_entries: Vec<MassMutateEntry<MutationInput>>,
     reserved_ids: &[RealId],
 ) -> Result<HashMap<String, (ValidationSets, Vec<MutationInputVariable>)>, String> {
     let mut upsert_manys: HashMap<String, (ValidationSets, Vec<_>)> = HashMap::new();
@@ -224,7 +219,7 @@ fn generate_upsert_many_inputs(
 }
 
 fn generate_delete_many_inputs(
-    delete_entries: VecDeque<MassMutateEntry<DeleteInput>>,
+    delete_entries: Vec<MassMutateEntry<DeleteInput>>,
     reserved_ids: &[RealId],
 ) -> Result<HashMap<String, Vec<InternalId>>, String> {
     let mut delete_ids = HashMap::new();
@@ -462,7 +457,7 @@ fn extract_mutation_data(
                     .last_mut()
                     .unwrap()
                     .create
-                    .push_back(MassMutateEntry {
+                    .push(MassMutateEntry {
                         model_name,
                         variables,
                     });
@@ -499,7 +494,7 @@ fn extract_mutation_data(
                         ),
                     );
 
-                capture.create.push_back(MassMutateEntry {
+                capture.create.push(MassMutateEntry {
                     model_name,
                     variables: serde_json::from_value(variables)
                         .map_err(|_| String::from("mutation variables are improperly formatted"))?,
@@ -520,7 +515,7 @@ fn extract_mutation_data(
                 .last_mut()
                 .unwrap()
                 .update
-                .push_back(MassMutateEntry {
+                .push(MassMutateEntry {
                     model_name,
                     variables,
                 });
@@ -536,7 +531,7 @@ fn extract_mutation_data(
                 .last_mut()
                 .unwrap()
                 .delete
-                .push_back(MassMutateEntry {
+                .push(MassMutateEntry {
                     model_name,
                     variables,
                 });
@@ -827,15 +822,15 @@ mod tests {
         let MassMutateEntry {
             model_name: create_model_name,
             variables: create_variables,
-        } = create.pop_front().unwrap();
+        } = create.pop().unwrap();
         assert_eq!(create_model_name.as_str(), "User");
         assert!(
-            matches!(create_variables, MutationInput { input: MutationInputVariable { id: 2, other_inputs }, validation_sets: None } if other_inputs.is_empty())
+            matches!(create_variables, MutationInput { input: MutationInputVariable { id: 1, other_inputs }, validation_sets: None } if other_inputs.is_empty())
         );
         let MassMutateEntry {
             model_name: delete_model_name,
             variables: delete_variables,
-        } = delete.pop_front().unwrap();
+        } = delete.pop().unwrap();
         assert_eq!(delete_model_name.as_str(), "User");
         assert!(matches!(delete_variables, DeleteInput { id: 2 }));
         assert!(update.is_empty());
@@ -922,7 +917,7 @@ mod tests {
         let MassMutateEntry {
             model_name: create_model_name,
             variables: create_variables,
-        } = create.pop_front().unwrap();
+        } = create.pop().unwrap();
         assert_eq!(create_model_name.as_str(), "User");
         assert!(
             matches!(create_variables, MutationInput { input: MutationInputVariable { id: -1, other_inputs }, validation_sets: None } if other_inputs.is_empty())
@@ -930,7 +925,7 @@ mod tests {
         let MassMutateEntry {
             model_name: create_model_name,
             variables: create_variables,
-        } = create.pop_front().unwrap();
+        } = create.pop().unwrap();
         assert_eq!(create_model_name.as_str(), "User");
         assert!(
             matches!(create_variables, MutationInput { input: MutationInputVariable { id: -2, other_inputs }, validation_sets: None } if other_inputs.is_empty())
@@ -1133,7 +1128,7 @@ mod tests {
     #[test]
     fn upsert_many_input_formatting_test() {
         let mut upsert_many_inputs = generate_upsert_many_inputs(
-            VecDeque::from([
+            Vec::from([
                 MassMutateEntry {
                     model_name: String::from("User"),
                     variables: MutationInput {
@@ -1165,7 +1160,7 @@ mod tests {
                     },
                 },
             ]),
-            VecDeque::from([MassMutateEntry {
+            Vec::from([MassMutateEntry {
                 model_name: String::from("User"),
                 variables: MutationInput {
                     input: MutationInputVariable {
@@ -1277,7 +1272,7 @@ mod tests {
     #[test]
     fn delete_many_input_formatting_test() {
         let mut delete_many_inputs = generate_delete_many_inputs(
-            VecDeque::from([
+            Vec::from([
                 MassMutateEntry {
                     model_name: String::from("User"),
                     variables: DeleteInput { id: 1 },
