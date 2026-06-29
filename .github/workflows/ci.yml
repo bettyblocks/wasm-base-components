@@ -18,10 +18,10 @@ jobs:
             components/logs-writer/target
             components/logs-writer/test-component/target
             components/utilities/auth/target
-            components/utilities/data-api/target
-            components/utilities/data-api/test-component/target
             components/utilities/crud/target
+            components/utilities/data-api/target
             components/utilities/log-to-stdout/target
+            components/utilities/upload-file/target
 
       - name: Install stable Rust toolchain
         # uses: dtolnay/rust-toolchain@stable
