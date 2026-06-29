@@ -20,6 +20,7 @@ use crate::bindings::exports::betty_blocks_utilities::data_api::data_api::Pendin
 
 const APPLICATION_ID: &str = "06caae5da8234837a330c14a7350ed75";
 const JWT: &str = "";
+const ACTION_ID: &str = "";
 const JAWS_SECRET: &str = "SUPER_SECRET";
 const JAWS_DEFAULT_ISSUER: &str = "actions-wasm";
 
@@ -138,7 +139,7 @@ fn data_api_component_should_return_data_rpc_server_error() {
 
     let data_api_resource_def = interface.data_api();
     let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, "", None)
+        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
         .unwrap();
     let res = data_api_resource_def.call_request(
         &mut component.store,
@@ -172,7 +173,7 @@ fn data_api_component_should_return_error_if_token_is_invalid() {
 
     let data_api_resource_def = interface.data_api();
     let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, "", None)
+        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
         .unwrap();
     let res = data_api_resource_def.call_request(
         &mut component.store,
@@ -195,7 +196,7 @@ fn id_reserving_test() {
         (
             (
                 "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
-                r#"{"model": "User", "amount": 2}"#,
+                r#"{"model":"User","amount":2}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -205,7 +206,7 @@ fn id_reserving_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input": [{"id":4},{"id":7,"subordinates":{"_replace":[{"id":4}]}}], "validationSets": "default"}"#,
+                r#"{"input":[{"id":4},{"id":7,"subordinates":{"_replace":[{"id":4}]}}],"validationSets":"default"}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -220,14 +221,14 @@ fn id_reserving_test() {
 
     let data_api_resource_def = interface.data_api();
     let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, "", None)
+        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
         .unwrap();
     data_api_resource_def
         .call_start_capture(&mut component.store, data_api_resource)
         .unwrap()
         .unwrap();
-    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource.clone(), "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {}}"#)).unwrap().unwrap(), r#"{"data": {"createUser": {"id": "-1"}}}"#);
-    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource.clone(), "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {"subordinates": {"_replace": [{"id": -1}]}}}"#)).unwrap().unwrap(), r#"{"data": {"createUser": {"id": "-2"}}}"#);
+    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource.clone(), "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-1"}}}"#);
+    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource.clone(), "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {"subordinates": {"_replace": [{"id": -1}]}}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-2"}}}"#);
     data_api_resource_def
         .call_apply_capture(&mut component.store, data_api_resource)
         .unwrap()
@@ -265,7 +266,7 @@ fn pending_capture_test() {
 
     let data_api_resource_def = interface.data_api();
     let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, "", None)
+        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
         .unwrap();
     data_api_resource_def
         .call_start_capture(&mut component.store, data_api_resource)
@@ -281,7 +282,7 @@ fn pending_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"createUser": {"id": "-1"}}}"#
+        r#"{"data":{"createUser":{"id":"-1"}}}"#
     );
     assert_eq!(
         data_api_resource_def
@@ -293,7 +294,7 @@ fn pending_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"updateUser": {"id": "-1"}}}"#
+        r#"{"data":{"updateUser":{"id":"-1"}}}"#
     );
     assert_eq!(
         data_api_resource_def
@@ -305,7 +306,7 @@ fn pending_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"deleteUser": {"id": "-1"}}}"#
+        r#"{"data":{"deleteUser":{"id":"-1"}}}"#
     );
     let [create_mutations, update_mutations, delete_mutations] = data_api_resource_def
         .call_pending_capture(&mut component.store, data_api_resource)
@@ -348,7 +349,7 @@ fn discard_capture_test() {
 
     let data_api_resource_def = interface.data_api();
     let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, "", None)
+        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
         .unwrap();
     data_api_resource_def
         .call_start_capture(&mut component.store, data_api_resource)
@@ -364,7 +365,7 @@ fn discard_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"createUser": {"id": "1"}}}"#
+        r#"{"data":{"createUser":{"id":"1"}}}"#
     );
     data_api_resource_def
         .call_discard_capture(&mut component.store, data_api_resource)
@@ -405,7 +406,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
-                r#"{"model": "User", "amount": 2}"#,
+                r#"{"model":"User","amount":2}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -415,7 +416,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input": [{"id":2,"name":"Joe","subordinates":{"_replace":[{"id":1}]}}], "validationSets": "default"}"#,
+                r#"{"input":[{"id":2,"name":"Joe","subordinates":{"_replace":[{"id":1}]}}],"validationSets":"default"}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -425,7 +426,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
-                r#"{"model": "User", "amount": 1}"#,
+                r#"{"model":"User","amount":1}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -435,7 +436,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input": [{"id":3,"name":"James","subordinates":{"_replace":[{"id":1},{"id":2}]}}], "validationSets": "default"}"#,
+                r#"{"input":[{"id":3,"name":"James","subordinates":{"_replace":[{"id":1},{"id":2}]}}],"validationSets":"default"}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -445,7 +446,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input": [{"id":1,"name":"John"}], "validationSets": "default"}"#,
+                r#"{"input":[{"id":1,"name":"John"}],"validationSets":"default"}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -460,7 +461,7 @@ fn nested_capture_test() {
 
     let data_api_resource_def = interface.data_api();
     let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, "", None)
+        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
         .unwrap();
     data_api_resource_def
         .call_start_capture(&mut component.store, data_api_resource)
@@ -476,7 +477,7 @@ fn nested_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"createUser": {"id": "-1"}}}"#
+        r#"{"data":{"createUser":{"id":"-1"}}}"#
     );
     data_api_resource_def
         .call_start_capture(&mut component.store, data_api_resource)
@@ -492,7 +493,7 @@ fn nested_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"createUser": {"id": "-2"}}}"#
+        r#"{"data":{"createUser":{"id":"-2"}}}"#
     );
     data_api_resource_def
         .call_apply_capture(&mut component.store, data_api_resource)
@@ -512,7 +513,7 @@ fn nested_capture_test() {
             )
             .unwrap()
             .unwrap(),
-        r#"{"data": {"createUser": {"id": "-3"}}}"#
+        r#"{"data":{"createUser":{"id":"-3"}}}"#
     );
     data_api_resource_def
         .call_apply_capture(&mut component.store, data_api_resource)
