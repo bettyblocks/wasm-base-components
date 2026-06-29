@@ -21,17 +21,16 @@ interface data-api {
         start-capture: func() -> result<_, string>;
         /// discard the current captured mutations
         discard-capture: func() -> result<string, string>;
-        // or flush or commit ?
         /// apply all the captured mutations
         apply-capture: func() -> result<_, string>;
 
         /// returns the current pending capture, grouped by the order how they need to be applied
         pending-capture: func() -> result<list<list<pending-mutation>>, string>;
 
-        /// do a graphql request to the data-api
+        /// send a graphql request to the data-api
         request: func(query: string, variables: json-string) -> result<json-string, string>;
 
-        /// do a graphql request to the data-api, only use when you know what you are doing
+        /// directly send a graphql request to the data-api, only use when you know what you are doing
         request-raw: func(query: string, variables: json-string) -> result<json-string, string>;
     }
 

@@ -2,15 +2,13 @@
 build:
     wash build
 
-unit-test:
-    wash wit deps
-    cargo test --lib --bins
-
 integration-test:
     wash wit deps
     cargo test --test '*'
 
-test: unit-test && integration-test
+test: 
+    wash wit deps
+    cargo test --lib --bins
 
 lint:
     wash wit deps

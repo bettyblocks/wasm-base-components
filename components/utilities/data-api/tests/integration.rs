@@ -91,7 +91,7 @@ fn create_request_handler(
             let mut response_body = Vec::with_capacity(res_bytes_length);
             response_body.push(0);
             response_body.extend_from_slice(&(res_bytes_length as u32).to_be_bytes());
-            response_body.extend(res_bytes.into_iter());
+            response_body.extend(res_bytes);
 
             Ok(hyper::Response::new(response_body.into()))
         })
@@ -227,8 +227,8 @@ fn id_reserving_test() {
         .call_start_capture(&mut component.store, data_api_resource)
         .unwrap()
         .unwrap();
-    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource.clone(), "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-1"}}}"#);
-    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource.clone(), "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {"subordinates": {"_replace": [{"id": -1}]}}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-2"}}}"#);
+    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource, "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-1"}}}"#);
+    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource, "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {"subordinates": {"_replace": [{"id": -1}]}}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-2"}}}"#);
     data_api_resource_def
         .call_apply_capture(&mut component.store, data_api_resource)
         .unwrap()
@@ -276,7 +276,7 @@ fn pending_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 &mutation1.mutation,
                 &mutation1.variables
             )
@@ -288,7 +288,7 @@ fn pending_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 &mutation2.mutation,
                 &mutation2.variables
             )
@@ -300,7 +300,7 @@ fn pending_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 &mutation3.mutation,
                 &mutation3.variables
             )
@@ -359,7 +359,7 @@ fn discard_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 &mutation1.mutation,
                 &mutation1.variables
             )
@@ -471,7 +471,7 @@ fn nested_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
                 &String::from(r#"{"input":{"name":"John"},"validationSets":"default"}"#)
             )
@@ -487,7 +487,7 @@ fn nested_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 &mutation2.mutation,
                 &mutation2.variables
             )
@@ -507,7 +507,7 @@ fn nested_capture_test() {
         data_api_resource_def
             .call_request(
                 &mut component.store,
-                data_api_resource.clone(),
+                data_api_resource,
                 &mutation3.mutation,
                 &mutation3.variables
             )

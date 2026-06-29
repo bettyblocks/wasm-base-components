@@ -5,32 +5,32 @@ use tonic::Request;
 use tracing::debug;
 use wasmcloud_grpc_client::GrpcEndpoint;
 
-use crate::data_grpc::data_api_result::Status;
-use crate::exports::betty_blocks_utilities::data_api::data_api::{Guest, HelperContext};
+use exports::betty_blocks_utilities::data_api::data_api::{Guest, HelperContext};
 
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");
 }
 pub mod context;
 
-use crate::context::DataAPIContext;
-use crate::data_grpc::DataApiRequest;
-use crate::data_grpc::data_api_client::DataApiClient;
-use crate::data_grpc::{Context as GrpcContext, DataApiResult};
+use context::DataAPIContext;
+use data_grpc::{
+    Context as GrpcContext, DataApiRequest, DataApiResult, data_api_client::DataApiClient,
+    data_api_result::Status,
+};
 
 wit_bindgen::generate!({ generate_all });
 
 const STATUS_ERROR: i32 = Status::Error as i32;
 const STATUS_OK: i32 = Status::Ok as i32;
 
-pub struct Config {
+struct Config {
     grpc_server_uri: String,
     jaws_issuer: String,
     jaws_secret_key: String,
 }
 
 impl Config {
-    pub fn from_env() -> anyhow::Result<Self> {
+    fn from_env() -> anyhow::Result<Self> {
         Ok(Self {
             grpc_server_uri: env::var("GRPC_SERVER_URI")
                 .unwrap_or_else(|_| "http://data-api:50054".to_string()),
@@ -76,7 +76,7 @@ impl Guest for DataApi {
 
 export!(DataApi);
 
-pub async fn inner_request(
+async fn inner_request(
     config: Config,
     application_id: &str,
     jwt: Option<String>,

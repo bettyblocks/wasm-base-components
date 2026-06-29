@@ -355,13 +355,10 @@ mod tests {
                 variables: MutationInput {
                     input: MutationInputVariable {
                         id: MutationIdInput(1),
-                        other_inputs: serde_json::Map::from_iter(
-                            [(
-                                String::from("key"),
-                                serde_json::Value::String(String::from("value")),
-                            )]
-                            .into_iter(),
-                        ),
+                        other_inputs: serde_json::Map::from_iter([(
+                            String::from("key"),
+                            serde_json::Value::String(String::from("value")),
+                        )]),
                     },
                     validation_sets: ValidationSets::Empty,
                 },
