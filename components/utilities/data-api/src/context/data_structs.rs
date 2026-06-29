@@ -1,24 +1,24 @@
+use crate::context::{InternalId, RealId};
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-use crate::context::{InternalId, RealId};
-
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReserveIdMutationResult {
     pub data: ReserveIdResult,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReserveIdResult {
     #[serde(rename = "reserveRecords")]
     pub reserved_ids: ReservedIds,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReservedIds {
     pub ids: VecDeque<RealId>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "serde_json::Value", into = "InternalId")]
 pub struct MutationIdInput(pub InternalId);
 
@@ -43,7 +43,7 @@ impl From<MutationIdInput> for InternalId {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MutationInput {
     pub input: MutationInputVariable,
@@ -51,7 +51,7 @@ pub struct MutationInput {
     pub validation_sets: ValidationSets,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MutationInputVariable {
     #[serde(default)]
     pub id: MutationIdInput,
@@ -59,12 +59,12 @@ pub struct MutationInputVariable {
     pub other_inputs: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct DeleteInput {
     pub id: MutationIdInput,
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ValidationSets {
     Empty,
