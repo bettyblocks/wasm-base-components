@@ -376,13 +376,13 @@ mod tests {
 
         let [create_input, create_input2, mut update_input] = user_input.try_into().unwrap();
 
-        assert_eq!(update_input.id.0, 1);
+        assert_eq!(*update_input.id, 1);
         assert_eq!(update_input.other_inputs.remove("key").unwrap(), "value");
         assert!(update_input.other_inputs.is_empty());
 
-        assert_eq!(create_input.id.0, 1);
+        assert_eq!(*create_input.id, 1);
         assert!(create_input.other_inputs.is_empty());
-        assert_eq!(create_input2.id.0, 2);
+        assert_eq!(*create_input2.id, 2);
         assert!(create_input2.other_inputs.is_empty());
 
         let (oozer_validation_sets, oozer_input) = upsert_many_inputs.remove("Oozer").unwrap();
@@ -391,7 +391,7 @@ mod tests {
 
         let [create_input3] = oozer_input.try_into().unwrap();
 
-        assert_eq!(create_input3.id.0, 1);
+        assert_eq!(*create_input3.id, 1);
         assert!(create_input3.other_inputs.is_empty());
 
         assert!(upsert_many_inputs.is_empty());

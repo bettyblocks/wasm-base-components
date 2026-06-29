@@ -1,6 +1,6 @@
 use crate::context::{InternalId, RealId};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ops::Deref};
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReserveIdMutationResult {
@@ -40,6 +40,14 @@ impl TryFrom<serde_json::Value> for MutationIdInput {
 impl From<MutationIdInput> for InternalId {
     fn from(value: MutationIdInput) -> Self {
         value.0
+    }
+}
+
+impl Deref for MutationIdInput {
+    type Target = InternalId;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

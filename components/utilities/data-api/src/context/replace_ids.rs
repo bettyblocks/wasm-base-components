@@ -102,7 +102,7 @@ mod tests {
 
         replace_negative_ids_in_mutation_input(&[2, 3, 4], &mut mutation_input.input).unwrap();
 
-        assert_eq!(mutation_input.input.id.0, 4);
+        assert_eq!(*mutation_input.input.id, 4);
         assert_eq!(
             mutation_input.input.other_inputs.remove("key").unwrap(),
             "value"
