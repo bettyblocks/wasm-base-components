@@ -1,6 +1,12 @@
-use crate::context::{InternalId, RealId};
+use crate::context::{InternalId, ModelName, RealId};
 use serde::{Deserialize, Serialize};
 use std::{collections::VecDeque, ops::Deref};
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ReserveIdMutationVariables {
+    pub model: ModelName,
+    pub amount: u32,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReserveIdMutationResult {

@@ -18,7 +18,12 @@ impl CaptureData {
         let mut reserved_id_map = self
             .reserve_id_count_per_model
             .drain()
-            .map(|entry| Self::request_reserved_ids(request_sender, entry))
+            .map(|(model, amount)| {
+                Self::request_reserved_ids(
+                    request_sender,
+                    ReserveIdMutationVariables { model, amount },
+                )
+            })
             .collect::<Result<HashMap<ModelName, VecDeque<RealId>>, String>>()?;
 
         for model_name in self.model_names_of_local_ids.drain(..) {
@@ -40,11 +45,12 @@ impl CaptureData {
 
     pub fn request_reserved_ids(
         request_sender: &impl RequestRaw,
-        (model_name, id_count): (ModelName, u32),
+        variables: ReserveIdMutationVariables,
     ) -> Result<(ModelName, VecDeque<RealId>), String> {
-        let variables = format!(r#"{{"model":"{model_name}","amount":{id_count}}}"#);
+        let variables_string = serde_json::to_string(&variables)
+            .map_err(|_| String::from("could not serialize reserve id variables"))?;
 
-        let res = request_sender.request_raw(RESERVE_ID_QUERY.to_string(), variables)?;
+        let res = request_sender.request_raw(RESERVE_ID_QUERY.to_string(), variables_string)?;
 
         let ReserveIdMutationResult {
             data: ReserveIdResult {
@@ -53,7 +59,7 @@ impl CaptureData {
         } = serde_json::from_str(&res)
             .map_err(|_| String::from("could not parse data api result for reserving ids"))?;
 
-        Ok((model_name, ids))
+        Ok((variables.model, ids))
     }
 }
 
