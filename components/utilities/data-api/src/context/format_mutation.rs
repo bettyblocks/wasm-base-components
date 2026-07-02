@@ -145,11 +145,10 @@ pub fn send_upsert_many_mutations(
         );
 
         for input_chunk in input_variables.chunks(CHUNK_SIZE) {
-            let variables = format!(
-                "{{\"input\":{},\"validationSets\":\"{validation_sets}\"}}",
-                serde_json::to_string(&input_chunk)
-                    .map_err(|_| String::from("could not format input variables"))?
-            );
+            let variables = serde_json::to_string(
+                &serde_json::json!({"input": input_chunk, "validationSets": validation_sets}),
+            )
+            .map_err(|_| String::from("could not format input variables"))?;
 
             request_sender.request_raw(query.clone(), variables)?;
         }
@@ -166,11 +165,9 @@ pub fn send_delete_many_mutations(
         let query = format!("mutation {{ deleteMany{model_name}(input: $input) {{ id }} }}");
 
         for input_chunk in variables.chunks(CHUNK_SIZE) {
-            let variables = format!(
-                "{{\"input\":{{\"ids\":{}}}}}",
-                serde_json::to_string(&input_chunk)
-                    .map_err(|_| String::from("could not format input variables"))?
-            );
+            let variables =
+                serde_json::to_string(&serde_json::json!({"input": {"ids": input_chunk}}))
+                    .map_err(|_| String::from("could not format input variables"))?;
 
             request_sender.request_raw(query.clone(), variables)?;
         }
