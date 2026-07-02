@@ -9,6 +9,9 @@ use prost::Message;
 use prost::bytes::Buf;
 use std::collections::VecDeque;
 use wasmtime_testing_helper::http::{HttpHandler, hyper};
+use wasmtime_testing_helper::wasmtime::Store;
+use wasmtime_testing_helper::wasmtime::component::ResourceAny;
+use wasmtime_testing_helper::{ComponentState, InstantiatedComponent};
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");
 }
@@ -16,7 +19,10 @@ pub mod data_grpc {
 use data_grpc::DataApiRequest;
 use data_grpc::{DataApiResult, data_api_result::Status};
 
-use crate::bindings::exports::betty_blocks_utilities::data_api::data_api::PendingMutation;
+use crate::bindings::Provider;
+use crate::bindings::exports::betty_blocks_utilities::data_api::data_api::{
+    GuestDataApi, PendingMutation,
+};
 
 const APPLICATION_ID: &str = "06caae5da8234837a330c14a7350ed75";
 const JWT: &str = "";
@@ -32,6 +38,43 @@ impl PendingMutation {
             variables: String::from(variables),
         }
     }
+}
+
+struct DataApiResource<'a> {
+    resource_def: GuestDataApi<'a>,
+    resource: ResourceAny,
+    store: &'a mut Store<ComponentState>,
+}
+
+impl<'a> DataApiResource<'a> {
+    fn new(component: &'a mut InstantiatedComponent<Provider>) -> Self {
+        let interface = component
+            .component
+            .betty_blocks_utilities_data_api_data_api();
+
+        let data_api_resource_def = interface.data_api();
+        let data_api_resource = data_api_resource_def
+            .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
+            .unwrap();
+
+        Self {
+            resource_def: data_api_resource_def,
+            resource: data_api_resource,
+            store: &mut component.store,
+        }
+    }
+}
+
+impl<'a> Drop for DataApiResource<'a> {
+    fn drop(&mut self) {
+        self.resource.resource_drop(&mut self.store).unwrap();
+    }
+}
+
+macro_rules! call_data_api_resource {
+    ($resource:ident.$function:ident($($param:expr),*)) => {
+        $resource.resource_def.$function(&mut $resource.store, $resource.resource, $($param),*).unwrap()
+    };
 }
 
 fn format_result_json(value: serde_json::Value) -> String {
@@ -82,9 +125,18 @@ fn create_request_handler(
                 )
                 .is_ok_and(|claims| claims.application_id == APPLICATION_ID)
             );
-            assert!(
-                matches!(new_req, DataApiRequest {context: Some(data_grpc::Context { application_id, jwt }), ..} if application_id.as_str() == APPLICATION_ID && jwt.as_str() == JWT)
-            );
+            assert!(matches!(
+            new_req,
+            DataApiRequest {
+                context: Some(
+                    data_grpc::Context {
+                        application_id, jwt
+                    }
+                ),
+                ..}
+                if application_id.as_str() == APPLICATION_ID
+                && jwt.as_str() == JWT
+            ));
             assert_eq!((new_req.query, new_req.variables), expected_req);
             let res_bytes = res.encode_to_vec();
             let res_bytes_length = res_bytes.len();
@@ -133,26 +185,10 @@ fn data_api_component_should_return_data_rpc_server_error() {
         },
     )]);
 
-    let interface = component
-        .component
-        .betty_blocks_utilities_data_api_data_api();
-
-    let data_api_resource_def = interface.data_api();
-    let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
-        .unwrap();
-    let res = data_api_resource_def.call_request(
-        &mut component.store,
-        data_api_resource,
-        "",
-        &String::from(""),
-    );
-    data_api_resource
-        .resource_drop(&mut component.store)
-        .unwrap();
+    let mut resource = DataApiResource::new(&mut component);
 
     assert!(
-        res.unwrap()
+        call_data_api_resource!(resource.call_request("", &String::from("")))
             .is_err_and(|err| { err == r#"{"errors":[{"message":"something went wrong"}]}"# })
     );
 }
@@ -167,27 +203,15 @@ fn data_api_component_should_return_error_if_token_is_invalid() {
         },
     )]);
 
-    let interface = component
-        .component
-        .betty_blocks_utilities_data_api_data_api();
+    let mut resource = DataApiResource::new(&mut component);
 
-    let data_api_resource_def = interface.data_api();
-    let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
-        .unwrap();
-    let res = data_api_resource_def.call_request(
-        &mut component.store,
-        data_api_resource,
-        "",
-        &String::from(""),
+    assert!(
+        call_data_api_resource!(
+            resource.call_request("", &String::from(""))
+        ).is_err_and(|err| {
+            err == r#"{"errors":[{"extensions":{"code":"UNAUTHENTICATED"},"message":"Request not authenticated"}]}"#
+        })
     );
-    data_api_resource
-        .resource_drop(&mut component.store)
-        .unwrap();
-
-    assert!(res.unwrap().is_err_and(|err| {
-        err == r#"{"errors":[{"extensions":{"code":"UNAUTHENTICATED"},"message":"Request not authenticated"}]}"#
-    }));
 }
 
 #[test]
@@ -215,27 +239,27 @@ fn id_reserving_test() {
         ),
     ]);
 
-    let interface = component
-        .component
-        .betty_blocks_utilities_data_api_data_api();
+    let mut resource = DataApiResource::new(&mut component);
 
-    let data_api_resource_def = interface.data_api();
-    let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
-        .unwrap();
-    data_api_resource_def
-        .call_start_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource, "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-1"}}}"#);
-    assert_eq!(data_api_resource_def.call_request(&mut component.store, data_api_resource, "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }", &String::from(r#"{"input": {"subordinates": {"_replace": [{"id": -1}]}}}"#)).unwrap().unwrap(), r#"{"data":{"createUser":{"id":"-2"}}}"#);
-    data_api_resource_def
-        .call_apply_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    data_api_resource
-        .resource_drop(&mut component.store)
-        .unwrap();
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }",
+            &String::from(r#"{"input": {}}"#)
+        )).unwrap(),
+        r#"{"data":{"createUser":{"id":"-1"}}}"#
+    );
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            "mutation ($input: userInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }",
+            &String::from(r#"{"input": {"subordinates": {"_replace": [{"id": -1}]}}}"#)
+        )).unwrap(),
+        r#"{"data":{"createUser":{"id":"-2"}}}"#
+    );
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
 }
 
 #[test]
@@ -260,60 +284,33 @@ fn pending_capture_test() {
 
     let mut component = instantiate_component([]);
 
-    let interface = component
-        .component
-        .betty_blocks_utilities_data_api_data_api();
+    let mut resource = DataApiResource::new(&mut component);
 
-    let data_api_resource_def = interface.data_api();
-    let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
-        .unwrap();
-    data_api_resource_def
-        .call_start_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                &mutation1.mutation,
-                &mutation1.variables
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation1.mutation, &mutation1.variables))
             .unwrap(),
         r#"{"data":{"createUser":{"id":"-1"}}}"#
     );
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                &mutation2.mutation,
-                &mutation2.variables
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation2.mutation, &mutation2.variables))
             .unwrap(),
         r#"{"data":{"updateUser":{"id":"-1"}}}"#
     );
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                &mutation3.mutation,
-                &mutation3.variables
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation3.mutation, &mutation3.variables))
             .unwrap(),
         r#"{"data":{"deleteUser":{"id":"-1"}}}"#
     );
-    let [create_mutations, update_mutations, delete_mutations] = data_api_resource_def
-        .call_pending_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap()
-        .try_into()
-        .unwrap();
+
+    let [create_mutations, update_mutations, delete_mutations] =
+        call_data_api_resource!(resource.call_pending_capture())
+            .unwrap()
+            .try_into()
+            .unwrap();
     mutation1.variables =
         String::from(r#"{"input":{"id":-1,"name":"John"},"validationSets":"default"}"#);
     assert_eq!(
@@ -328,9 +325,6 @@ fn pending_capture_test() {
         TryInto::<[_; 1]>::try_into(delete_mutations).unwrap(),
         [mutation3]
     );
-    data_api_resource
-        .resource_drop(&mut component.store)
-        .unwrap();
 }
 
 #[test]
@@ -343,53 +337,35 @@ fn discard_capture_test() {
 
     let mut component = instantiate_component([]);
 
-    let interface = component
-        .component
-        .betty_blocks_utilities_data_api_data_api();
+    let mut resource = DataApiResource::new(&mut component);
 
-    let data_api_resource_def = interface.data_api();
-    let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
-        .unwrap();
-    data_api_resource_def
-        .call_start_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                &mutation1.mutation,
-                &mutation1.variables
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation1.mutation, &mutation1.variables))
             .unwrap(),
         r#"{"data":{"createUser":{"id":"1"}}}"#
     );
-    data_api_resource_def
-        .call_discard_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        data_api_resource_def
-            .call_pending_capture(&mut component.store, data_api_resource)
+
+    call_data_api_resource!(resource.call_discard_capture()).unwrap();
+
+    assert!(
+        call_data_api_resource!(resource.call_pending_capture())
             .unwrap()
-            .unwrap()
-            .as_slice(),
-        [] as [Vec<PendingMutation>; 0]
+            .is_empty()
     );
-    data_api_resource_def
-        .call_apply_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    data_api_resource
-        .resource_drop(&mut component.store)
-        .unwrap();
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
 }
 
 #[test]
 fn nested_capture_test() {
+    let mutation1 = PendingMutation::new(
+        "createUser",
+        "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
+        r#"{"input":{"name":"John"},"validationSets":"default"}"#,
+    );
+
     let mutation2 = PendingMutation::new(
         "createUser",
         "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
@@ -455,75 +431,35 @@ fn nested_capture_test() {
         ),
     ]);
 
-    let interface = component
-        .component
-        .betty_blocks_utilities_data_api_data_api();
+    let mut resource = DataApiResource::new(&mut component);
 
-    let data_api_resource_def = interface.data_api();
-    let data_api_resource = data_api_resource_def
-        .call_constructor(&mut component.store, APPLICATION_ID, ACTION_ID, None)
-        .unwrap();
-    data_api_resource_def
-        .call_start_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
-                &String::from(r#"{"input":{"name":"John"},"validationSets":"default"}"#)
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation1.mutation, &mutation1.variables))
             .unwrap(),
         r#"{"data":{"createUser":{"id":"-1"}}}"#
     );
-    data_api_resource_def
-        .call_start_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                &mutation2.mutation,
-                &mutation2.variables
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation2.mutation, &mutation2.variables))
             .unwrap(),
         r#"{"data":{"createUser":{"id":"-2"}}}"#
     );
-    data_api_resource_def
-        .call_apply_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    data_api_resource_def
-        .call_start_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
     assert_eq!(
-        data_api_resource_def
-            .call_request(
-                &mut component.store,
-                data_api_resource,
-                &mutation3.mutation,
-                &mutation3.variables
-            )
-            .unwrap()
+        call_data_api_resource!(resource.call_request(&mutation3.mutation, &mutation3.variables))
             .unwrap(),
         r#"{"data":{"createUser":{"id":"-3"}}}"#
     );
-    data_api_resource_def
-        .call_apply_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    data_api_resource_def
-        .call_apply_capture(&mut component.store, data_api_resource)
-        .unwrap()
-        .unwrap();
-    data_api_resource
-        .resource_drop(&mut component.store)
-        .unwrap();
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
 }
