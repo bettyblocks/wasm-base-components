@@ -1,3 +1,10 @@
+## [1.15.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.15.0...v1.15.1) (2026-07-03)
+
+
+### Bug Fixes
+
+* fix publish workflow to checkout dev instead of main ([24ae9f5](https://github.com/bettyblocks/wasm-base-components/commit/24ae9f596d8803782ae34fbd1cb5ec25a4ae238b))
+
 # [1.15.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.14.0...v1.15.0) (2026-07-03)
 
 
