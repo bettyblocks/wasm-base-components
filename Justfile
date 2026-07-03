@@ -29,6 +29,15 @@ test-all:
         just --working-directory "$dir" --justfile "$justfile" test
     done
 
+integration-test-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    find . -name Justfile -not -path "./Justfile" -mindepth 2 -print0 | while IFS= read -r -d '' justfile; do
+        dir=$(dirname "$justfile")
+        echo "--- Running integration tests in $dir ---"
+        just --working-directory "$dir" --justfile "$justfile" integration-test
+    done
+
 lint-all:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -64,8 +73,5 @@ format-ci:
         echo "--- Running formatter in $dir ---"
         just --working-directory "$dir" --justfile "$justfile" formatting --check
     done
-
-integration-test:
-    cd components/http-mcp && cargo test --test integration_test_mcp -- --nocapture
 
 all: test-all lint-all clippy-all format-all
