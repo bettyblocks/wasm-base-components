@@ -1,4 +1,4 @@
-name ="crud-component"
+name = "crud-component"
 language = "rust"
 type = "component"
 

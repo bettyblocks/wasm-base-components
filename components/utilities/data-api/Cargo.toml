@@ -1,7 +1,7 @@
 [package]
 name = "data-api-component"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 publish = false
 
 [lib]
@@ -10,24 +10,24 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = "1.0.100"
 wit-bindgen = "0.48.0"
-wasmcloud-grpc-client = { git = "https://github.com/Aditya1404Sal/wasmcloud-grpc-client.git", rev="1d2cadd203a38e5ce8379770c051c9604cbd48cf" }
+wasmcloud-grpc-client = { git = "https://github.com/Aditya1404Sal/wasmcloud-grpc-client.git", rev = "1d2cadd203a38e5ce8379770c051c9604cbd48cf" }
 wasmcloud-component = "0.2.0"
 tokio = { version = "1.48.0", features = ["rt"] }
 prost = "0.13"
 jaws-rs = { git = "https://github.com/bettyblocks/jaws-rs.git", version = "0.1.0" }
-tonic = { version = "0.13", default-features = false, features = ["codegen", "prost"] }
+tonic = { version = "0.13", default-features = false, features = [
+  "codegen",
+  "prost",
+] }
 uuid = { version = "1.8.0", features = ["v4"] }
 tracing = "0.1"
+serde_json = "1.0.145"
+serde = { version = "1.0.228", features = ["derive"] }
 
 [dev-dependencies]
-wash-runtime = { git = "https://github.com/bettyblocks/wasmCloud.git", rev = "54376a3d0470dc0527e0592faa170f9c0afd861f" }
-tonic = { version = "0.13", default-features = false, features = ["codegen", "prost", "transport"] }
-serde_json = "1.0.145"
-bytes = "1.11.0"
-semver = "1.0.27"
-reqwest = {version = "0.12.24", default-features = false, features = ["json"] }
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-serial_test = "3.2.0"
+wasmtime-testing-helper = { git = "https://github.com/bettyblocks/wasmtime-testing-helper", features = [
+  "http",
+] }
 
 [build-dependencies]
 tonic-build = "0.13"

@@ -5,16 +5,18 @@ use tonic::Request;
 use tracing::debug;
 use wasmcloud_grpc_client::GrpcEndpoint;
 
-use crate::data_grpc::data_api_result::Status;
-use crate::exports::betty_blocks_utilities::data_api::data_api::{Guest, HelperContext};
+use exports::betty_blocks_utilities::data_api::data_api::{Guest, HelperContext};
 
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");
 }
+pub mod context;
 
-use crate::data_grpc::data_api_client::DataApiClient;
-use crate::data_grpc::DataApiRequest;
-use crate::data_grpc::{Context as GrpcContext, DataApiResult};
+use context::DataAPIContext;
+use data_grpc::{
+    Context as GrpcContext, DataApiRequest, DataApiResult, data_api_client::DataApiClient,
+    data_api_result::Status,
+};
 
 wit_bindgen::generate!({ generate_all });
 
@@ -38,11 +40,10 @@ impl Config {
     }
 }
 
-struct DataApi {}
-
-export!(DataApi);
+pub struct DataApi {}
 
 impl Guest for DataApi {
+    type DataApi = DataAPIContext;
     fn request(
         helper_context: HelperContext,
         query: String,
@@ -62,14 +63,23 @@ impl Guest for DataApi {
         };
 
         runtime
-            .block_on(inner_request(config, helper_context, query, variables))
+            .block_on(inner_request(
+                config,
+                &helper_context.application_id,
+                helper_context.jwt,
+                query,
+                variables,
+            ))
             .map_err(|e| format!("{e:#}"))
     }
 }
 
+export!(DataApi);
+
 async fn inner_request(
     config: Config,
-    helper_context: HelperContext,
+    application_id: &str,
+    jwt: Option<String>,
     query: String,
     variables: String,
 ) -> anyhow::Result<String> {
@@ -80,19 +90,18 @@ async fn inner_request(
         .context("Failed to parse GRPC_SERVER_URI")?;
 
     let endpoint = GrpcEndpoint::new(endpoint_uri);
-    debug!("Creating new gRPC client");
     let mut client = DataApiClient::new(endpoint);
 
     let mut request = Request::new(DataApiRequest {
         query,
         variables,
         context: Some(GrpcContext {
-            application_id: helper_context.application_id.to_string(),
-            jwt: helper_context.jwt.unwrap_or_default(),
+            application_id: application_id.to_string(),
+            jwt: jwt.unwrap_or_default(),
         }),
     });
 
-    let token = generate_jaws(&config, helper_context.application_id)?;
+    let token = generate_jaws(&config, application_id.to_string())?;
 
     let metadata = request.metadata_mut();
     metadata.insert(
@@ -102,7 +111,6 @@ async fn inner_request(
             .context("Failed to create valid bearer header")?,
     );
 
-    debug!("Executing gRPC request");
     let response = client.execute(request).await.context("gRPC call failed")?;
 
     match response.into_inner() {

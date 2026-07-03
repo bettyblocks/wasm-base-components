@@ -31,10 +31,10 @@ jobs:
             components/logs-writer/target
             components/logs-writer/test-component/target
             components/utilities/auth/target
-            components/utilities/data-api/target
-            components/utilities/data-api/test-component/target
             components/utilities/crud/target
+            components/utilities/data-api/target
             components/utilities/log-to-stdout/target
+            components/utilities/upload-file/target
 
       - name: Install stable Rust toolchain
         # uses: dtolnay/rust-toolchain@stable
@@ -76,7 +76,4 @@ jobs:
 
       - name: Run component integration tests
         run: |
-          for justfile in $(find components -name Justfile 2>/dev/null); do
-            echo "--- Running integration tests in $(dirname "$justfile") ---"
-            (cd "$(dirname "$justfile")" && just integration-test)
-          done
+          just integration-test-all
