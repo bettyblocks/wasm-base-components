@@ -1,3 +1,29 @@
+# [1.15.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.14.0...v1.15.0) (2026-07-03)
+
+
+### Bug Fixes
+
+* fix releaserc to work with new dev deployment ([26341a0](https://github.com/bettyblocks/wasm-base-components/commit/26341a0ec37d0cbea04144acea19f58a0f41f11f))
+* get data from gql mutation ([33fbb9a](https://github.com/bettyblocks/wasm-base-components/commit/33fbb9adc05d386ab9e6f0e615a1f0136bdbf2ba))
+* resolve some todos ([eddb190](https://github.com/bettyblocks/wasm-base-components/commit/eddb190384d74d40d7300f6888f7ee8dfc1b5aff))
+* save reserved ids in capture data ([c7e5048](https://github.com/bettyblocks/wasm-base-components/commit/c7e50487f3038fb929b293db3ecc50d46331e126))
+* update ci caching ([e987b41](https://github.com/bettyblocks/wasm-base-components/commit/e987b417ba4245544c7be4170c2c4f6cc585d166))
+
+
+### Features
+
+* add handling for an array of objects for MassMutateEntry ([3d4939a](https://github.com/bettyblocks/wasm-base-components/commit/3d4939ab4c4e69cb9a9d5c6c34e422774b87d01d))
+* add id reserving logic ([195d598](https://github.com/bettyblocks/wasm-base-components/commit/195d59855fab489a75569fa783d4748acee4e317))
+* add input chunking ([7051da8](https://github.com/bettyblocks/wasm-base-components/commit/7051da848c591682009b1c10cb2c336ba017c651))
+* add new dev branch handling to CI and CD pipelines ([d29130a](https://github.com/bettyblocks/wasm-base-components/commit/d29130a5ee56511abf8e60f66f3e278bd7a8fab1))
+* add partial capture application and request parsing logic ([75a63d8](https://github.com/bettyblocks/wasm-base-components/commit/75a63d82ab295458694537efaf57eb8359261efa))
+* add validation set handling ([0ae3561](https://github.com/bettyblocks/wasm-base-components/commit/0ae3561aca8b9cfef6f69c4e58ba81e3c71c8972))
+* count the amount of negative ids in upsert_manys for mass mutate apply_capture ([869d47c](https://github.com/bettyblocks/wasm-base-components/commit/869d47c65bc1987886ba419486ac84a085f57fcf))
+* implement the graphql parsing and extracting data from the ([dccada1](https://github.com/bettyblocks/wasm-base-components/commit/dccada1b770adf609a017fda10497e288eb37f82))
+* repurpose counting amount of negative ids to replacing negative ids with their reserved counterpart ([51f927f](https://github.com/bettyblocks/wasm-base-components/commit/51f927f892b112b4e91a2b089981a8d83835973c))
+* start on implementing the capture api ([04f3035](https://github.com/bettyblocks/wasm-base-components/commit/04f30350abe66504c33db089e525b2a11f09a592))
+* use specific environments for the Azure secrets ([e09c37a](https://github.com/bettyblocks/wasm-base-components/commit/e09c37a81a57c286728deedbacfa3706a766f81a))
+
 # [1.14.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.13.2...v1.14.0) (2026-06-22)
 
 
