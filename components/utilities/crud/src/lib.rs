@@ -2,9 +2,11 @@ wit_bindgen::generate!({ generate_all });
 
 use crate::betty_blocks_utilities::data_api::data_api::request;
 use crate::betty_blocks_utilities::data_api::data_api::HelperContext;
-use crate::betty_blocks_utilities::types::types::{Property, PropertyMap, PropertyPath};
+use crate::betty_blocks_utilities::types::types::{
+    BettyProperty, BettyPropertyMap, BettyPropertyPath,
+};
 use crate::exports::betty_blocks_utilities::crud::crud::{
-    Guest, JsonString, Model, PropertyMapping,
+    BettyModel, BettyPropertyMapping, Guest, JsonString,
 };
 
 #[derive(Debug, PartialEq)]
@@ -109,7 +111,7 @@ fn parse_property_value(value: Option<&str>) -> Option<serde_json::Value> {
     value.map(parse_json_or_string)
 }
 
-fn object_fields_str(object_fields: &Option<Vec<Property>>) -> String {
+fn object_fields_str(object_fields: &Option<Vec<BettyProperty>>) -> String {
     object_fields.as_ref().map_or("".to_string(), |fields| {
         fields
             .iter()
@@ -123,12 +125,12 @@ fn id_fragment(name: &str) -> String {
     format!("{name} {{ id\n }}",)
 }
 
-fn get_query_fields(property_map: PropertyMapping) -> String {
+fn get_query_fields(property_map: BettyPropertyMapping) -> String {
     property_map
         .iter()
-        .map(|property: &PropertyMap| {
+        .map(|property: &BettyPropertyMap| {
             assert!(property.key.len() == 1, "Currently the builder doesn't support nested assignments, so we also take the first one");
-            let PropertyPath {
+            let BettyPropertyPath {
                 name,
                 kind,
                 object_fields,
@@ -173,7 +175,7 @@ fn get_query_fields(property_map: PropertyMapping) -> String {
         .join("\n")
 }
 
-fn parse_to_gql_fragment(model_name: &str, property_map: PropertyMapping) -> GraphQL {
+fn parse_to_gql_fragment(model_name: &str, property_map: BettyPropertyMapping) -> GraphQL {
     if model_name.is_empty() {
         return GraphQL {
             name: "".to_string(),
@@ -228,11 +230,11 @@ fn get_assigned_value(kind: &PropertyKind, value: serde_json::Value) -> serde_js
     }
 }
 
-fn parse_assigned_properties(property_map: PropertyMapping) -> serde_json::Value {
+fn parse_assigned_properties(property_map: BettyPropertyMapping) -> serde_json::Value {
     let mut result = serde_json::Map::new();
-    property_map.iter().for_each(|property: &PropertyMap| {
+    property_map.iter().for_each(|property: &BettyPropertyMap| {
         assert!(property.key.len() == 1, "Currently the builder doesn't support nested assignments, so we also take the first one");
-        let PropertyPath { name, kind, .. } = property.key.first().unwrap();
+        let BettyPropertyPath { name, kind, .. } = property.key.first().unwrap();
 
         let kind = PropertyKind::from(kind);
         let property_json = parse_property_value(property.value.as_deref());
@@ -393,8 +395,8 @@ struct CrudComponent {}
 impl Guest for CrudComponent {
     fn create(
         helper_context: HelperContext,
-        model: Model,
-        mapping: PropertyMapping,
+        model: BettyModel,
+        mapping: BettyPropertyMapping,
         validation_sets: Option<Vec<String>>,
     ) -> Result<JsonString, String> {
         let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
@@ -431,9 +433,9 @@ impl Guest for CrudComponent {
 
     fn update(
         helper_context: HelperContext,
-        model: Model,
+        model: BettyModel,
         record_id: String,
-        mapping: PropertyMapping,
+        mapping: BettyPropertyMapping,
         validation_sets: Option<Vec<String>>,
     ) -> Result<JsonString, String> {
         let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
@@ -471,9 +473,9 @@ impl Guest for CrudComponent {
 
     fn upsert(
         helper_context: HelperContext,
-        model: Model,
-        mapping: PropertyMapping,
-        unique_by: Property,
+        model: BettyModel,
+        mapping: BettyPropertyMapping,
+        unique_by: BettyProperty,
         validation_sets: Option<Vec<String>>,
     ) -> Result<JsonString, String> {
         let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
@@ -511,7 +513,7 @@ impl Guest for CrudComponent {
 
     fn delete(
         helper_context: HelperContext,
-        model: Model,
+        model: BettyModel,
         record_id: String,
     ) -> Result<JsonString, String> {
         let mutation_name = format!("delete{}", model.name);
@@ -554,15 +556,15 @@ mod tests {
     use super::*;
 
     mod parse_to_gql_fragment {
-        use crate::betty_blocks_utilities::types::types::Property;
+        use crate::betty_blocks_utilities::types::types::BettyProperty;
         use serde_json::json;
 
         use super::*;
 
         #[test]
         fn returns_task_fragment() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "STRING".to_string(),
                     name: "name".to_string(),
                     object_fields: None,
@@ -591,18 +593,18 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_object_property() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "OBJECT".to_string(),
                     name: "object".to_string(),
                     object_fields: Some(vec![
-                        Property {
+                        BettyProperty {
                             name: "uuid".to_string(),
                         },
-                        Property {
+                        BettyProperty {
                             name: "answer".to_string(),
                         },
-                        Property {
+                        BettyProperty {
                             name: "score".to_string(),
                         },
                     ]),
@@ -635,8 +637,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_belongs_to_relation() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "model".to_string(),
                     object_fields: None,
@@ -678,8 +680,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_has_many_relation() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "HAS_MANY".to_string(),
                     name: "users".to_string(),
                     object_fields: None,
@@ -739,8 +741,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_multiple_belongs_to_relations() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "information".to_string(),
                     object_fields: None,
@@ -810,8 +812,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_nested_belongs_to_relations() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "information".to_string(),
                     object_fields: None,
@@ -886,8 +888,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_nested_relations_array() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "information".to_string(),
                     object_fields: None,
@@ -970,8 +972,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_belongs_to_by_id() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "model".to_string(),
                     object_fields: None,
@@ -1002,8 +1004,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_has_many_by_id() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "HAS_MANY".to_string(),
                     name: "users".to_string(),
                     object_fields: None,
@@ -1034,16 +1036,16 @@ fragment taskFields on Task {
         #[test]
         fn returns_task_fragment_has_many_with_empty_array() {
             let property_map = vec![
-                PropertyMap {
-                    key: vec![PropertyPath {
+                BettyPropertyMap {
+                    key: vec![BettyPropertyPath {
                         kind: "STRING".to_string(),
                         name: "title".to_string(),
                         object_fields: None,
                     }],
                     value: Some("My Task".to_string()),
                 },
-                PropertyMap {
-                    key: vec![PropertyPath {
+                BettyPropertyMap {
+                    key: vec![BettyPropertyPath {
                         kind: "HAS_MANY".to_string(),
                         name: "tags".to_string(),
                         object_fields: None,
@@ -1075,8 +1077,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_nested_empty_collection() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "user".to_string(),
                     object_fields: None,
@@ -1116,8 +1118,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_task_fragment_with_nested_empty_record() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "BELONGS_TO".to_string(),
                     name: "user".to_string(),
                     object_fields: None,
@@ -1157,8 +1159,8 @@ fragment taskFields on Task {
 
         #[test]
         fn returns_empty_when_model_missing() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "STRING".to_string(),
                     name: "name".to_string(),
                     object_fields: None,
@@ -1188,8 +1190,8 @@ fragment taskFields on Task {
 
         #[test]
         fn parse_assigned_propertie_should_create_simple_input_variables() {
-            let property_map = vec![PropertyMap {
-                key: vec![PropertyPath {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
                     kind: "STRING".to_string(),
                     name: "name".to_string(),
                     object_fields: None,
@@ -1205,16 +1207,16 @@ fragment taskFields on Task {
         #[test]
         fn parse_assigned_propertie_should_create_nested_input_variables() {
             let property_map = vec![
-                PropertyMap {
-                    key: vec![PropertyPath {
+                BettyPropertyMap {
+                    key: vec![BettyPropertyPath {
                         kind: "STRING".to_string(),
                         name: "name".to_string(),
                         object_fields: None,
                     }],
                     value: Some("test".to_string()),
                 },
-                PropertyMap {
-                    key: vec![PropertyPath {
+                BettyPropertyMap {
+                    key: vec![BettyPropertyPath {
                         kind: "HAS_MANY".to_string(),
                         name: "abilities".to_string(),
                         object_fields: None,
@@ -1232,16 +1234,16 @@ fragment taskFields on Task {
         #[test]
         fn empty_has_and_belongs_to_many_should_wrap_in_id_object() {
             let property_map = vec![
-                PropertyMap {
-                    key: vec![PropertyPath {
+                BettyPropertyMap {
+                    key: vec![BettyPropertyPath {
                         kind: "STRING".to_string(),
                         name: "title".to_string(),
                         object_fields: None,
                     }],
                     value: Some("Assign empty collection".to_string()),
                 },
-                PropertyMap {
-                    key: vec![PropertyPath {
+                BettyPropertyMap {
+                    key: vec![BettyPropertyPath {
                         kind: "HAS_AND_BELONGS_TO_MANY".to_string(),
                         name: "tags".to_string(),
                         object_fields: None,
