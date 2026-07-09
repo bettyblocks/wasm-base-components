@@ -7,7 +7,7 @@ use wstd::http::{Body, Client, Request};
 
 use crate::bindings::{
     betty_blocks_utilities::data_api::data_api::{self, HelperContext},
-    betty_blocks_utilities::types::types::{Model, Property},
+    betty_blocks_utilities::types::types::{BettyModel, BettyProperty},
     exports::betty_blocks_utilities::upload_file::upload_file::UploadResult,
 };
 
@@ -93,8 +93,8 @@ struct PresignedPostRequest {
 
 pub async fn upload_bytes_internal(
     helper_context: HelperContext,
-    model: Model,
-    property: Property,
+    model: BettyModel,
+    property: BettyProperty,
     file_bytes: Vec<u8>,
     filename: String,
 ) -> Result<UploadResult> {
