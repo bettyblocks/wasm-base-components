@@ -7,6 +7,17 @@ interface types {
         name: string
     }
 
+    type betty-record-json = string;
+
+    record betty-record {
+        id: u64
+    }
+
+    record betty-selected-record {
+        model: betty-model,
+        data: option<betty-record>
+    }
+
     record betty-property {
         name: string,
     }
