@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.15.1...v1.16.0) (2026-07-14)
+
+
+### Features
+
+* add pdf-generator component ([c4afc22](https://github.com/bettyblocks/wasm-base-components/commit/c4afc220a96c3d923f830ccdfb0d82d8908c10bb))
+
 ## [1.15.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.15.0...v1.15.1) (2026-07-03)
 
 

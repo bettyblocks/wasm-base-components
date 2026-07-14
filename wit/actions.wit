@@ -1,7 +1,7 @@
 package betty-blocks-utilities:actions;
 
 interface actions {
-    use betty-blocks-utilities:types/types.{json-string};
+    use betty-blocks-utilities:types/types@0.1.0.{json-string};
 
     record run-payload {
         input: json-string,
