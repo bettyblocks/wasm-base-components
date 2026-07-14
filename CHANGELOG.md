@@ -1,3 +1,10 @@
+## [1.16.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.0...v1.16.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* disable header-max-length commitlint rule ([1af071e](https://github.com/bettyblocks/wasm-base-components/commit/1af071e702c95d3ac1ddb26b3102f505bf403fb6))
+
 # [1.16.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.15.1...v1.16.0) (2026-07-14)
 
 
