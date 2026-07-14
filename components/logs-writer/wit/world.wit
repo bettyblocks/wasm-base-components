@@ -1,4 +1,4 @@
-package betty-blocks-utilities:logs-writer;
+package betty-blocks-utilities:logs-writer@2.0.0;
 
 interface debug-logging {
     type json-string = string;

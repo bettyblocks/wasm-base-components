@@ -1,4 +1,4 @@
-package betty-blocks-utilities:auth;
+package betty-blocks-utilities:auth@2.0.0;
 
 interface jwt {
     variant auth-error {
