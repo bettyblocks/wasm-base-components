@@ -37,6 +37,7 @@ jobs:
         crud-component|components/utilities/crud/build/crud_component.wasm
         data-api-component|components/utilities/data-api/build/data_api_component.wasm
         upload-file-component|components/utilities/upload-file/build/upload_file.wasm
+        pdf-generator-component|components/utilities/pdf-generator/build/pdf_generator.wasm
         http-wrapper|components/http-wrapper/build/http_wrapper.wasm
         log-to-stdout|target/wasm32-wasip2/release/log_to_stdout.wasm
         http-mcp|components/http-mcp/build/mcp_component.wasm

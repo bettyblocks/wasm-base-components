@@ -34,6 +34,7 @@ jobs:
             components/utilities/crud/target
             components/utilities/data-api/target
             components/utilities/log-to-stdout/target
+            components/utilities/pdf-generator/target
             components/utilities/upload-file/target
 
       - name: Install stable Rust toolchain

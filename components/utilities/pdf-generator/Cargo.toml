@@ -1,0 +1,23 @@
+[package]
+name = "pdf-generator"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[workspace]
+
+[dependencies]
+anyhow = "1.0.100"
+wit-bindgen = "0.47.0"
+wstd = "=0.6.5"
+jaws-rs = { git = "https://github.com/bettyblocks/jaws-rs.git", version = "0.1.0" }
+uuid = { version = "1.8.0", features = ["v4"] }
+tracing = "0.1"
+
+[dev-dependencies]
+wasmtime-testing-helper = { git = "https://github.com/bettyblocks/wasmtime-testing-helper", features = [
+  "http",
+] }
