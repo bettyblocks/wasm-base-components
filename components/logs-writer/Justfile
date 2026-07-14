@@ -1,19 +1,17 @@
+fetch_wit_deps:
+    WKG_CONFIG_FILE={{justfile_directory()}}/../../wkg.toml wash wit fetch
+    cd ./test-component/ && WKG_CONFIG_FILE={{justfile_directory()}}/../../wkg.toml wash wit fetch
 
-build:
-    wash build
+build: fetch_wit_deps
+    wash build --skip-fetch
 
-test:
-    wash wit deps
+test: fetch_wit_deps
     cargo test --lib --bins
 
-integration-test:
-    wash wit deps
-    cd ./test-component/ && wash wit deps
+integration-test: fetch_wit_deps
     cargo test --tests '*'
 
-lint:
-    wash wit deps
-    cd ./test-component/ && wash wit deps
+lint: fetch_wit_deps
     cargo check
 
 formatting *args:
