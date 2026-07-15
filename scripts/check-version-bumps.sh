@@ -84,11 +84,11 @@ while IFS= read -r world; do
     "^${dir}/wit/deps/"
 done < <(find components -name world.wit -not -path '*/wit/deps/*' | sort)
 
-# --- Shared WIT packages: wit/<pkg>/*.wit ---
+# --- Shared WIT packages: wit/<pkg>/*.wit (only .wit changes require a bump, not wkg.toml/lock) ---
 while IFS= read -r witfile; do
   [ -z "$witfile" ] && continue
   dir="$(dirname "$witfile")"
-  require_bump "$dir" "$witfile" "^${dir}/"
+  require_bump "$dir" "$witfile" "^${dir}/[^/]*\.wit$"
 done < <(find wit -mindepth 2 -name '*.wit' -not -path '*/deps/*' | sort)
 
 echo

@@ -71,7 +71,9 @@ jobs:
       - name: Build and push WIT typings packages to prod Azure registry
         run: |
           EXIT_CODE=0
+          out_dir=$(mktemp -d)
           for wit_file in wit/*/*.wit; do
+            pkg_dir=$(dirname "$wit_file")
             name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
             # Version comes from the WIT package declaration, not the git tag.
             wit_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$wit_file")
@@ -80,30 +82,16 @@ jobs:
               EXIT_CODE=1
               continue
             fi
-            temp_directory=$(mktemp -d)
-            cp "$wit_file" "$temp_directory/"
 
-            # Create overrides for any local WIT dependencies (wit/<dep>/<dep>.wit).
-            dependencies=$(grep -oP 'betty-blocks-utilities:\K[a-z0-9-]+' "$wit_file" | grep -v "$name" || true)
-            if [ -n "$dependencies" ]; then
-              echo "[overrides]" > "$temp_directory/wkg.toml"
-              for dependency in $dependencies; do
-                dependency_directory="$temp_directory/deps/$dependency"
-                mkdir -p "$dependency_directory"
-                cp "wit/$dependency/$dependency.wit" "$dependency_directory/"
-                echo "\"betty-blocks-utilities:$dependency\" = { path = \"$dependency_directory\" }" >> "$temp_directory/wkg.toml"
-              done
-            fi
-
-            wasm_file=$(cd "$temp_directory" && wkg wit build --wit-dir "." -o "$name.wasm" 2>&1)
-            if [ $? -ne 0 ]; then
-              echo "::warning::Failed to build WIT package $name: $wasm_file"
+            # Build from the package dir; any local WIT deps resolve via the committed wit/<pkg>/wkg.toml.
+            if ! ( cd "$pkg_dir" && wkg wit build --wit-dir . -o "$out_dir/$name.wasm" ); then
+              echo "::warning::Failed to build WIT package $name"
               EXIT_CODE=1
               continue
             fi
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
-            wkg oci push "${IMAGE_NAME}:${wit_version}" "$temp_directory/$name.wasm" || EXIT_CODE=1
+            wkg oci push "${IMAGE_NAME}:${wit_version}" "$out_dir/$name.wasm" || EXIT_CODE=1
           done
           exit $EXIT_CODE
 
