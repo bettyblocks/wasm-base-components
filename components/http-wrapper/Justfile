@@ -1,5 +1,5 @@
 fetch_wit_deps:
-    WKG_CONFIG_FILE={{justfile_directory()}}/../../wkg.toml wash wit fetch
+    wkg wit fetch
 
 build: fetch_wit_deps
     wash build --skip-fetch

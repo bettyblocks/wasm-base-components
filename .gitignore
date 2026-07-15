@@ -9,5 +9,5 @@ build
 .version
 node_modules
 
-# Generated WIT dependencies (regenerated via `wash wit deps`)
+# Generated WIT dependencies (regenerated via `wkg wit fetch`)
 **/wit/deps/
