@@ -2,7 +2,7 @@ use wasmcloud_component::http;
 
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks_utilities::logs_writer::debug_logging::send_log_and_variables;
+use crate::betty_blocks_types::logs_writer::debug_logging::send_log_and_variables;
 
 const APPLICATION_ID: &str = "app-1";
 

@@ -74,7 +74,7 @@ jobs:
           out_dir=$(mktemp -d)
           for wit_file in wit/*/*.wit; do
             pkg_dir=$(dirname "$wit_file")
-            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
+            name=$(sed -nE 's/^package betty-blocks-types:([a-z0-9-]+).*/\1/p' "$wit_file")
             # Version comes from the WIT package declaration, not the git tag.
             wit_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$wit_file")
             if [ -z "$wit_version" ]; then
@@ -90,7 +90,7 @@ jobs:
               continue
             fi
 
-            IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
+            IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-types/$name"
             wkg oci push "${IMAGE_NAME}:${wit_version}" "$out_dir/$name.wasm" || EXIT_CODE=1
           done
           exit $EXIT_CODE

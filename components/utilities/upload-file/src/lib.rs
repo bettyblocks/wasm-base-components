@@ -7,8 +7,8 @@ pub mod bindings {
 }
 
 use bindings::{
-    betty_blocks_utilities::data_api::data_api::HelperContext,
-    exports::betty_blocks_utilities::upload_file::upload_file::{
+    betty_blocks_types::data_api::data_api::HelperContext,
+    exports::betty_blocks_types::upload_file::upload_file::{
         Guest as UploadFileGuest, Input, UploadResult,
     },
 };
