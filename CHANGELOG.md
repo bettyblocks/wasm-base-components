@@ -1,3 +1,12 @@
+# [1.17.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.1...v1.17.0) (2026-07-16)
+
+
+### Features
+
+* add version bump check pipeline ([e96d21e](https://github.com/bettyblocks/wasm-base-components/commit/e96d21e61199914cd0ebd9ab781d8a07422b494e))
+* component-level dependency management ([38fbaec](https://github.com/bettyblocks/wasm-base-components/commit/38fbaecc6e012facf0f5f186257952e30a6ee8ff))
+* use wit package version as oci tag ([f7c4a9f](https://github.com/bettyblocks/wasm-base-components/commit/f7c4a9f3e175a6cfa9e59b193acb4462a439b717))
+
 ## [1.16.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.0...v1.16.1) (2026-07-14)
 
 
