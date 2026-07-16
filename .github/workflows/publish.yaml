@@ -31,17 +31,18 @@ jobs:
     env:
       REGISTRY: ${{ github.event_name == 'workflow_dispatch' && inputs.registry || 'ghcr.io' }}
       REPO_OWNER: ${{ github.repository_owner }}
-      # Component registry — add new components here (name|build_path)
+      # Component registry — add new components here (name|build_path|world_wit)
+      # The publish tag is read from the WIT package version in world_wit.
       COMPONENTS: |
-        auth-component|components/utilities/auth/build/jwt_auth_component.wasm
-        crud-component|components/utilities/crud/build/crud_component.wasm
-        data-api-component|components/utilities/data-api/build/data_api_component.wasm
-        upload-file-component|components/utilities/upload-file/build/upload_file.wasm
-        pdf-generator-component|components/utilities/pdf-generator/build/pdf_generator.wasm
-        http-wrapper|components/http-wrapper/build/http_wrapper.wasm
-        log-to-stdout|target/wasm32-wasip2/release/log_to_stdout.wasm
-        http-mcp|components/http-mcp/build/mcp_component.wasm
-        logs-writer|components/logs-writer/build/logs_writer.wasm
+        auth-component|components/utilities/auth/target/wasm32-wasip2/release/jwt_auth_component.wasm|components/utilities/auth/wit/world.wit
+        crud-component|components/utilities/crud/target/wasm32-wasip2/release/crud_component.wasm|components/utilities/crud/wit/world.wit
+        data-api-component|components/utilities/data-api/target/wasm32-wasip2/release/data_api_component.wasm|components/utilities/data-api/wit/world.wit
+        upload-file-component|components/utilities/upload-file/target/wasm32-wasip2/release/upload_file.wasm|components/utilities/upload-file/wit/world.wit
+        pdf-generator-component|components/utilities/pdf-generator/target/wasm32-wasip2/release/pdf_generator.wasm|components/utilities/pdf-generator/wit/world.wit
+        http-wrapper|components/http-wrapper/target/wasm32-wasip2/release/http_wrapper.wasm|components/http-wrapper/wit/world.wit
+        log-to-stdout|components/target/wasm32-wasip2/release/log_to_stdout.wasm|components/utilities/log-to-stdout/wit/world.wit
+        http-mcp|components/http-mcp/target/wasm32-wasip2/release/mcp_component.wasm|components/http-mcp/wit/world.wit
+        logs-writer|components/logs-writer/target/wasm32-wasip2/release/logs_writer.wasm|components/logs-writer/wit/world.wit
 
     steps:
       - uses: actions/checkout@v4
@@ -60,9 +61,11 @@ jobs:
             echo "INPUT_VERSION=$LATEST_TAG" >> $GITHUB_ENV
           fi
 
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: wash
+      - name: Install wash
+        shell: bash
+        run: |
+          curl -fsSL https://wasmcloud.com/sh | INSTALL_DIR=/usr/local/bin bash
+          wash --version
 
       - name: Prepare environment
         run: |
@@ -91,35 +94,38 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts/components ]; then
-            cp -r artifacts/components/* components/ 2>/dev/null || true
-          fi
-          if [ -d artifacts/target ]; then
-            cp -r artifacts/target/* target/ 2>/dev/null || true
+          if [ -d artifacts ]; then
+            cp -r artifacts/* components/ 2>/dev/null || true
           fi
 
       - name: Publish components to registry
         run: |
           EXIT_CODE=0
-          while IFS='|' read -r name path; do
+          while IFS='|' read -r name path world; do
             [ -z "$name" ] && continue
             if [ ! -f "$path" ]; then
               echo "::warning::Skipped $name (artifact not found at $path)"
               continue
             fi
+            # Publish tag = the component's WIT package version (not the git tag).
+            CVERSION=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world")
+            if [ -z "$CVERSION" ]; then
+              echo "::error::No @version found in $world for $name"
+              EXIT_CODE=1
+              continue
+            fi
             IMAGE_NAME="$REGISTRY/$REPO_OWNER/$name"
-            wash push \
+            wash oci push \
               --user ${{ github.actor }} \
               --password ${{ secrets.GITHUB_TOKEN }} \
-              ${IMAGE_NAME}:${VERSION} \
+              ${IMAGE_NAME}:${CVERSION} \
               ./$path || EXIT_CODE=1
-            wash push \
+            wash oci push \
               --user ${{ github.actor }} \
               --password ${{ secrets.GITHUB_TOKEN }} \
-              --allow-latest \
               ${IMAGE_NAME}:latest \
               ./$path || EXIT_CODE=1
-            echo "Published: ${IMAGE_NAME}:${VERSION}"
+            echo "Published: ${IMAGE_NAME}:${CVERSION}"
           done <<< "$COMPONENTS"
           exit $EXIT_CODE
 
@@ -128,16 +134,17 @@ jobs:
         run: |
           echo "## Published Components to GitHub Packages" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Source bundle:** \`${VERSION}\` (per-component versions taken from WIT, shown below)" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${REGISTRY}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          while IFS='|' read -r name path; do
+          while IFS='|' read -r name path world; do
             [ -z "$name" ] && continue
             IMAGE_NAME="$REGISTRY/$REPO_OWNER/$name"
             if [ -f "$path" ]; then
+              CVERSION=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world")
               echo "- **$name**" >> $GITHUB_STEP_SUMMARY
-              echo "  - \`${IMAGE_NAME}:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+              echo "  - \`${IMAGE_NAME}:${CVERSION}\`" >> $GITHUB_STEP_SUMMARY
               echo "  - \`${IMAGE_NAME}:latest\`" >> $GITHUB_STEP_SUMMARY
             else
               echo "- ~$name~ (skipped)" >> $GITHUB_STEP_SUMMARY
@@ -189,11 +196,8 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts/components ]; then
-            cp -r artifacts/components/* components/ 2>/dev/null || true
-          fi
-          if [ -d artifacts/target ]; then
-            cp -r artifacts/target/* target/ 2>/dev/null || true
+          if [ -d artifacts ]; then
+            cp -r artifacts/* components/ 2>/dev/null || true
           fi
 
       - name: Log in to Azure registry
@@ -206,33 +210,28 @@ jobs:
       - name: Build and push WIT typings packages to Azure registry
         run: |
           EXIT_CODE=0
-          for wit_file in wit/*.wit; do
-            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
-            temp_directory=$(mktemp -d)
-            cp "$wit_file" "$temp_directory/"
-
-            # Create overrides for any local WIT dependencies.
-            dependencies=$(grep -oP 'betty-blocks-utilities:\K[a-z0-9-]+' "$wit_file" | grep -v "$name" || true)
-            if [ -n "$dependencies" ]; then
-              echo "[overrides]" > "$temp_directory/wkg.toml"
-              for dependency in $dependencies; do
-                dependency_directory="$temp_directory/deps/$dependency"
-                mkdir -p "$dependency_directory"
-                cp "wit/$dependency.wit" "$dependency_directory/"
-                echo "\"betty-blocks-utilities:$dependency\" = { path = \"$dependency_directory\" }" >> "$temp_directory/wkg.toml"
-              done
+          out_dir=$(mktemp -d)
+          while IFS= read -r wit_file; do
+            pkg_dir=$(dirname "$wit_file")
+            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
+            # Version comes from the WIT package declaration, not the git tag.
+            wit_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$wit_file")
+            if [ -z "$wit_version" ]; then
+              echo "::warning::No @version in $wit_file; skipping $name"
+              EXIT_CODE=1
+              continue
             fi
 
-            wasm_file=$(cd "$temp_directory" && wkg wit build --wit-dir "." -o "$name.wasm" 2>&1)
-            if [ $? -ne 0 ]; then
-              echo "::warning::Failed to build WIT package $name: $wasm_file"
+            # Build from the package dir; any local WIT deps resolve via the committed wit/<pkg>/wkg.toml.
+            if ! ( cd "$pkg_dir" && wkg wit build --wit-dir . -o "$out_dir/$name.wasm" ); then
+              echo "::warning::Failed to build WIT package $name"
               EXIT_CODE=1
               continue
             fi
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
-            wkg oci push "${IMAGE_NAME}:${VERSION}" "$temp_directory/$name.wasm" || EXIT_CODE=1
-          done
+            wkg oci push "${IMAGE_NAME}:${wit_version}" "$out_dir/$name.wasm" || EXIT_CODE=1
+          done < <(find wit -mindepth 2 -maxdepth 2 -name '*.wit')
           exit $EXIT_CODE
 
       - name: Push components to Azure registry
@@ -240,11 +239,18 @@ jobs:
           EXIT_CODE=0
           for world_file in $(find components -name "world.wit" -path "*/wit/*" -not -path "*/deps/*" -not -path "*/test-component/*"); do
             component_directory=$(dirname "$(dirname "$world_file")")
-            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+            # Version comes from the component's WIT package declaration, not the git tag.
+            world_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world_file")
+            if [ -z "$world_version" ]; then
+              echo "::warning::No @version in $world_file; skipping $name"
+              EXIT_CODE=1
+              continue
+            fi
 
-            wasm_file=$(find "$component_directory/build" -name "*.wasm" 2>/dev/null | head -1)
+            wasm_file=$(find "$component_directory/target/wasm32-wasip2/release" -maxdepth 1 -name "*.wasm" 2>/dev/null | head -1)
             if [ -z "$wasm_file" ]; then
-              wasm_file=$(find target/wasm32-wasip2/release -name "*.wasm" 2>/dev/null | head -1)
+              wasm_file=$(find components/target/wasm32-wasip2/release -maxdepth 1 -name "*.wasm" 2>/dev/null | head -1)
             fi
 
             if [ -z "$wasm_file" ]; then
@@ -253,6 +259,6 @@ jobs:
             fi
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
-            wkg oci push "${IMAGE_NAME}:${VERSION}" "$wasm_file" || EXIT_CODE=1
+            wkg oci push "${IMAGE_NAME}:${world_version}" "$wasm_file" || EXIT_CODE=1
           done
           exit $EXIT_CODE
