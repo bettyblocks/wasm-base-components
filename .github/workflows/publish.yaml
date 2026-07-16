@@ -94,8 +94,9 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts ]; then
-            cp -r artifacts/* components/ 2>/dev/null || true
+          components_dir=$(find artifacts -type d -name components | head -1)
+          if [ -n "$components_dir" ]; then
+            cp -r "$components_dir" .
           fi
 
       - name: Publish components to registry
@@ -196,8 +197,9 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts ]; then
-            cp -r artifacts/* components/ 2>/dev/null || true
+          components_dir=$(find artifacts -type d -name components | head -1)
+          if [ -n "$components_dir" ]; then
+            cp -r "$components_dir" .
           fi
 
       - name: Log in to Azure registry
@@ -211,7 +213,7 @@ jobs:
         run: |
           EXIT_CODE=0
           out_dir=$(mktemp -d)
-          for wit_file in wit/*/*.wit; do
+          while IFS= read -r wit_file; do
             pkg_dir=$(dirname "$wit_file")
             name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
             # Version comes from the WIT package declaration, not the git tag.
@@ -231,7 +233,7 @@ jobs:
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
             wkg oci push "${IMAGE_NAME}:${wit_version}" "$out_dir/$name.wasm" || EXIT_CODE=1
-          done
+          done < <(find wit -mindepth 2 -maxdepth 2 -name '*.wit')
           exit $EXIT_CODE
 
       - name: Push components to Azure registry
