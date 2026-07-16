@@ -1,3 +1,4 @@
 [overrides]
-"betty-blocks-utilities:data-api" = { path = "../data-api/wit" }
-"betty-blocks-utilities:types" = { path = "../../../wit/types" }
+"betty-blocks-types:pdf-generator" = { path = "../../../wit/pdf-generator" }
+"betty-blocks-types:data-api" = { path = "../../../wit/data-api" }
+"betty-blocks-types:types" = { path = "../../../wit/types" }

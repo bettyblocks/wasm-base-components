@@ -1,6 +1,6 @@
 use crate::{
     context::{CaptureData, MassMutateEntry, RequestRaw, data_structs::*},
-    exports::betty_blocks_utilities::data_api::data_api::JsonString,
+    exports::betty_blocks_types::data_api::data_api::JsonString,
 };
 
 pub fn generate_delayed_id_response(id: &str, mutation_name: &str) -> JsonString {

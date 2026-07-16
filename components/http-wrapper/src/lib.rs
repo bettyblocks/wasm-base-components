@@ -6,7 +6,7 @@ pub mod bindings {
     wit_bindgen::generate!({ generate_all });
 }
 
-use crate::bindings::betty_blocks_utilities::actions::actions::{
+use crate::bindings::betty_blocks_types::actions::actions::{
     Error as ActionError, RunInput as Input, RunOutput as Output, RunPayload as Payload, call,
     health,
 };

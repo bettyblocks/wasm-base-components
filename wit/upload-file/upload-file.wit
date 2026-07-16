@@ -1,0 +1,26 @@
+package betty-blocks-types:upload-file@2.0.0;
+
+// Our platform passes the property as [{ kind: "FILE", name: "<propertyName>" }], we have to accommodate that in the store interfaces.
+
+interface upload-file {
+    use betty-blocks-types:data-api/data-api@2.0.0.{helper-context};
+    use betty-blocks-types:types/types@2.0.0.{betty-model, betty-property};
+
+    record upload-result {
+        reference: string,
+        file-size: u64,
+        message: option<string>,
+    }
+
+    record input {
+        model: betty-model,
+        property: betty-property,
+        file-bytes: list<u8>,
+        full-filename: string,
+    }
+
+    upload: func(
+        helper-context: helper-context,
+        input: input,
+    ) -> result<upload-result, string>;
+}

@@ -1,2 +1,3 @@
 [overrides]
+"betty-blocks-types:data-api" = { path = "../data-api" }
 "betty-blocks-types:types" = { path = "../types" }

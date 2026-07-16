@@ -6,7 +6,7 @@ use crate::{
         data_structs::*,
         replace_ids::{replace_id, replace_negative_ids_in_mutation_input},
     },
-    exports::betty_blocks_utilities::data_api::data_api::PendingMutation,
+    exports::betty_blocks_types::data_api::data_api::PendingMutation,
 };
 
 const CHUNK_SIZE: usize = 100_000;

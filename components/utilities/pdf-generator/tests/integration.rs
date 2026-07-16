@@ -7,7 +7,7 @@ mod bindings {
 use jaws_rs::Keys;
 use wasmtime_testing_helper::http::{HttpHandler, hyper};
 
-use crate::bindings::betty_blocks_utilities::data_api::data_api::HelperContext;
+use crate::bindings::betty_blocks_types::data_api::data_api::HelperContext;
 
 const APPLICATION_ID: &str = "06caae5da8234837a330c14a7350ed75";
 const JAWS_SECRET: &str = "SUPER_SECRET";
@@ -89,7 +89,7 @@ fn pdf_generator_component_should_return_pdf_bytes_on_success() {
 
     let result = component
         .component
-        .betty_blocks_utilities_pdf_generator_pdf_generator()
+        .betty_blocks_types_pdf_generator_pdf_generator()
         .call_generate(&mut component.store, &helper_context(), HTML)
         .unwrap();
 
@@ -108,7 +108,7 @@ fn pdf_generator_component_should_return_error_on_non_2xx_status() {
 
     let result = component
         .component
-        .betty_blocks_utilities_pdf_generator_pdf_generator()
+        .betty_blocks_types_pdf_generator_pdf_generator()
         .call_generate(&mut component.store, &helper_context(), HTML)
         .unwrap();
 
@@ -122,7 +122,7 @@ fn pdf_generator_component_should_return_config_error_when_jaws_secret_is_missin
 
     let result = component
         .component
-        .betty_blocks_utilities_pdf_generator_pdf_generator()
+        .betty_blocks_types_pdf_generator_pdf_generator()
         .call_generate(&mut component.store, &helper_context(), HTML)
         .unwrap();
 

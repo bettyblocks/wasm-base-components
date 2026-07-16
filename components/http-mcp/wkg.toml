@@ -1,2 +1,2 @@
 [overrides]
-"betty-blocks-utilities:auth" = { path = "../utilities/auth/wit" }
+"betty-blocks-types:auth" = { path = "../../wit/auth" }
