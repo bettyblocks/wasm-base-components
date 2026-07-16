@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.2...v1.18.0) (2026-07-16)
+
+
+### Features
+
+* publish WIT interfaces as lean packages under betty-blocks-types ([e642e6e](https://github.com/bettyblocks/wasm-base-components/commit/e642e6e22ed43a349149c2f65cbea6f629dd902e))
+
 ## [1.17.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.1...v1.17.2) (2026-07-16)
 
 
