@@ -36,9 +36,15 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: just,wash
+          tool: just
 
       - uses: wasco-dev/workflows/.github/actions/install-wkg@main
+
+      - name: Install wash
+        shell: bash
+        run: |
+          curl -fsSL https://wasmcloud.com/sh | INSTALL_DIR=/usr/local/bin bash
+          wash --version
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
@@ -77,7 +83,5 @@ jobs:
         with:
           name: wasm-components-v${{ steps.version.outputs.version }}
           path: |
-            **/build/*.wasm
-            target/wasm32-wasip2/release/*.wasm
-            **/build/*.par.gz
+            **/target/wasm32-wasip2/release/*.wasm
           retention-days: 90
