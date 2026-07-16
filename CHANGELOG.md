@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.0...v1.17.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* update publish step ([0b9efcf](https://github.com/bettyblocks/wasm-base-components/commit/0b9efcffb3a8ba8708c87a5728a1ab1b35c86995))
+
 # [1.17.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.1...v1.17.0) (2026-07-16)
 
 
