@@ -34,15 +34,15 @@ jobs:
       # Component registry — add new components here (name|build_path|world_wit)
       # The publish tag is read from the WIT package version in world_wit.
       COMPONENTS: |
-        auth-component|components/utilities/auth/build/jwt_auth_component.wasm|components/utilities/auth/wit/world.wit
-        crud-component|components/utilities/crud/build/crud_component.wasm|components/utilities/crud/wit/world.wit
-        data-api-component|components/utilities/data-api/build/data_api_component.wasm|components/utilities/data-api/wit/world.wit
-        upload-file-component|components/utilities/upload-file/build/upload_file.wasm|components/utilities/upload-file/wit/world.wit
-        pdf-generator-component|components/utilities/pdf-generator/build/pdf_generator.wasm|components/utilities/pdf-generator/wit/world.wit
-        http-wrapper|components/http-wrapper/build/http_wrapper.wasm|components/http-wrapper/wit/world.wit
-        log-to-stdout|target/wasm32-wasip2/release/log_to_stdout.wasm|components/utilities/log-to-stdout/wit/world.wit
-        http-mcp|components/http-mcp/build/mcp_component.wasm|components/http-mcp/wit/world.wit
-        logs-writer|components/logs-writer/build/logs_writer.wasm|components/logs-writer/wit/world.wit
+        auth-component|components/utilities/auth/target/wasm32-wasip2/release/jwt_auth_component.wasm|components/utilities/auth/wit/world.wit
+        crud-component|components/utilities/crud/target/wasm32-wasip2/release/crud_component.wasm|components/utilities/crud/wit/world.wit
+        data-api-component|components/utilities/data-api/target/wasm32-wasip2/release/data_api_component.wasm|components/utilities/data-api/wit/world.wit
+        upload-file-component|components/utilities/upload-file/target/wasm32-wasip2/release/upload_file.wasm|components/utilities/upload-file/wit/world.wit
+        pdf-generator-component|components/utilities/pdf-generator/target/wasm32-wasip2/release/pdf_generator.wasm|components/utilities/pdf-generator/wit/world.wit
+        http-wrapper|components/http-wrapper/target/wasm32-wasip2/release/http_wrapper.wasm|components/http-wrapper/wit/world.wit
+        log-to-stdout|components/target/wasm32-wasip2/release/log_to_stdout.wasm|components/utilities/log-to-stdout/wit/world.wit
+        http-mcp|components/http-mcp/target/wasm32-wasip2/release/mcp_component.wasm|components/http-mcp/wit/world.wit
+        logs-writer|components/logs-writer/target/wasm32-wasip2/release/logs_writer.wasm|components/logs-writer/wit/world.wit
 
     steps:
       - uses: actions/checkout@v4
@@ -94,11 +94,8 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts/components ]; then
-            cp -r artifacts/components/* components/ 2>/dev/null || true
-          fi
-          if [ -d artifacts/target ]; then
-            cp -r artifacts/target/* target/ 2>/dev/null || true
+          if [ -d artifacts ]; then
+            cp -r artifacts/* components/ 2>/dev/null || true
           fi
 
       - name: Publish components to registry
@@ -199,11 +196,8 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts/components ]; then
-            cp -r artifacts/components/* components/ 2>/dev/null || true
-          fi
-          if [ -d artifacts/target ]; then
-            cp -r artifacts/target/* target/ 2>/dev/null || true
+          if [ -d artifacts ]; then
+            cp -r artifacts/* components/ 2>/dev/null || true
           fi
 
       - name: Log in to Azure registry
@@ -254,9 +248,9 @@ jobs:
               continue
             fi
 
-            wasm_file=$(find "$component_directory/build" -name "*.wasm" 2>/dev/null | head -1)
+            wasm_file=$(find "$component_directory/target/wasm32-wasip2/release" -maxdepth 1 -name "*.wasm" 2>/dev/null | head -1)
             if [ -z "$wasm_file" ]; then
-              wasm_file=$(find target/wasm32-wasip2/release -name "*.wasm" 2>/dev/null | head -1)
+              wasm_file=$(find components/target/wasm32-wasip2/release -maxdepth 1 -name "*.wasm" 2>/dev/null | head -1)
             fi
 
             if [ -z "$wasm_file" ]; then

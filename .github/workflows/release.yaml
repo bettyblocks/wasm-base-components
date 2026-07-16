@@ -83,7 +83,5 @@ jobs:
         with:
           name: wasm-components-v${{ steps.version.outputs.version }}
           path: |
-            **/build/*.wasm
-            target/wasm32-wasip2/release/*.wasm
-            **/build/*.par.gz
+            **/target/wasm32-wasip2/release/*.wasm
           retention-days: 90
