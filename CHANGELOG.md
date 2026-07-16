@@ -1,3 +1,10 @@
+## [1.17.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.1...v1.17.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* fix publish pipeline ([e232ae6](https://github.com/bettyblocks/wasm-base-components/commit/e232ae6253ea1e3f93aab1c04634876b90c87d78))
+
 ## [1.17.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.0...v1.17.1) (2026-07-16)
 
 
