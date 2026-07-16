@@ -1,17 +1,16 @@
+fetch-wit-deps:
+    wkg wit fetch
 
-build:
-    wash build
+build: fetch-wit-deps
+    wash build --skip-fetch
 
-integration-test:
-    wash wit deps
+integration-test: fetch-wit-deps
     cargo test --test '*'
 
-test: 
-    wash wit deps
+test: fetch-wit-deps
     cargo test --lib --bins
 
-lint:
-    wash wit deps
+lint: fetch-wit-deps
     cargo check
 
 formatting *args:

@@ -1,8 +1,8 @@
-package betty-blocks-utilities:data-api;
+package betty-blocks-utilities:data-api@2.0.0;
 
 interface data-api {
     // use types when it exists
-    use betty-blocks-utilities:types/types@0.1.0.{json-string};
+    use betty-blocks-utilities:types/types@2.0.0.{json-string};
 
     record pending-mutation {
         mutation-name: string,

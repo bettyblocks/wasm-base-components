@@ -71,32 +71,27 @@ jobs:
       - name: Build and push WIT typings packages to prod Azure registry
         run: |
           EXIT_CODE=0
-          for wit_file in wit/*.wit; do
-            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
-            temp_directory=$(mktemp -d)
-            cp "$wit_file" "$temp_directory/"
-
-            # Create overrides for any local WIT dependencies.
-            dependencies=$(grep -oP 'betty-blocks-utilities:\K[a-z0-9-]+' "$wit_file" | grep -v "$name" || true)
-            if [ -n "$dependencies" ]; then
-              echo "[overrides]" > "$temp_directory/wkg.toml"
-              for dependency in $dependencies; do
-                dependency_directory="$temp_directory/deps/$dependency"
-                mkdir -p "$dependency_directory"
-                cp "wit/$dependency.wit" "$dependency_directory/"
-                echo "\"betty-blocks-utilities:$dependency\" = { path = \"$dependency_directory\" }" >> "$temp_directory/wkg.toml"
-              done
+          out_dir=$(mktemp -d)
+          for wit_file in wit/*/*.wit; do
+            pkg_dir=$(dirname "$wit_file")
+            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$wit_file")
+            # Version comes from the WIT package declaration, not the git tag.
+            wit_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$wit_file")
+            if [ -z "$wit_version" ]; then
+              echo "::warning::No @version in $wit_file; skipping $name"
+              EXIT_CODE=1
+              continue
             fi
 
-            wasm_file=$(cd "$temp_directory" && wkg wit build --wit-dir "." -o "$name.wasm" 2>&1)
-            if [ $? -ne 0 ]; then
-              echo "::warning::Failed to build WIT package $name: $wasm_file"
+            # Build from the package dir; any local WIT deps resolve via the committed wit/<pkg>/wkg.toml.
+            if ! ( cd "$pkg_dir" && wkg wit build --wit-dir . -o "$out_dir/$name.wasm" ); then
+              echo "::warning::Failed to build WIT package $name"
               EXIT_CODE=1
               continue
             fi
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
-            wkg oci push "${IMAGE_NAME}:${VERSION}" "$temp_directory/$name.wasm" || EXIT_CODE=1
+            wkg oci push "${IMAGE_NAME}:${wit_version}" "$out_dir/$name.wasm" || EXIT_CODE=1
           done
           exit $EXIT_CODE
 
@@ -105,7 +100,14 @@ jobs:
           EXIT_CODE=0
           for world_file in $(find components -name "world.wit" -path "*/wit/*" -not -path "*/deps/*" -not -path "*/test-component/*"); do
             component_directory=$(dirname "$(dirname "$world_file")")
-            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+            # Version comes from the component's WIT package declaration, not the git tag.
+            world_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world_file")
+            if [ -z "$world_version" ]; then
+              echo "::warning::No @version in $world_file; skipping $name"
+              EXIT_CODE=1
+              continue
+            fi
 
             wasm_file=$(find "$component_directory/build" -name "*.wasm" 2>/dev/null | head -1)
             if [ -z "$wasm_file" ]; then
@@ -118,7 +120,7 @@ jobs:
             fi
 
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
-            wkg oci push "${IMAGE_NAME}:${VERSION}" "$wasm_file" || EXIT_CODE=1
+            wkg oci push "${IMAGE_NAME}:${world_version}" "$wasm_file" || EXIT_CODE=1
           done
           exit $EXIT_CODE
 
@@ -127,15 +129,16 @@ jobs:
         run: |
           echo "## Published Components to Prod Azure Registry" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** \`${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Source bundle:** \`${VERSION}\` (per-package versions taken from WIT, shown below)" >> $GITHUB_STEP_SUMMARY
           echo "**Registry:** \`${{ secrets.AZURE_REGISTRY }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           for world_file in $(find components -name "world.wit" -path "*/wit/*" -not -path "*/deps/*" -not -path "*/test-component/*"); do
-            name=$(sed -nE 's/package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
+            world_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world_file")
             IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
             if [ -f "$(find "$(dirname "$(dirname "$world_file")")/build" -name "*.wasm" 2>/dev/null | head -1)" ]; then
-              echo "- **$name**: \`${IMAGE_NAME}:${VERSION}\`" >> $GITHUB_STEP_SUMMARY
+              echo "- **$name**: \`${IMAGE_NAME}:${world_version}\`" >> $GITHUB_STEP_SUMMARY
             else
               echo "- ~$name~ (skipped)" >> $GITHUB_STEP_SUMMARY
             fi

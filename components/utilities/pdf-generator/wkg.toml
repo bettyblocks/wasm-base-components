@@ -1,0 +1,3 @@
+[overrides]
+"betty-blocks-utilities:data-api" = { path = "../data-api/wit" }
+"betty-blocks-utilities:types" = { path = "../../../wit/types" }

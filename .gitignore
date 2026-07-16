@@ -8,3 +8,6 @@ build
 # Semantic release
 .version
 node_modules
+
+# Generated WIT dependencies (regenerated via `wkg wit fetch`)
+**/wit/deps/

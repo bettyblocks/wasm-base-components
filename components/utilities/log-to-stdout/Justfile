@@ -1,9 +1,9 @@
 
 
-fetch_wit_deps:
+fetch-wit-deps:
   wkg wit fetch
 
-build: fetch_wit_deps
+build: fetch-wit-deps
   cargo build --release --target wasm32-wasip2
 
 test:
@@ -12,7 +12,7 @@ test:
 integration-test:
     cargo test --tests '*'
 
-lint: fetch_wit_deps
+lint: fetch-wit-deps
     cargo check
 
 formatting *args:

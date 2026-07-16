@@ -1,6 +1,8 @@
+fetch-wit-deps:
+    wkg wit fetch
 
-build:
-    wash build
+build: fetch-wit-deps
+    wash build --skip-fetch
 
 test:
     cargo test --lib --bins
@@ -8,8 +10,7 @@ test:
 integration-test:
     cargo test --test integration_test_mcp -- --nocapture
 
-lint:
-    wash wit deps
+lint: fetch-wit-deps
     cargo check
 
 formatting *args:
