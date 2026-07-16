@@ -94,8 +94,9 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts ]; then
-            cp -r artifacts/* components/ 2>/dev/null || true
+          components_dir=$(find artifacts -type d -name components | head -1)
+          if [ -n "$components_dir" ]; then
+            cp -r "$components_dir" .
           fi
 
       - name: Publish components to registry
@@ -196,8 +197,9 @@ jobs:
 
       - name: Organize artifacts
         run: |
-          if [ -d artifacts ]; then
-            cp -r artifacts/* components/ 2>/dev/null || true
+          components_dir=$(find artifacts -type d -name components | head -1)
+          if [ -n "$components_dir" ]; then
+            cp -r "$components_dir" .
           fi
 
       - name: Log in to Azure registry
