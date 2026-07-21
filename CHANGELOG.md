@@ -1,3 +1,11 @@
+## [1.18.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.0...v1.18.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* update betty record type ([07d22b0](https://github.com/bettyblocks/wasm-base-components/commit/07d22b09823ecf342462d52c7ac05dbc490e2cf6))
+* update types ([6537cf5](https://github.com/bettyblocks/wasm-base-components/commit/6537cf570c6f9a286fe5d68b117244d3fb1ab5b1))
+
 # [1.18.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.2...v1.18.0) (2026-07-16)
 
 
