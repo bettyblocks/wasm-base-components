@@ -10,7 +10,7 @@ pub mod bindings {
     wit_bindgen::generate!({ generate_all });
 }
 
-use crate::bindings::exports::betty_blocks_utilities::auth::jwt::{AuthError, Guest};
+use crate::bindings::exports::betty_blocks_types::auth::jwt::{AuthError, Guest};
 
 type Headers = Vec<(String, Vec<u8>)>;
 

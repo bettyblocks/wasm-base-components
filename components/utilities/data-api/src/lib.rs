@@ -5,7 +5,7 @@ use tonic::Request;
 use tracing::debug;
 use wasmcloud_grpc_client::GrpcEndpoint;
 
-use exports::betty_blocks_utilities::data_api::data_api::{Guest, HelperContext};
+use exports::betty_blocks_types::data_api::data_api::{Guest, HelperContext};
 
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");

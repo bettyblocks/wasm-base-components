@@ -1,11 +1,11 @@
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks_utilities::data_api::data_api::request;
-use crate::betty_blocks_utilities::data_api::data_api::HelperContext;
-use crate::betty_blocks_utilities::types::types::{
+use crate::betty_blocks_types::data_api::data_api::request;
+use crate::betty_blocks_types::data_api::data_api::HelperContext;
+use crate::betty_blocks_types::types::types::{
     BettyProperty, BettyPropertyMap, BettyPropertyPath,
 };
-use crate::exports::betty_blocks_utilities::crud::crud::{
+use crate::exports::betty_blocks_types::crud::crud::{
     BettyModel, BettyPropertyMapping, Guest, JsonString,
 };
 
@@ -556,7 +556,7 @@ mod tests {
     use super::*;
 
     mod parse_to_gql_fragment {
-        use crate::betty_blocks_utilities::types::types::BettyProperty;
+        use crate::betty_blocks_types::types::types::BettyProperty;
         use serde_json::json;
 
         use super::*;

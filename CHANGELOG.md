@@ -1,3 +1,33 @@
+# [1.18.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.2...v1.18.0) (2026-07-16)
+
+
+### Features
+
+* publish WIT interfaces as lean packages under betty-blocks-types ([e642e6e](https://github.com/bettyblocks/wasm-base-components/commit/e642e6e22ed43a349149c2f65cbea6f629dd902e))
+
+## [1.17.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.1...v1.17.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* fix publish pipeline ([e232ae6](https://github.com/bettyblocks/wasm-base-components/commit/e232ae6253ea1e3f93aab1c04634876b90c87d78))
+
+## [1.17.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.0...v1.17.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* update publish step ([0b9efcf](https://github.com/bettyblocks/wasm-base-components/commit/0b9efcffb3a8ba8708c87a5728a1ab1b35c86995))
+
+# [1.17.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.1...v1.17.0) (2026-07-16)
+
+
+### Features
+
+* add version bump check pipeline ([e96d21e](https://github.com/bettyblocks/wasm-base-components/commit/e96d21e61199914cd0ebd9ab781d8a07422b494e))
+* component-level dependency management ([38fbaec](https://github.com/bettyblocks/wasm-base-components/commit/38fbaecc6e012facf0f5f186257952e30a6ee8ff))
+* use wit package version as oci tag ([f7c4a9f](https://github.com/bettyblocks/wasm-base-components/commit/f7c4a9f3e175a6cfa9e59b193acb4462a439b717))
+
 ## [1.16.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.0...v1.16.1) (2026-07-14)
 
 

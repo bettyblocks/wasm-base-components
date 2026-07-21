@@ -6,7 +6,7 @@ use crate::context::format_mutation::{
     generate_delete_many_inputs, generate_upsert_many_inputs, send_delete_many_mutations,
     send_upsert_many_mutations,
 };
-use crate::exports::betty_blocks_utilities::data_api::data_api::{self, GuestDataApi, JsonString};
+use crate::exports::betty_blocks_types::data_api::data_api::{self, GuestDataApi, JsonString};
 use crate::{Config, inner_request};
 
 mod data_structs;
