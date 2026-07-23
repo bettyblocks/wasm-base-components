@@ -1,3 +1,11 @@
+## [1.18.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.1...v1.18.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* **ci:** reconstruct downloaded artifacts at repo root, not under components/ ([c24541f](https://github.com/bettyblocks/wasm-base-components/commit/c24541f4315edb83a673de03709e844809012e3b))
+* **ci:** sync publish/release workflows to corrected artifact + WIT paths ([66f0920](https://github.com/bettyblocks/wasm-base-components/commit/66f09206abb41152613ebc43735144aaa210ecb2))
+
 ## [1.18.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.0...v1.18.1) (2026-07-21)
 
 
