@@ -1,12 +1,12 @@
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks_utilities::data_api::data_api::request;
-use crate::betty_blocks_utilities::data_api::data_api::HelperContext;
-use crate::betty_blocks_utilities::types::types::{
+use crate::betty_blocks_types::data_api::data_api::request;
+use crate::betty_blocks_types::data_api::data_api::HelperContext;
+use crate::betty_blocks_types::types::types::{
     BettyProperty, BettyPropertyMap, BettyPropertyPath,
 };
-use crate::exports::betty_blocks_utilities::crud::crud::{
-    BettyModel, BettyPropertyMapping, Guest, JsonString,
+use crate::exports::betty_blocks_types::crud::crud::{
+    BettyModel, BettyPropertyMapping, BettyRecordJson, Guest,
 };
 
 #[derive(Debug, PartialEq)]
@@ -279,7 +279,7 @@ fn fetch_record(
     model_name: &str,
     id: &str,
     fragment: &GraphQL,
-) -> Result<JsonString, String> {
+) -> Result<BettyRecordJson, String> {
     let query_name = format!("one{model_name}",);
     let query = create_fetch_record_query(model_name, &query_name, fragment);
 
@@ -398,7 +398,7 @@ impl Guest for CrudComponent {
         model: BettyModel,
         mapping: BettyPropertyMapping,
         validation_sets: Option<Vec<String>>,
-    ) -> Result<JsonString, String> {
+    ) -> Result<BettyRecordJson, String> {
         let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
 
         let assign_properties = parse_assigned_properties(mapping.clone());
@@ -437,7 +437,7 @@ impl Guest for CrudComponent {
         record_id: String,
         mapping: BettyPropertyMapping,
         validation_sets: Option<Vec<String>>,
-    ) -> Result<JsonString, String> {
+    ) -> Result<BettyRecordJson, String> {
         let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
 
         let assign_properties = parse_assigned_properties(mapping.clone());
@@ -477,7 +477,7 @@ impl Guest for CrudComponent {
         mapping: BettyPropertyMapping,
         unique_by: BettyProperty,
         validation_sets: Option<Vec<String>>,
-    ) -> Result<JsonString, String> {
+    ) -> Result<BettyRecordJson, String> {
         let fragment = parse_to_gql_fragment(&model.name, mapping.clone());
 
         let assign_properties = parse_assigned_properties(mapping.clone());
@@ -515,7 +515,7 @@ impl Guest for CrudComponent {
         helper_context: HelperContext,
         model: BettyModel,
         record_id: String,
-    ) -> Result<JsonString, String> {
+    ) -> Result<String, String> {
         let mutation_name = format!("delete{}", model.name);
         let mutation = format_delete_mutation(&mutation_name);
         let input = serde_json::json!(
@@ -556,7 +556,7 @@ mod tests {
     use super::*;
 
     mod parse_to_gql_fragment {
-        use crate::betty_blocks_utilities::types::types::BettyProperty;
+        use crate::betty_blocks_types::types::types::BettyProperty;
         use serde_json::json;
 
         use super::*;

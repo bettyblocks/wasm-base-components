@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{collections::HashMap, env, time::Duration};
 use tracing::error;
 
-use crate::exports::betty_blocks_utilities::logs_writer::debug_logging::Guest;
+use crate::exports::betty_blocks_types::logs_writer::debug_logging::Guest;
 
 wit_bindgen::generate!({ generate_all });
 

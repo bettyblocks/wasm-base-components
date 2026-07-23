@@ -1,0 +1,2 @@
+[overrides]
+"betty-blocks-types:types" = { path = "../types" }

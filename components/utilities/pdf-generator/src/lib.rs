@@ -10,8 +10,8 @@ use anyhow::Context;
 use wstd::http::{Body, Client, Request};
 
 use bindings::{
-    betty_blocks_utilities::data_api::data_api::HelperContext,
-    exports::betty_blocks_utilities::pdf_generator::pdf_generator::Guest,
+    betty_blocks_types::data_api::data_api::HelperContext,
+    exports::betty_blocks_types::pdf_generator::pdf_generator::Guest,
 };
 
 struct Config {

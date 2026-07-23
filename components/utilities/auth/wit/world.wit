@@ -1,19 +1,6 @@
-package betty-blocks-utilities:auth;
-
-interface jwt {
-    variant auth-error {
-        malformed-token,
-        missing-config(string),
-        validation-failed(string),
-    }
-
-    type request-headers = list<tuple<string, list<u8>>>;
-
-    allowed-to-call: func(headers: request-headers, action-id: string) -> result<_, auth-error>;
-    allowed-to-list: func(headers: request-headers, mcp-id: string) -> result<_, auth-error>;
-}
+package betty-blocks-utilities:auth@2.0.0;
 
 world auth {
     import wasi:config/store@0.2.0-rc.1;
-    export jwt;
+    export betty-blocks-types:auth/jwt@2.0.0;
 }

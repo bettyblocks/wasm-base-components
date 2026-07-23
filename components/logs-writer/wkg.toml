@@ -1,0 +1,2 @@
+[overrides]
+"betty-blocks-types:logs-writer" = { path = "../../wit/logs-writer" }

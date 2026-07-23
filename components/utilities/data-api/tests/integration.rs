@@ -20,7 +20,7 @@ use data_grpc::DataApiRequest;
 use data_grpc::{DataApiResult, data_api_result::Status};
 
 use crate::bindings::Provider;
-use crate::bindings::exports::betty_blocks_utilities::data_api::data_api::{
+use crate::bindings::exports::betty_blocks_types::data_api::data_api::{
     GuestDataApi, PendingMutation,
 };
 
@@ -50,7 +50,7 @@ impl<'a> DataApiResource<'a> {
     fn new(component: &'a mut InstantiatedComponent<Provider>) -> Self {
         let interface = component
             .component
-            .betty_blocks_utilities_data_api_data_api();
+            .betty_blocks_types_data_api_data_api();
 
         let data_api_resource_def = interface.data_api();
         let data_api_resource = data_api_resource_def

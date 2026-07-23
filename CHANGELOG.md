@@ -1,3 +1,56 @@
+## [1.18.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.1...v1.18.2) (2026-07-23)
+
+
+### Bug Fixes
+
+* **ci:** reconstruct downloaded artifacts at repo root, not under components/ ([c24541f](https://github.com/bettyblocks/wasm-base-components/commit/c24541f4315edb83a673de03709e844809012e3b))
+* **ci:** sync publish/release workflows to corrected artifact + WIT paths ([66f0920](https://github.com/bettyblocks/wasm-base-components/commit/66f09206abb41152613ebc43735144aaa210ecb2))
+
+## [1.18.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.0...v1.18.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* update betty record type ([07d22b0](https://github.com/bettyblocks/wasm-base-components/commit/07d22b09823ecf342462d52c7ac05dbc490e2cf6))
+* update types ([6537cf5](https://github.com/bettyblocks/wasm-base-components/commit/6537cf570c6f9a286fe5d68b117244d3fb1ab5b1))
+
+# [1.18.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.2...v1.18.0) (2026-07-16)
+
+
+### Features
+
+* publish WIT interfaces as lean packages under betty-blocks-types ([e642e6e](https://github.com/bettyblocks/wasm-base-components/commit/e642e6e22ed43a349149c2f65cbea6f629dd902e))
+
+## [1.17.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.1...v1.17.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* fix publish pipeline ([e232ae6](https://github.com/bettyblocks/wasm-base-components/commit/e232ae6253ea1e3f93aab1c04634876b90c87d78))
+
+## [1.17.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.17.0...v1.17.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* update publish step ([0b9efcf](https://github.com/bettyblocks/wasm-base-components/commit/0b9efcffb3a8ba8708c87a5728a1ab1b35c86995))
+
+# [1.17.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.1...v1.17.0) (2026-07-16)
+
+
+### Features
+
+* add version bump check pipeline ([e96d21e](https://github.com/bettyblocks/wasm-base-components/commit/e96d21e61199914cd0ebd9ab781d8a07422b494e))
+* component-level dependency management ([38fbaec](https://github.com/bettyblocks/wasm-base-components/commit/38fbaecc6e012facf0f5f186257952e30a6ee8ff))
+* use wit package version as oci tag ([f7c4a9f](https://github.com/bettyblocks/wasm-base-components/commit/f7c4a9f3e175a6cfa9e59b193acb4462a439b717))
+
+## [1.16.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.16.0...v1.16.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* disable header-max-length commitlint rule ([1af071e](https://github.com/bettyblocks/wasm-base-components/commit/1af071e702c95d3ac1ddb26b3102f505bf403fb6))
+
 # [1.16.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.15.1...v1.16.0) (2026-07-14)
 
 

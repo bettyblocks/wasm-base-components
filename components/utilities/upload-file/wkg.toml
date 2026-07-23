@@ -1,0 +1,4 @@
+[overrides]
+"betty-blocks-types:upload-file" = { path = "../../../wit/upload-file" }
+"betty-blocks-types:data-api" = { path = "../../../wit/data-api" }
+"betty-blocks-types:types" = { path = "../../../wit/types" }
