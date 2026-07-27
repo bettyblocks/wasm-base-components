@@ -1,4 +1,4 @@
-package betty-blocks-types:upload-file@2.0.0;
+package betty-blocks-types:upload-file@3.0.0;
 
 // Our platform passes the property as [{ kind: "FILE", name: "<propertyName>" }], we have to accommodate that in the store interfaces.
 
@@ -15,7 +15,9 @@ interface upload-file {
     record input {
         model: betty-model,
         property: betty-property,
-        file-bytes: list<u8>,
+        // Standard base64 (no data-URL prefix), decoded inside upload-file.
+        // Not list<u8>: that costs 48 host bytes per file byte and traps at ~2.67 MiB.
+        file-base64: string,
         full-filename: string,
     }
 

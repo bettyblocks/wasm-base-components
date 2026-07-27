@@ -1,4 +1,5 @@
 use anyhow::Result;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use multipart::client::lazy::Multipart;
 use serde::Deserialize;
 use std::io::Read;
@@ -91,13 +92,20 @@ struct PresignedPostRequest {
     url: String,
 }
 
+fn decode_file_base64(file_base64: &str) -> Result<Vec<u8>> {
+    STANDARD
+        .decode(file_base64)
+        .map_err(|e| anyhow::anyhow!("file-base64 is not valid standard base64: {e}"))
+}
+
 pub async fn upload_bytes_internal(
     helper_context: HelperContext,
     model: BettyModel,
     property: BettyProperty,
-    file_bytes: Vec<u8>,
+    file_base64: String,
     filename: String,
 ) -> Result<UploadResult> {
+    let file_bytes = decode_file_base64(&file_base64)?;
     let file_size = file_bytes.len() as u64;
 
     let variables = serde_json::json!({
