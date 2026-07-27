@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 tracing = "0.1.44"
 wit-bindgen = "0.47.0"
 wstd = "=0.6.5"

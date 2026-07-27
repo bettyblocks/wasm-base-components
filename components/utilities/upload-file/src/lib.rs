@@ -23,7 +23,7 @@ impl UploadFileGuest for Component {
         Input {
             model,
             property,
-            file_bytes,
+            file_base64,
             full_filename,
         }: Input,
     ) -> Result<UploadResult, String> {
@@ -31,7 +31,7 @@ impl UploadFileGuest for Component {
             helper_context,
             model,
             property,
-            file_bytes,
+            file_base64,
             full_filename,
         ))
         .map_err(|e| e.to_string())
