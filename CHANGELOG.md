@@ -1,3 +1,10 @@
+## [1.18.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.2...v1.18.3) (2026-07-27)
+
+
+### Bug Fixes
+
+* adjust interface of upload-file so that you not have file size *48 ([6343c7c](https://github.com/bettyblocks/wasm-base-components/commit/6343c7c1ac0a0918e148d9dc54410c9af3666445))
+
 ## [1.18.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.1...v1.18.2) (2026-07-23)
 
 
