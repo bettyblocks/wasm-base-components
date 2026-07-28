@@ -24,6 +24,7 @@ struct PayloadWrapper {
 struct InputWrapper {
     action_id: String,
     payload: PayloadWrapper,
+    jwt: Option<String>,
 }
 
 impl From<InputWrapper> for Input {
@@ -34,6 +35,7 @@ impl From<InputWrapper> for Input {
                 input: val.payload.input,
                 configurations: val.payload.configurations,
             },
+            jwt: val.jwt,
         }
     }
 }
