@@ -37,7 +37,7 @@ What it doesn't include:
 
 | workflow | runs on | what it does |
 |---|---|---|
-| **Build WASM Components** (`release.yaml`) | push to `dev` | builds every component, runs semantic-release, uploads one `wasm-components` artifact holding **all** of them, and writes its own run id into `.build-run-id` in the release commit |
+| **Build WASM Components** (`release.yaml`) | push to `dev` that touches something a component is built from | builds every component, runs semantic-release, uploads one `wasm-components` artifact holding **all** of them, and writes its own run id into `.build-run-id` in the release commit |
 | **Publish WASM Components (dev)** (`publish.yaml`) | that build finishing, or manual dispatch | picks *which* build to publish, nothing more. Fans out to ghcr and the dev registry |
 | **Publish WASM Components (production)** (`publish-prod.yaml`) | push to `main`, or manual dispatch | reads the build run id out of `.build-run-id`, checks `main`'s tree still matches that build's commit, then publishes to production |
 | **Publish components** (`publish-components.yaml`) | called by the two above | all the actual publishing logic, once, identically per destination |
@@ -46,6 +46,12 @@ What it doesn't include:
 Publishing always takes a **build run id** as its input, never a commit or a branch. One run id
 resolves to exactly one artifact; a commit can have several build runs, so the run id is the only
 thing that names a specific set of bytes.
+
+A push to `dev` that changes only `docs/`, markdown, `**/tests/`, `.github/` or `scripts/` doesn't
+build, so it doesn't publish either — those can't change a component binary. A push is skipped
+only when *every* changed file matches, so a commit touching `src/` alongside a test still builds.
+Changes to `.github/` and `scripts/` do change how publishing behaves; to exercise them, dispatch
+**Publish WASM Components (dev)** with the previous build's run id.
 
 ### What gets tagged
 

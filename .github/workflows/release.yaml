@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - "dev"
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/tests/**"
+      - ".github/**"
+      - "scripts/**"
 
 jobs:
   build-and-release:
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      has_release: ${{ steps.version.outputs.has_release }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -75,13 +78,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: bunx semantic-release
-
-      - name: Read version
-        id: version
-        run: |
-          if [ -f .version ]; then
-            echo "version=$(cat .version)" >> $GITHUB_OUTPUT
-            echo "has_release=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_release=false" >> $GITHUB_OUTPUT
-          fi
