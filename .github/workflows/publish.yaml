@@ -1,5 +1,14 @@
-name: Publish WASM Components to GitHub Packages
-run-name: Publish to ${{ github.event_name == 'workflow_dispatch' && inputs.registry || 'ghcr.io' }} ${{ github.event_name == 'workflow_run' && '(auto)' || '' }}
+name: Publish WASM Components (dev)
+run-name: >-
+  Publish build ${{ github.event.workflow_run.id || inputs.build_run_id }} to dev
+  ${{ github.event_name == 'workflow_dispatch' && '(manual)' || '(auto)' }}
+
+# This workflow contains no publishing logic. Its only job is to say *which build* to
+# publish; publish-components.yaml does the rest, identically for every destination.
+#
+# Note that workflow_run always executes the copy of this file on the default branch (main),
+# while release.yaml executes the copy on dev. Anything both files agree on — the artifact
+# name in particular — is a contract between the two branches.
 
 on:
   workflow_run:
@@ -10,257 +19,29 @@ on:
       - dev
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version to publish (leave empty to use latest tag)"
-        required: false
-        type: string
-      registry:
-        description: "Registry to publish to"
-        required: false
-        default: "ghcr.io"
+      build_run_id:
+        description: "Build WASM Components run ID to publish"
+        required: true
         type: string
 
 jobs:
-  push-ghcr:
-    runs-on: ubuntu-latest
+  ghcr:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    permissions:
-      contents: read
-      packages: write
+    uses: ./.github/workflows/publish-components.yaml
+    with:
+      build_run_id: ${{ format('{0}', github.event.workflow_run.id || inputs.build_run_id) }}
+      environment: ghcr
+      registry_host: ghcr.io
+      component_namespace: ${{ github.repository_owner }}
+      name_column: ghcr_name
+      tag_latest: true
 
-    env:
-      REGISTRY: ${{ github.event_name == 'workflow_dispatch' && inputs.registry || 'ghcr.io' }}
-      REPO_OWNER: ${{ github.repository_owner }}
-      # Component registry — add new components here (name|build_path|world_wit)
-      # The publish tag is read from the WIT package version in world_wit.
-      COMPONENTS: |
-        auth-component|components/utilities/auth/target/wasm32-wasip2/release/jwt_auth_component.wasm|components/utilities/auth/wit/world.wit
-        crud-component|components/utilities/crud/target/wasm32-wasip2/release/crud_component.wasm|components/utilities/crud/wit/world.wit
-        data-api-component|components/utilities/data-api/target/wasm32-wasip2/release/data_api_component.wasm|components/utilities/data-api/wit/world.wit
-        upload-file-component|components/utilities/upload-file/target/wasm32-wasip2/release/upload_file.wasm|components/utilities/upload-file/wit/world.wit
-        pdf-generator-component|components/utilities/pdf-generator/target/wasm32-wasip2/release/pdf_generator.wasm|components/utilities/pdf-generator/wit/world.wit
-        http-wrapper|components/http-wrapper/target/wasm32-wasip2/release/http_wrapper.wasm|components/http-wrapper/wit/world.wit
-        log-to-stdout|components/target/wasm32-wasip2/release/log_to_stdout.wasm|components/utilities/log-to-stdout/wit/world.wit
-        http-mcp|components/http-mcp/target/wasm32-wasip2/release/mcp_component.wasm|components/http-mcp/wit/world.wit
-        logs-writer|components/logs-writer/target/wasm32-wasip2/release/logs_writer.wasm|components/logs-writer/wit/world.wit
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_branch }}
-
-      - name: Determine version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
-            echo "Using provided version: ${{ inputs.version }}"
-            echo "INPUT_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
-          else
-            LATEST_TAG=$(git describe --tags --abbrev=0)
-            echo "Using latest tag: $LATEST_TAG"
-            echo "INPUT_VERSION=$LATEST_TAG" >> $GITHUB_ENV
-          fi
-
-      - name: Install wash
-        shell: bash
-        run: |
-          curl -fsSL https://wasmcloud.com/sh | INSTALL_DIR=/usr/local/bin bash
-          wash --version
-
-      - name: Prepare environment
-        run: |
-          # Set VERSION based on event type
-          VERSION="${INPUT_VERSION}"
-
-          # Remove 'v' prefix from version if present
-          VERSION="${VERSION#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-          # Convert repository owner to lowercase for ghcr.io
-          REPO_OWNER=$(echo "$REPO_OWNER" | tr '[:upper:]' '[:lower:]')
-          echo "REPO_OWNER=$REPO_OWNER" >> $GITHUB_ENV
-
-          echo "Publishing version: $VERSION"
-          echo "Publishing to: $REGISTRY/$REPO_OWNER"
-
-      - name: Download artifacts from workflow run
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          workflow: release.yaml
-          name: wasm-components-v${{ env.VERSION }}
-          path: ./artifacts
-          if_no_artifact_found: fail
-          search_artifacts: true
-
-      - name: Organize artifacts
-        run: |
-          components_dir=$(find artifacts -type d -name components | head -1)
-          if [ -n "$components_dir" ]; then
-            cp -r "$components_dir" .
-          fi
-
-      - name: Publish components to registry
-        run: |
-          EXIT_CODE=0
-          while IFS='|' read -r name path world; do
-            [ -z "$name" ] && continue
-            if [ ! -f "$path" ]; then
-              echo "::warning::Skipped $name (artifact not found at $path)"
-              continue
-            fi
-            # Publish tag = the component's WIT package version (not the git tag).
-            CVERSION=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world")
-            if [ -z "$CVERSION" ]; then
-              echo "::error::No @version found in $world for $name"
-              EXIT_CODE=1
-              continue
-            fi
-            IMAGE_NAME="$REGISTRY/$REPO_OWNER/$name"
-            wash oci push \
-              --user ${{ github.actor }} \
-              --password ${{ secrets.GITHUB_TOKEN }} \
-              ${IMAGE_NAME}:${CVERSION} \
-              ./$path || EXIT_CODE=1
-            wash oci push \
-              --user ${{ github.actor }} \
-              --password ${{ secrets.GITHUB_TOKEN }} \
-              ${IMAGE_NAME}:latest \
-              ./$path || EXIT_CODE=1
-            echo "Published: ${IMAGE_NAME}:${CVERSION}"
-          done <<< "$COMPONENTS"
-          exit $EXIT_CODE
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "## Published Components to GitHub Packages" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Source bundle:** \`${VERSION}\` (per-component versions taken from WIT, shown below)" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** \`${REGISTRY}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          while IFS='|' read -r name path world; do
-            [ -z "$name" ] && continue
-            IMAGE_NAME="$REGISTRY/$REPO_OWNER/$name"
-            if [ -f "$path" ]; then
-              CVERSION=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world")
-              echo "- **$name**" >> $GITHUB_STEP_SUMMARY
-              echo "  - \`${IMAGE_NAME}:${CVERSION}\`" >> $GITHUB_STEP_SUMMARY
-              echo "  - \`${IMAGE_NAME}:latest\`" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "- ~$name~ (skipped)" >> $GITHUB_STEP_SUMMARY
-            fi
-          done <<< "$COMPONENTS"
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### View Packages" >> $GITHUB_STEP_SUMMARY
-          echo "Visit: [GitHub Packages](https://github.com/orgs/${REPO_OWNER}/packages)" >> $GITHUB_STEP_SUMMARY
-
-  push-azure:
-    runs-on: ubuntu-latest
+  azure-dev:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    environment: dev
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_branch }}
-
-      - name: Determine version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
-            echo "INPUT_VERSION=${{ inputs.version }}" >> $GITHUB_ENV
-          else
-            LATEST_TAG=$(git describe --tags --abbrev=0)
-            echo "INPUT_VERSION=$LATEST_TAG" >> $GITHUB_ENV
-          fi
-
-      - uses: wasco-dev/workflows/.github/actions/install-wkg@main
-
-      - name: Prepare environment
-        run: |
-          VERSION="${INPUT_VERSION}"
-          VERSION="${VERSION#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Download artifacts from workflow run
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          workflow: release.yaml
-          name: wasm-components-v${{ env.VERSION }}
-          path: ./artifacts
-          if_no_artifact_found: fail
-          search_artifacts: true
-
-      - name: Organize artifacts
-        run: |
-          components_dir=$(find artifacts -type d -name components | head -1)
-          if [ -n "$components_dir" ]; then
-            cp -r "$components_dir" .
-          fi
-
-      - name: Log in to Azure registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.AZURE_REGISTRY }}
-          username: ${{ secrets.AZURE_USERNAME }}
-          password: ${{ secrets.AZURE_PASSWORD }}
-
-      - name: Build and push WIT typings packages to Azure registry
-        run: |
-          EXIT_CODE=0
-          out_dir=$(mktemp -d)
-          while IFS= read -r wit_file; do
-            pkg_dir=$(dirname "$wit_file")
-            name=$(sed -nE 's/^package betty-blocks-types:([a-z0-9-]+).*/\1/p' "$wit_file")
-            # Version comes from the WIT package declaration, not the git tag.
-            wit_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$wit_file")
-            if [ -z "$wit_version" ]; then
-              echo "::warning::No @version in $wit_file; skipping $name"
-              EXIT_CODE=1
-              continue
-            fi
-
-            # Build from the package dir; any local WIT deps resolve via the committed wit/<pkg>/wkg.toml.
-            if ! ( cd "$pkg_dir" && wkg wit build --wit-dir . -o "$out_dir/$name.wasm" ); then
-              echo "::warning::Failed to build WIT package $name"
-              EXIT_CODE=1
-              continue
-            fi
-
-            IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-types/$name"
-            wkg oci push "${IMAGE_NAME}:${wit_version}" "$out_dir/$name.wasm" || EXIT_CODE=1
-          done < <(find wit -mindepth 2 -maxdepth 2 -name '*.wit')
-          exit $EXIT_CODE
-
-      - name: Push components to Azure registry
-        run: |
-          EXIT_CODE=0
-          for world_file in $(find components -name "world.wit" -path "*/wit/*" -not -path "*/deps/*" -not -path "*/test-component/*"); do
-            component_directory=$(dirname "$(dirname "$world_file")")
-            name=$(sed -nE 's/^package betty-blocks-utilities:([a-z0-9-]+).*/\1/p' "$world_file")
-            # Version comes from the component's WIT package declaration, not the git tag.
-            world_version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world_file")
-            if [ -z "$world_version" ]; then
-              echo "::warning::No @version in $world_file; skipping $name"
-              EXIT_CODE=1
-              continue
-            fi
-
-            wasm_file=$(find "$component_directory/target/wasm32-wasip2/release" -maxdepth 1 -name "*.wasm" 2>/dev/null | head -1)
-            if [ -z "$wasm_file" ]; then
-              wasm_file=$(find components/target/wasm32-wasip2/release -maxdepth 1 -name "*.wasm" 2>/dev/null | head -1)
-            fi
-
-            if [ -z "$wasm_file" ]; then
-              echo "::warning::Skipped $name (no .wasm artifact found)"
-              continue
-            fi
-
-            IMAGE_NAME="${{ secrets.AZURE_REGISTRY }}/betty-blocks-utilities/$name"
-            wkg oci push "${IMAGE_NAME}:${world_version}" "$wasm_file" || EXIT_CODE=1
-          done
-          exit $EXIT_CODE
+    uses: ./.github/workflows/publish-components.yaml
+    with:
+      build_run_id: ${{ format('{0}', github.event.workflow_run.id || inputs.build_run_id) }}
+      environment: dev
+      component_namespace: betty-blocks-utilities
+      wit_namespace: betty-blocks-types
+      name_column: azure_name

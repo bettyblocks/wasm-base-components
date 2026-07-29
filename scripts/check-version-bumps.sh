@@ -19,31 +19,57 @@ set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 
-# Make the base ref available (no-op if already fetched, e.g. local dev).
-git fetch -q origin "$BASE_REF" 2>/dev/null || true
+main() {
+  # Make the base ref available (no-op if already fetched, e.g. local dev).
+  git fetch -q origin "$BASE_REF" 2>/dev/null || true
 
-if git rev-parse --verify -q "origin/${BASE_REF}^{commit}" >/dev/null; then
-  BASE="origin/${BASE_REF}"
-elif git rev-parse --verify -q "${BASE_REF}^{commit}" >/dev/null; then
-  BASE="${BASE_REF}"
-else
-  echo "::error::base ref '${BASE_REF}' not found (tried origin/${BASE_REF} and ${BASE_REF})"
-  exit 1
-fi
+  if git rev-parse --verify -q "origin/${BASE_REF}^{commit}" >/dev/null; then
+    BASE="origin/${BASE_REF}"
+  elif git rev-parse --verify -q "${BASE_REF}^{commit}" >/dev/null; then
+    BASE="${BASE_REF}"
+  else
+    echo "::error::base ref '${BASE_REF}' not found (tried origin/${BASE_REF} and ${BASE_REF})"
+    exit 1
+  fi
 
-echo "Comparing against base: ${BASE}"
-changed="$(git diff --name-only "${BASE}...HEAD")"
-if [ -z "$changed" ]; then
-  echo "No changes vs base. Nothing to check."
-  exit 0
-fi
+  echo "Comparing against base: ${BASE}"
+  changed="$(git diff --name-only "${BASE}...HEAD")"
+  if [ -z "$changed" ]; then
+    echo "No changes vs base. Nothing to check."
+    exit 0
+  fi
+
+  errors=()
+
+  # --- Components: components/**/wit/world.wit (a component root is the parent of wit/) ---
+  while IFS= read -r world; do
+    [ -z "$world" ] && continue
+    dir="$(dirname "$(dirname "$world")")"
+    require_bump "$dir" "$world" \
+      "^${dir}/(src/|build\.rs$|Cargo\.toml$|wit/)" \
+      "^${dir}/wit/deps/"
+  done < <(find components -name world.wit -not -path '*/wit/deps/*' | sort)
+
+  # --- Shared WIT packages: wit/<pkg>/*.wit (only .wit changes require a bump, not wkg.toml/lock) ---
+  while IFS= read -r witfile; do
+    [ -z "$witfile" ] && continue
+    dir="$(dirname "$witfile")"
+    require_bump "$dir" "$witfile" "^${dir}/[^/]*\.wit$"
+  done < <(find wit -mindepth 2 -name '*.wit' -not -path '*/deps/*' | sort)
+
+  echo
+  if [ "${#errors[@]}" -gt 0 ]; then
+    echo "::error::Version bump required — the following packages changed without a version bump:"
+    for e in "${errors[@]}"; do echo "  • ${e}"; done
+    exit 1
+  fi
+  echo "All changed packages have a version bump. ✅"
+}
 
 # Extract the version that follows '@' in the first `package ...;` line (reads stdin).
 version_of() {
   grep -m1 -E '^package ' | sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p'
 }
-
-errors=()
 
 # require_bump <label> <version-file> <include-ERE> [<exclude-ERE>]
 require_bump() {
@@ -52,10 +78,10 @@ require_bump() {
   hits="$(printf '%s\n' "$changed" | grep -E "$include" || true)"
   [ -n "$exclude" ] && hits="$(printf '%s\n' "$hits" | grep -vE "$exclude" || true)"
   hits="$(printf '%s\n' "$hits" | grep -v '^[[:space:]]*$' || true)"
-  [ -z "$hits" ] && return 0   # nothing relevant to this package changed
+  [ -z "$hits" ] && return 0 # nothing relevant to this package changed
 
   local cur base
-  cur="$(version_of < "$vfile" 2>/dev/null)"
+  cur="$(version_of <"$vfile" 2>/dev/null)"
   base="$(git show "${BASE}:${vfile}" 2>/dev/null | version_of)"
 
   if [ -z "$base" ]; then
@@ -75,26 +101,4 @@ require_bump() {
   fi
 }
 
-# --- Components: components/**/wit/world.wit (a component root is the parent of wit/) ---
-while IFS= read -r world; do
-  [ -z "$world" ] && continue
-  dir="$(dirname "$(dirname "$world")")"
-  require_bump "$dir" "$world" \
-    "^${dir}/(src/|build\.rs$|Cargo\.toml$|wit/)" \
-    "^${dir}/wit/deps/"
-done < <(find components -name world.wit -not -path '*/wit/deps/*' | sort)
-
-# --- Shared WIT packages: wit/<pkg>/*.wit (only .wit changes require a bump, not wkg.toml/lock) ---
-while IFS= read -r witfile; do
-  [ -z "$witfile" ] && continue
-  dir="$(dirname "$witfile")"
-  require_bump "$dir" "$witfile" "^${dir}/[^/]*\.wit$"
-done < <(find wit -mindepth 2 -name '*.wit' -not -path '*/deps/*' | sort)
-
-echo
-if [ "${#errors[@]}" -gt 0 ]; then
-  echo "::error::Version bump required — the following packages changed without a version bump:"
-  for e in "${errors[@]}"; do echo "  • ${e}"; done
-  exit 1
-fi
-echo "All changed packages have a version bump. ✅"
+main "$@"

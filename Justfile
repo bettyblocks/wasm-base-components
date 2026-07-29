@@ -16,10 +16,6 @@ build-all:
 
 build: build-all
 
-deploy env version:
-  cd deploy && bun install
-  cd deploy && bun run publish {{env}} {{version}}
-
 test-all:
     #!/usr/bin/env bash
     set -euo pipefail
