@@ -53,7 +53,7 @@ jobs:
         with:
           tool: just
 
-      - uses: wasco-dev/workflows/.github/actions/install-wkg@main
+      - uses: ./.github/actions/install-wkg
 
       - name: Install wash
         shell: bash

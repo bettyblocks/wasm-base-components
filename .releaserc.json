@@ -12,13 +12,13 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "echo ${nextRelease.version} > .version"
+        "prepareCmd": "echo ${nextRelease.version} > .version && echo $GITHUB_RUN_ID > .build-run-id"
       }
     ],
     [
       "@semantic-release/git",
       {
-        "assets": ["CHANGELOG.md"],
+        "assets": ["CHANGELOG.md", ".build-run-id"],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
     ]
