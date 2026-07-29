@@ -72,6 +72,15 @@ That's deliberate: pushing is idempotent, so it's cheap (registries are content-
 blob that's already there isn't uploaded again) and re-running a publish that failed halfway is
 always safe.
 
+Each tag is a separate `wkg oci push` of the same file, because `wkg` pushes a file rather than
+pointing a tag at a digest. Only the first uploads the component; the rest find the blob already
+present and just write a manifest, so a component is three pushes but one artifact.
+
+Deployments reference `X.Y.Z`, and that tag moves with every publish — so on its own, nothing
+records *which build* is currently deployed, and there's no name for the build that worked
+yesterday. `X.Y.Z-<short-sha>` is that name: it's the tag a rollback points at, and the one to
+pin when a deployment has to stay on what it runs today.
+
 ### Republishing an old build, and rollback
 
 Dispatch **Publish WASM Components (production)** with `build_run_id` set to a

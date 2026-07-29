@@ -93,6 +93,7 @@ jobs:
   azure-prod:
     needs: which-build
     uses: ./.github/workflows/publish-components.yaml
+    secrets: inherit
     with:
       build_run_id: ${{ needs.which-build.outputs.build_run_id }}
       environment: production

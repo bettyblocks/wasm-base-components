@@ -7,8 +7,10 @@ name: Publish components
 # Each environment provides:
 #   secret  AZURE_REGISTRY   registry host, e.g. myregistry.azurecr.io. Not needed when the
 #                            caller passes registry_host (ghcr).
-#   secret  AZURE_USERNAME   optional; defaults to github.actor
-#   secret  AZURE_PASSWORD   optional; defaults to the job's GITHUB_TOKEN
+#   secret  AZURE_USERNAME   required unless the caller passes registry_host (ghcr)
+#   secret  AZURE_PASSWORD   required unless the caller passes registry_host (ghcr)
+#
+# Callers must pass `secrets: inherit`, or none of the above reach this workflow.
 
 on:
   workflow_call:
@@ -111,6 +113,8 @@ jobs:
         env:
           HOST_INPUT: ${{ inputs.registry_host }}
           HOST_SECRET: ${{ secrets.AZURE_REGISTRY }}
+          USERNAME_SECRET: ${{ secrets.AZURE_USERNAME }}
+          PASSWORD_SECRET: ${{ secrets.AZURE_PASSWORD }}
           COMPONENT_NAMESPACE: ${{ inputs.component_namespace }}
           WIT_NAMESPACE: ${{ inputs.wit_namespace }}
         run: |
@@ -122,6 +126,18 @@ jobs:
           if [ -z "$COMPONENT_NAMESPACE" ]; then
             echo "::error::component_namespace is empty — the caller must name the namespace to publish under"
             exit 1
+          fi
+
+          # A destination without a registry_host is environment-backed, so it logs in with the
+          # environment's own credentials; ghcr uses the job's GITHUB_TOKEN and needs none.
+          if [ -z "$HOST_INPUT" ]; then
+            missing=""
+            if [ -z "$USERNAME_SECRET" ]; then missing="$missing AZURE_USERNAME"; fi
+            if [ -z "$PASSWORD_SECRET" ]; then missing="$missing AZURE_PASSWORD"; fi
+            if [ -n "$missing" ]; then
+              echo "::error::environment '${{ inputs.environment }}' is missing:$missing"
+              exit 1
+            fi
           fi
 
           component_registry="$host/$COMPONENT_NAMESPACE"
@@ -166,8 +182,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ steps.dest.outputs.host }}
-          username: ${{ secrets.AZURE_USERNAME || github.actor }}
-          password: ${{ secrets.AZURE_PASSWORD || secrets.GITHUB_TOKEN }}
+          username: ${{ inputs.registry_host != '' && github.actor || secrets.AZURE_USERNAME }}
+          password: ${{ inputs.registry_host != '' && secrets.GITHUB_TOKEN || secrets.AZURE_PASSWORD }}
 
       - name: Start the summary
         run: |

@@ -39,6 +39,7 @@ jobs:
   azure-dev:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     uses: ./.github/workflows/publish-components.yaml
+    secrets: inherit
     with:
       build_run_id: ${{ format('{0}', github.event.workflow_run.id || inputs.build_run_id) }}
       environment: dev
