@@ -1,0 +1,59 @@
+name: Install wkg
+description: >-
+  Install a pinned wkg and verify its checksum before running it.
+
+# To move to a new wkg: bump WKG_VERSION and replace both digests with the ones from
+#   sha256sum wkg-x86_64-unknown-linux-gnu wkg-aarch64-unknown-linux-gnu
+# taken from https://github.com/bytecodealliance/wasm-pkg-tools/releases
+
+inputs:
+  version:
+    description: "wkg release to install, without the leading v"
+    required: false
+    default: "0.15.1"
+
+runs:
+  using: composite
+  steps:
+    - name: Install wkg
+      shell: bash
+      env:
+        WKG_VERSION: ${{ inputs.version }}
+        WKG_SHA_AMD64: 994cfcfac2d31e3514f4d30f5f7fabf8f7916458753cf81bec37464d41ec2a38
+        WKG_SHA_ARM64: cb6a3f593e30ea4342303510f23f1316b6050e85753fb4618d49cb5ff09b8d61
+      run: |
+        set -euo pipefail
+
+        case "$(uname -m)" in
+          x86_64)          target=x86_64-unknown-linux-gnu;  expected="$WKG_SHA_AMD64" ;;
+          aarch64 | arm64) target=aarch64-unknown-linux-gnu; expected="$WKG_SHA_ARM64" ;;
+          *)
+            echo "::error::no pinned wkg digest for $(uname -m)"
+            exit 1
+            ;;
+        esac
+
+        # The digests belong to one release, so fail with the reason instead of a mismatch.
+        if [ "$WKG_VERSION" != "0.15.1" ]; then
+          echo "::error::the digests in this action are for wkg 0.15.1, not $WKG_VERSION."
+          echo "::error::Update WKG_SHA_AMD64 and WKG_SHA_ARM64 together with the default version."
+          exit 1
+        fi
+
+        url="https://github.com/bytecodealliance/wasm-pkg-tools/releases/download/v${WKG_VERSION}/wkg-${target}"
+        tmp=$(mktemp -d)
+        trap 'rm -rf "$tmp"' EXIT
+
+        echo "Downloading wkg $WKG_VERSION for $target"
+        curl -fsSL --retry 3 -o "$tmp/wkg" "$url"
+
+        actual=$(sha256sum "$tmp/wkg" | cut -d' ' -f1)
+        if [ "$actual" != "$expected" ]; then
+          echo "::error::wkg $WKG_VERSION for $target does not have the expected contents."
+          echo "::error::  expected sha256:$expected"
+          echo "::error::  got      sha256:$actual"
+          exit 1
+        fi
+
+        install -m 0755 "$tmp/wkg" /usr/local/bin/wkg
+        wkg --version

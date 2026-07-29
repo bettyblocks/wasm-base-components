@@ -48,9 +48,7 @@ struct DataApiResource<'a> {
 
 impl<'a> DataApiResource<'a> {
     fn new(component: &'a mut InstantiatedComponent<Provider>) -> Self {
-        let interface = component
-            .component
-            .betty_blocks_types_data_api_data_api();
+        let interface = component.component.betty_blocks_types_data_api_data_api();
 
         let data_api_resource_def = interface.data_api();
         let data_api_resource = data_api_resource_def

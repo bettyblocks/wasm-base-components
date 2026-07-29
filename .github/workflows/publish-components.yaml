@@ -1,0 +1,201 @@
+name: Publish components
+
+# The whole publish operation, for every destination. Callers (publish.yaml for dev,
+# publish-prod.yaml for production) only pick *which build* to hand over; all publishing logic
+# lives here.
+#
+# Each environment provides:
+#   secret  AZURE_REGISTRY   registry host, e.g. myregistry.azurecr.io. Not needed when the
+#                            caller passes registry_host (ghcr).
+#   secret  AZURE_USERNAME   optional; defaults to github.actor
+#   secret  AZURE_PASSWORD   optional; defaults to the job's GITHUB_TOKEN
+
+on:
+  workflow_call:
+    inputs:
+      build_run_id:
+        description: "Build WASM Components run whose .wasm files get published"
+        required: true
+        type: string
+      environment:
+        description: "Environment supplying the registry host and credentials"
+        required: true
+        type: string
+      registry_host:
+        description: "Registry host, for destinations whose host is public (ghcr.io). Empty means take it from the environment's AZURE_REGISTRY secret."
+        required: false
+        default: ""
+        type: string
+      component_namespace:
+        description: "Namespace the component images live under, e.g. betty-blocks-utilities"
+        required: true
+        type: string
+      wit_namespace:
+        description: "Namespace the WIT packages live under; empty means do not publish WIT here"
+        required: false
+        default: ""
+        type: string
+      name_column:
+        description: "Which image name this registry uses: ghcr_name or azure_name"
+        required: true
+        type: string
+      tag_latest:
+        description: "Also move :latest to this version"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+
+    # One publish per destination at a time, so concurrent runs cannot leave the moving tags
+    # (X.Y.Z, latest) pointing at the older build.
+    concurrency:
+      group: publish-components-${{ inputs.environment }}-${{ inputs.component_namespace }}
+      cancel-in-progress: false
+
+    env:
+      WASM_TOOLS_VERSION: "1.235.0"
+
+      # key|wasm|world|ghcr_name|azure_name
+      #
+      # scripts/publish-components.sh fails on a betty-blocks-utilities world.wit missing from
+      # this table, so forgetting to list a new component is an error, not a silent skip.
+      COMPONENTS: |
+        auth|components/utilities/auth/target/wasm32-wasip2/release/jwt_auth_component.wasm|components/utilities/auth/wit/world.wit|auth-component|auth
+        crud|components/utilities/crud/target/wasm32-wasip2/release/crud_component.wasm|components/utilities/crud/wit/world.wit|crud-component|crud
+        data-api|components/utilities/data-api/target/wasm32-wasip2/release/data_api_component.wasm|components/utilities/data-api/wit/world.wit|data-api-component|data-api
+        upload-file|components/utilities/upload-file/target/wasm32-wasip2/release/upload_file.wasm|components/utilities/upload-file/wit/world.wit|upload-file-component|upload-file
+        pdf-generator|components/utilities/pdf-generator/target/wasm32-wasip2/release/pdf_generator.wasm|components/utilities/pdf-generator/wit/world.wit|pdf-generator-component|pdf-generator
+        http-wrapper|components/http-wrapper/target/wasm32-wasip2/release/http_wrapper.wasm|components/http-wrapper/wit/world.wit|http-wrapper|http-wrapper
+        log-to-stdout|components/target/wasm32-wasip2/release/log_to_stdout.wasm|components/utilities/log-to-stdout/wit/world.wit|log-to-stdout|log-to-stdout
+        http-mcp|components/http-mcp/target/wasm32-wasip2/release/mcp_component.wasm|components/http-mcp/wit/world.wit|http-mcp|mcp
+        logs-writer|components/logs-writer/target/wasm32-wasip2/release/logs_writer.wasm|components/logs-writer/wit/world.wit|logs-writer|logs-writer
+
+    steps:
+      # Everything below is anchored to the build's commit, not to the commit this publish run sits on.
+      - name: Find the commit this build was made from
+        id: build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          head_sha=$(gh run view "$BUILD_RUN_ID" --json headSha --jq '.headSha')
+          if [ -z "$head_sha" ]; then
+            echo "::error::build run $BUILD_RUN_ID has no head SHA — check the run id"
+            exit 1
+          fi
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${head_sha:0:7}" >> "$GITHUB_OUTPUT"
+          echo "Publishing build run $BUILD_RUN_ID, built from $head_sha"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.build.outputs.head_sha }}
+
+      - uses: ./.github/actions/install-wkg
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-tools@${{ env.WASM_TOOLS_VERSION }}
+
+      - name: Work out where this environment publishes to
+        id: dest
+        env:
+          HOST_INPUT: ${{ inputs.registry_host }}
+          HOST_SECRET: ${{ secrets.AZURE_REGISTRY }}
+          COMPONENT_NAMESPACE: ${{ inputs.component_namespace }}
+          WIT_NAMESPACE: ${{ inputs.wit_namespace }}
+        run: |
+          host=${HOST_INPUT:-$HOST_SECRET}
+          if [ -z "$host" ]; then
+            echo "::error::no registry host: environment '${{ inputs.environment }}' has no AZURE_REGISTRY secret and the caller passed no registry_host."
+            exit 1
+          fi
+          if [ -z "$COMPONENT_NAMESPACE" ]; then
+            echo "::error::component_namespace is empty — the caller must name the namespace to publish under"
+            exit 1
+          fi
+
+          component_registry="$host/$COMPONENT_NAMESPACE"
+          wit_registry=""
+          [ -n "$WIT_NAMESPACE" ] && wit_registry="$host/$WIT_NAMESPACE"
+
+          {
+            echo "component_registry=$component_registry"
+            echo "wit_registry=$wit_registry"
+            echo "host=$host"
+          } >> "$GITHUB_OUTPUT"
+          echo "Components -> $component_registry"
+          echo "WIT        -> ${wit_registry:-(skipped)}"
+
+      - name: Download the build's .wasm files
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: wasm-components
+          path: ./artifacts
+
+      - name: Put the .wasm files where the table expects them
+        run: |
+          if [ ! -d artifacts/components ]; then
+            echo "::error::the build bundle has no components/ directory"
+            find artifacts -maxdepth 2 | head -30
+            exit 1
+          fi
+          cp -r artifacts/components .
+
+      # The tag comes from each world.wit's version, so prove the .wasm was built from that same
+      # file before anything is pushed.
+      - name: Check every .wasm against the world in this checkout
+        env:
+          REGISTRY: ${{ steps.dest.outputs.component_registry }}
+          NAME_COLUMN: ${{ inputs.name_column }}
+          MODE: check
+        run: ./scripts/publish-components.sh
+
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ steps.dest.outputs.host }}
+          username: ${{ secrets.AZURE_USERNAME || github.actor }}
+          password: ${{ secrets.AZURE_PASSWORD || secrets.GITHUB_TOKEN }}
+
+      - name: Start the summary
+        run: |
+          {
+            echo "## Published to \`${{ inputs.environment }}\`"
+            echo
+            echo "**Build run:** \`${{ inputs.build_run_id }}\`, built from \`${{ steps.build.outputs.head_sha }}\`"
+            echo "**Components:** \`${{ steps.dest.outputs.component_registry }}\`"
+            echo
+            echo "Tags come from each package's own WIT version, not from a git tag."
+            echo "\`X.Y.Z\` (and \`latest\`) move with every build; \`X.Y.Z-${SHORT_SHA}\` names these"
+            echo "exact bytes and is never rewritten — pin that one."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SHORT_SHA: ${{ steps.build.outputs.short_sha }}
+
+      - name: Push the WIT packages
+        if: steps.dest.outputs.wit_registry != ''
+        env:
+          REGISTRY: ${{ steps.dest.outputs.wit_registry }}
+        run: ./scripts/publish-wit-packages.sh
+
+      - name: Push the component images
+        env:
+          REGISTRY: ${{ steps.dest.outputs.component_registry }}
+          NAME_COLUMN: ${{ inputs.name_column }}
+          MODE: push
+          TAG_LATEST: ${{ inputs.tag_latest }}
+          SOURCE_SHA: ${{ steps.build.outputs.head_sha }}
+        run: ./scripts/publish-components.sh

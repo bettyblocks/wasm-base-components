@@ -38,7 +38,7 @@ jobs:
         with:
           tool: just
 
-      - uses: wasco-dev/workflows/.github/actions/install-wkg@main
+      - uses: ./.github/actions/install-wkg
 
       - name: Install wash
         shell: bash
@@ -62,6 +62,15 @@ jobs:
       - name: Build wasm components
         run: just build
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-components
+          path: |
+            **/target/wasm32-wasip2/release/*.wasm
+          retention-days: 90
+          overwrite: true
+
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -76,12 +85,3 @@ jobs:
           else
             echo "has_release=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Upload build artifacts
-        if: steps.version.outputs.has_release == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: wasm-components-v${{ steps.version.outputs.version }}
-          path: |
-            **/target/wasm32-wasip2/release/*.wasm
-          retention-days: 90
