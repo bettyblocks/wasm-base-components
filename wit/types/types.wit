@@ -1,4 +1,4 @@
-package betty-blocks-types:types@2.0.0;
+package betty-blocks-types:types@2.1.0;
 
 interface types {
     type json-string = string;
@@ -11,6 +11,15 @@ interface types {
 
     record betty-record {
         id: u64
+    }
+
+    record betty-collection {
+        model: betty-model,
+        data: option<list<betty-record-json>>
+    }
+
+    record betty-authentication-profile {
+        id: option<string> 
     }
 
     record betty-selected-record {
