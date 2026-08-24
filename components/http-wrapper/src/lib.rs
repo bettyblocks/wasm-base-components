@@ -190,6 +190,7 @@ mod tests {
                 input: serde_json::Value::Object(Default::default()).to_string(),
                 configurations: serde_json::Value::Object(Default::default()).to_string(),
             },
+            jwt: None,
         };
 
         let test_action = |action_input: &Input| -> Result<Output, ActionError> {
@@ -240,6 +241,7 @@ mod tests {
                 input: input.to_string(),
                 configurations: serde_json::Value::Object(Default::default()).to_string(),
             },
+            jwt: None,
         };
 
         assert!(serde_json::to_vec(&input).unwrap().len() as u64 > MAX_READ);
@@ -300,6 +302,7 @@ mod tests {
                 input: serde_json::Value::Object(Default::default()).to_string(),
                 configurations: serde_json::Value::Object(Default::default()).to_string(),
             },
+            jwt: None,
         };
 
         let test_action =
@@ -326,6 +329,7 @@ mod tests {
                 input: serde_json::Value::Object(Default::default()).to_string(),
                 configurations: serde_json::Value::Object(Default::default()).to_string(),
             },
+            jwt: None,
         };
 
         let test_action = |_: &Input| -> Result<Output, ActionError> {

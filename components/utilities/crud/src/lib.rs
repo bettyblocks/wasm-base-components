@@ -2,9 +2,7 @@ wit_bindgen::generate!({ generate_all });
 
 use crate::betty_blocks_types::data_api::data_api::request;
 use crate::betty_blocks_types::data_api::data_api::HelperContext;
-use crate::betty_blocks_types::types::types::{
-    BettyProperty, BettyPropertyMap, BettyPropertyPath,
-};
+use crate::betty_blocks_types::types::types::{BettyProperty, BettyPropertyMap, BettyPropertyPath};
 use crate::exports::betty_blocks_types::crud::crud::{
     BettyModel, BettyPropertyMapping, BettyRecordJson, Guest,
 };
