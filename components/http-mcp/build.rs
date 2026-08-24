@@ -28,6 +28,14 @@ fn main() {
         .expect("Failed to compile mcp-component");
     assert!(status.success(), "mcp-component WASM build failed");
 
+    println!("cargo:warning=Fetching WIT deps for jwt-auth-component...");
+    let status = Command::new("wkg")
+        .args(["wit", "fetch"])
+        .current_dir(&auth_dir)
+        .status()
+        .expect("Failed to run wkg wit fetch for jwt-auth-component");
+    assert!(status.success(), "wkg wit fetch failed for jwt-auth-component");
+
     println!("cargo:warning=Building jwt-auth-component for wasm32-wasip2...");
     let status = Command::new("cargo")
         .args([
