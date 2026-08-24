@@ -34,7 +34,10 @@ fn main() {
         .current_dir(&auth_dir)
         .status()
         .expect("Failed to run wkg wit fetch for jwt-auth-component");
-    assert!(status.success(), "wkg wit fetch failed for jwt-auth-component");
+    assert!(
+        status.success(),
+        "wkg wit fetch failed for jwt-auth-component"
+    );
 
     println!("cargo:warning=Building jwt-auth-component for wasm32-wasip2...");
     let status = Command::new("cargo")
