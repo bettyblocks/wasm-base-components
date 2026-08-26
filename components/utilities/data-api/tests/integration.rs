@@ -12,6 +12,7 @@ use wasmtime_testing_helper::http::{HttpHandler, hyper};
 use wasmtime_testing_helper::wasmtime::Store;
 use wasmtime_testing_helper::wasmtime::component::ResourceAny;
 use wasmtime_testing_helper::{ComponentState, InstantiatedComponent};
+#[allow(clippy::result_large_err)]
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");
 }
