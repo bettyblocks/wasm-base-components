@@ -7,6 +7,7 @@ use wasmcloud_grpc_client::GrpcEndpoint;
 
 use exports::betty_blocks_types::data_api::data_api::{Guest, HelperContext};
 
+#[allow(clippy::result_large_err)]
 pub mod data_grpc {
     tonic::include_proto!("data_grpc");
 }
