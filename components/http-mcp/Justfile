@@ -1,5 +1,6 @@
 fetch-wit-deps:
     wkg wit fetch
+    cd ../utilities/auth && wkg wit fetch
 
 build: fetch-wit-deps
     wash build --skip-fetch
