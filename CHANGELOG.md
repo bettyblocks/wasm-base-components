@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.19.0...v1.20.0) (2026-09-02)
+
+
+### Features
+
+* add bb map and value type ([eb29f83](https://github.com/bettyblocks/wasm-base-components/commit/eb29f83178fa9d3df50ad02249497552d6136418))
+
 # [1.19.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.3...v1.19.0) (2026-09-02)
 
 
