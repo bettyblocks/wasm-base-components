@@ -1,3 +1,29 @@
+# [1.19.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.3...v1.19.0) (2026-09-02)
+
+
+### Bug Fixes
+
+* add clippy exception also in tests ([bc3b0eb](https://github.com/bettyblocks/wasm-base-components/commit/bc3b0eb4dec804cabd214ebe9ce966872b6a3366))
+* add clippy exception for grpc error ([c5c62e0](https://github.com/bettyblocks/wasm-base-components/commit/c5c62e0a8b5d6660459866e9a98b15fa9608a9e0))
+* bump http-wrapper package version, otherwise it gets overwritten ([c9fc272](https://github.com/bettyblocks/wasm-base-components/commit/c9fc2721d85b9c805cda7e3e3ace24e2de5b923c))
+* fetch auth WIT deps in http-mcp, which builds it as a test fixture ([72cd6a6](https://github.com/bettyblocks/wasm-base-components/commit/72cd6a699ecabc2887e7ca20bdb10f7c12c5848a))
+* make building of the components not order dependent by fetching wit ([f19d99a](https://github.com/bettyblocks/wasm-base-components/commit/f19d99afe23d8305ad2be9a0c8145843e477d656))
+* repoint consumers at types@2.1.0 without cascading version bumps ([7f5f340](https://github.com/bettyblocks/wasm-base-components/commit/7f5f34084da5dc4ed5fc3dac1bf867aa23b34311))
+* version betty blocks types ([26187fc](https://github.com/bettyblocks/wasm-base-components/commit/26187fce40891be913a536bd05bcc3357e6690b1))
+
+
+### Features
+
+* add betty-collection type ([ca18f03](https://github.com/bettyblocks/wasm-base-components/commit/ca18f03875b14e14946e62aacb0c2020b201a80b))
+* pass the jwt from the caller to the action ([5bcb3e1](https://github.com/bettyblocks/wasm-base-components/commit/5bcb3e1992e2cc0f53396b1485540c8ab2f9e86e))
+
+## [1.18.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.2...v1.18.3) (2026-07-27)
+
+
+### Bug Fixes
+
+* adjust interface of upload-file so that you not have file size *48 ([6343c7c](https://github.com/bettyblocks/wasm-base-components/commit/6343c7c1ac0a0918e148d9dc54410c9af3666445))
+
 ## [1.18.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.18.1...v1.18.2) (2026-07-23)
 
 
