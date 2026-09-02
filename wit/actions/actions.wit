@@ -1,4 +1,4 @@
-package betty-blocks-types:actions@2.0.0;
+package betty-blocks-types:actions@2.1.0;
 
 interface actions {
     use betty-blocks-types:types/types@2.0.0.{json-string};
@@ -11,6 +11,7 @@ interface actions {
     record run-input {
         action-id: string,
         payload: run-payload,
+        jwt: option<string>,
     }
 
     record run-output {
