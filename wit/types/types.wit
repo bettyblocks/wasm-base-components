@@ -1,4 +1,4 @@
-package betty-blocks-types:types@2.1.0;
+package betty-blocks-types:types@2.2.0;
 
 interface types {
     type json-string = string;
@@ -19,7 +19,7 @@ interface types {
     }
 
     record betty-authentication-profile {
-        id: option<string> 
+        id: option<string>
     }
 
     record betty-selected-record {
@@ -43,4 +43,13 @@ interface types {
     }
 
     type betty-property-mapping = list<betty-property-map>;
+
+    record key-value {
+        key: string,
+        value: option<json-string>
+    }
+
+    type betty-map = list<key-value>;
+
+    type betty-value = json-string;
 }
