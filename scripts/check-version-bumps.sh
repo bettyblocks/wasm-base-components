@@ -12,6 +12,15 @@
 # Generated/tooling files never trigger the requirement: wit/deps/ (gitignored),
 # target/ (gitignored), wkg.lock, .wash/, tests/, docs, Justfile, etc.
 #
+# One WIT-only exemption: a change that does nothing but repoint a `use`/`import`/
+# `export` at a new version of *another* package. WIT resolves dependencies by exact
+# version, so bumping one package forces every consumer to edit that line; demanding a
+# bump there too would cascade a single leaf change across the whole dependency graph
+# (and on through each consumer's own consumers). Such a package still describes the
+# same interface, so it keeps its version. Anything else in the .wit differing -- a new
+# record, a changed signature, or the package's own `package ...@X.Y.Z;` line -- is a
+# real change and still requires a bump.
+#
 # Usage:
 #   GITHUB_BASE_REF=main ./scripts/check-version-bumps.sh
 #   ./scripts/check-version-bumps.sh <base-ref-or-sha>
@@ -71,6 +80,30 @@ version_of() {
   grep -m1 -E '^package ' | sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p'
 }
 
+# Drop the version tag from every reference to another package, so that a change which
+# only repoints a dependency compares equal to the base. The `package ...@X.Y.Z;` line is
+# deliberately left intact: that version is the one require_bump checks.
+normalize_wit() {
+  sed -E '/^[[:space:]]*package[[:space:]]/!s/@[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?//g'
+}
+
+# Reads changed paths on stdin. True only when every one of them is a .wit file whose
+# sole difference from the base is the version on a reference to another package.
+only_dep_version_refs_changed() {
+  local f
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+    *.wit) ;;
+    *) return 1 ;; # non-WIT input (src/, Cargo.toml, ...) -- a bump is genuinely required
+    esac
+    [ -f "$f" ] || return 1                             # deleted
+    git show "${BASE}:${f}" >/dev/null 2>&1 || return 1  # newly added
+    diff -q <(git show "${BASE}:${f}" | normalize_wit) <(normalize_wit <"$f") >/dev/null || return 1
+  done
+  return 0
+}
+
 # require_bump <label> <version-file> <include-ERE> [<exclude-ERE>]
 require_bump() {
   local label="$1" vfile="$2" include="$3" exclude="${4:-}"
@@ -79,6 +112,11 @@ require_bump() {
   [ -n "$exclude" ] && hits="$(printf '%s\n' "$hits" | grep -vE "$exclude" || true)"
   hits="$(printf '%s\n' "$hits" | grep -v '^[[:space:]]*$' || true)"
   [ -z "$hits" ] && return 0 # nothing relevant to this package changed
+
+  if printf '%s\n' "$hits" | only_dep_version_refs_changed; then
+    echo "⏭️  ${label}: only dependency version references changed — no bump required"
+    return 0
+  fi
 
   local cur base
   cur="$(version_of <"$vfile" 2>/dev/null)"
