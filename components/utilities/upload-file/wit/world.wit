@@ -3,7 +3,7 @@ package betty-blocks-utilities:upload-file@3.0.0;
 world upload {
     import wasi:http/outgoing-handler@0.2.0;
     import betty-blocks-types:data-api/data-api@2.0.0;
-    import betty-blocks-types:types/types@2.1.0;
+    import betty-blocks-types:types/types@2.2.0;
 
     export betty-blocks-types:upload-file/upload-file@3.0.0;
 }
