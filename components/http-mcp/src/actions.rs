@@ -89,11 +89,42 @@ async fn send_http_request(
     crate::reject_oversized_body("Action response", &response_text, MAX_ACTION_RESPONSE_SIZE)?;
 
     if !status.is_success() {
+        let parsed_error_message = extract_error_message(&response_text);
         return Err(format!(
-            "Action HTTP request failed with status {status}: {response_text}"
+            "Action HTTP request failed with status {status}: {parsed_error_message}"
         ));
     }
     Ok(response_text)
+}
+
+fn extract_error_message(response_text: &str) -> String {
+    let trimmed = response_text.trim();
+    if trimmed.is_empty() {
+        return "(downstream returned empty error body)".to_string();
+    }
+
+    let parsed: Value = match serde_json::from_str(trimmed) {
+        Ok(value) => value,
+        Err(_) => return trimmed.to_string(),
+    };
+
+    parsed
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .or_else(|| {
+            parsed
+                .get("message")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            parsed
+                .get("error")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| trimmed.to_string())
 }
 
 /// Best-effort early rejection based on response content-length (may be absent).
@@ -122,6 +153,36 @@ pub fn parse_action_output(output: &Value) -> Vec<ContentBlock> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn test_extract_error_message_empty_body() {
+        let message = extract_error_message(" ");
+        assert_eq!(message, "(downstream returned empty error body)");
+    }
+
+    #[test]
+    fn test_extract_error_message_plain_text() {
+        let message = extract_error_message("Custom plain-text error");
+        assert_eq!(message, "Custom plain-text error");
+    }
+
+    #[test]
+    fn test_extract_error_message_json_nested_error_message() {
+        let message = extract_error_message(r#"{"error":{"message":"Raised from action"}}"#);
+        assert_eq!(message, "Raised from action");
+    }
+
+    #[test]
+    fn test_extract_error_message_json_message() {
+        let message = extract_error_message(r#"{"message":"Top-level message"}"#);
+        assert_eq!(message, "Top-level message");
+    }
+
+    #[test]
+    fn test_extract_error_message_json_error_string() {
+        let message = extract_error_message(r#"{"error":"Simple error"}"#);
+        assert_eq!(message, "Simple error");
+    }
 
     #[test]
     fn test_parse_action_output_null() {
