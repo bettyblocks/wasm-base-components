@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.20.0...v1.21.0) (2026-09-14)
+
+
+### Features
+
+* add new type ai provider ([db751c9](https://github.com/bettyblocks/wasm-base-components/commit/db751c931e0874fc39dfcdffdae91644a5c0edb3))
+
 # [1.20.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.19.0...v1.20.0) (2026-09-02)
 
 
