@@ -1,6 +1,8 @@
-fetch-wit-deps:
-    wkg wit fetch
-    cd ./test-component/ && wkg wit fetch
+set allow-duplicate-recipes := true
+import '../../wit-deps.just'
+
+fetch-wit-deps: wkg-fetch
+    cd test-component && {{ repo_root }}/scripts/generate-wkg-toml.sh && wkg wit fetch
 
 build: fetch-wit-deps
     wash build --skip-fetch
