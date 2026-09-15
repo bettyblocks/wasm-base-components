@@ -1,3 +1,11 @@
+## [1.21.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.0...v1.21.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* resolve unadopted WIT dependencies from the registry ([ab46086](https://github.com/bettyblocks/wasm-base-components/commit/ab46086e14b975c8fa3b951afadfdc4924c2aa47))
+* revert to older check version bumps ([84631f4](https://github.com/bettyblocks/wasm-base-components/commit/84631f4d7ae159e3624c41cd106d59d3eacb84f1))
+
 # [1.21.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.20.0...v1.21.0) (2026-09-14)
 
 
