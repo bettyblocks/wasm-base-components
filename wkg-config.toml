@@ -1,0 +1,5 @@
+# wasi is listed explicitly: naming a config file replaces wkg's built-in namespace defaults
+# rather than adding to them, so leaving it out breaks every wasi: import.
+[namespace_registries]
+wasi = "wasi.dev"
+betty-blocks-types = "bettyblocksdev.azurecr.io"
