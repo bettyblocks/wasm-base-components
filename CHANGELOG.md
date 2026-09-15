@@ -1,3 +1,10 @@
+## [1.21.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.1...v1.21.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* revert type versions ([6d5669f](https://github.com/bettyblocks/wasm-base-components/commit/6d5669fa3ab9c38fb32a3d08ac9242f6d0774bc6))
+
 ## [1.21.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.0...v1.21.1) (2026-09-15)
 
 
