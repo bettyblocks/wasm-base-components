@@ -1,3 +1,10 @@
+## [1.21.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.2...v1.21.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* read WIT dependencies without the push credentials ([a28e7cf](https://github.com/bettyblocks/wasm-base-components/commit/a28e7cfc8853c932c0035c151eb7e120bfc35010))
+
 ## [1.21.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.1...v1.21.2) (2026-09-15)
 
 
