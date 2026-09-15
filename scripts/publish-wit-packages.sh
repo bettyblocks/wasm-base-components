@@ -7,13 +7,19 @@
 # `package betty-blocks-types:<name>@X.Y.Z;` declaration, never a git tag.
 #
 # Env:
-#   REGISTRY  required  host and namespace, e.g. myreg.azurecr.io/betty-blocks-types
-#   DRY_RUN   optional  true to print instead of pushing
+#   REGISTRY        required  host and namespace, e.g. myreg.azurecr.io/betty-blocks-types
+#   DRY_RUN         optional  true to print instead of pushing
+#   WKG_CONFIG_FILE optional  registry config; defaults to the repo's wkg-config.toml
 
 set -uo pipefail
 
 : "${REGISTRY:?REGISTRY is required (host and namespace, e.g. myreg.azurecr.io/betty-blocks-types)}"
 DRY_RUN=${DRY_RUN:-false}
+
+# A package whose dependency this checkout does not hold at the declared version resolves it
+# from the registry, so building one needs the registry config and the generated wkg.toml.
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export WKG_CONFIG_FILE=${WKG_CONFIG_FILE:-$repo_root/wkg-config.toml}
 
 main() {
   build_dir=$(mktemp -d)
@@ -70,7 +76,7 @@ read_package_declaration() {
 
 build_wit_package() {
   local package_dir=$1 name=$2
-  (cd "$package_dir" && wkg wit build --wit-dir . -o "$build_dir/$name.wasm")
+  (cd "$package_dir" && "$repo_root/scripts/generate-wkg-toml.sh" && wkg wit build --wit-dir . -o "$build_dir/$name.wasm")
 }
 
 append_to_summary() {

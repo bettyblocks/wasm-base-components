@@ -112,11 +112,43 @@ Prefer republishing the **original run id** rather than re-running the build for
 run id means the same artifact, so the push is a genuine no-op. Re-running the build gives you
 equivalent-but-different bytes under a tag someone may already have pinned.
 
+## WIT dependencies
+
+Every package under `wit/` is published to the Betty Blocks registries, and a component takes
+each dependency from one of two places:
+
+- **this checkout**, when `wit/<pkg>` declares exactly the version the component asks for —
+  which is always true for a version that only exists on your branch, so a WIT change and the
+  component that adopts it can land in one PR;
+- **the registry** (`bettyblocksdev.azurecr.io`, anonymous pull, no login needed) otherwise —
+  a component that stayed on `types@2.2.0` keeps building after `wit/types` moves to `2.3.0`,
+  instead of every consumer having to follow the bump.
+
+`scripts/generate-wkg-toml.sh` makes that choice and writes the `wkg.toml` that `wkg` reads. It
+runs from `fetch-wit-deps` in every component Justfile (shared via `wit-deps.just`) and from
+`publish-wit-packages.sh`, so `just build` is all you need. The generated `wkg.toml` is
+gitignored and rewritten on every build — don't commit it, and don't edit it. `wkg.lock`
+*is* committed: it pins the registry half of the resolution by digest.
+
+Two consequences worth knowing:
+
+- Run `just build` (or `just fetch-wit-deps`), not a bare `wkg wit fetch` — on its own, wkg
+  has neither the overrides nor the registry config and will fail on anything unpublished.
+- When a component adopts a new version of a WIT package, everything in its graph has to name
+  that same version. `wkg wit fetch` resolves a whole world at once and keys dependencies by
+  package name *without* the version, so the first version it meets wins and the rest are
+  dropped; the build then fails with `package '...@X.Y.Z' not found. known packages:` naming
+  the one that survived. The generator catches it first and names the files that disagree.
+  Two versions *can* coexist in principle — a component can import both, and wasmCloud links
+  them independently — but only by fetching each with `wkg get <pkg>@<version>`, which this
+  repo does not do. Verified in the [WIT interface
+  spikes](https://gitlab.betty.services/code/wasmcloud-experimentation-wit-interfaces).
+
 ## Local Setup
 
 - install [rust](https://rust-lang.org/tools/install/)
 - install [wash](https://wasmcloud.com/docs/installation/)
-- install [just](https://github.com/casey/just)
+- install [just](https://github.com/casey/just), 1.27 or newer
 - install [bun](https://bun.sh/) (for semantic-release)
 
 ## Local Build
@@ -133,4 +165,6 @@ See the [./integration-test](./integration-test) folder
 - components: contains wasm components that are not action steps
 - integration-test: Contains the tests to verify that the providers work in wasmcloud
 - wit: contains shared WIT interface definitions used by the wasm components
+- wit-deps.just: shared `fetch-wit-deps` recipe, imported by every component Justfile
+- wkg-config.toml: registry configuration for wkg/wash (see [WIT dependencies](#wit-dependencies))
 - .github/workflows: CI/CD pipelines for building, releasing, and publishing

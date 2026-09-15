@@ -1,5 +1,4 @@
-fetch-wit-deps:
-    wkg wit fetch
+import '../../../wit-deps.just'
 
 build: fetch-wit-deps
     wash build --skip-fetch
