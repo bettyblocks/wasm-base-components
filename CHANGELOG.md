@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.22.0...v1.23.0) (2026-09-16)
+
+
+### Features
+
+* add api key ([09fda0a](https://github.com/bettyblocks/wasm-base-components/commit/09fda0a5d473041b67c49da228290819b81f8a8c))
+
 # [1.22.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.3...v1.22.0) (2026-09-16)
 
 
