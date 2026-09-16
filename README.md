@@ -125,46 +125,30 @@ These are the versions written by hand in `wit/<pkg>/*.wit` and `components/<c>/
 They are unrelated to the repo's own release version in `CHANGELOG.md`, which semantic-release
 keeps bumping normally from conventional commits.
 
-The reason is that `wit-parser` buckets versions into a **compatibility class** — the leftmost
-non-zero component — and when one build ends up with two versions of a package in the same
-class, it silently rewrites the older consumer's imports onto the newer one. That check does not
-look inside a record, so a renamed field, a reordered field or a `u32`→`s32` flip all pass and
-the older consumer is rebound onto a different memory layout without warning. Major-only bumps
-mean two releases are never in the same class, so the rewrite never has a pair to act on.
-
-The full reasoning, including what does and does not get caught, is in
-[ADR 001](docs/decisions/001-major-only-wit-version-bumps.md).
+The reasoning — what `wit-parser` merges inside one compatibility class, and why that rewrite is
+unsafe — is in [ADR 001](docs/decisions/001-major-only-wit-version-bumps.md).
 
 ### Iterating on dev
 
-`dev` tags are mutable — every publish overwrites `X.Y.Z` in place — so you do **not** need a
-new major per PR while a change is still being worked on. Take the next major **once**, then
-keep reusing it for as long as the change is in flight:
+`dev` tags are mutable — every publish overwrites `X.Y.Z` in place — so a change still in flight
+does not need a new major per PR. Take the next major **once**, then keep reusing it:
 
 | PR | package version | verdict |
 |---|---|---|
 | first feature PR into `dev` | `2.0.0` → `3.0.0` | ✅ the one bump |
-| follow-up PR into `dev` | stays `3.0.0` | ♻️ reuse, allowed |
-| another follow-up into `dev` | stays `3.0.0` | ♻️ reuse, allowed |
+| follow-up PRs into `dev` | stays `3.0.0` | ♻️ reuse, allowed |
 | promotion PR `dev` → `main` | `2.0.0` → `3.0.0` vs `main` | ✅ exactly one major step |
 
-Reuse is allowed **only** when the PR's base is `dev`. The promotion PR compares against `main`,
-so however many times a package was republished on `dev`, `main` must still see a single major
-step. Bumping twice on `dev` (`2.0.0` → `3.0.0` → `4.0.0`) passes each dev PR and then **blocks
-the promotion**, because `main` would be asked to jump from `2.0.0` to `4.0.0`. If that happens,
-collapse the versions back to one major before promoting.
-
-Reuse is not a licence to skip the shape: a bump made on `dev` still has to be `@(X+1).0.0`.
-`3.0.0` → `3.0.1` is rejected on `dev` exactly as it is on `main`.
-
-Because a reused version means the dev registry's `X.Y.Z` tag now points at different bytes than
-it did yesterday, pin `X.Y.Z-<short-sha>` for anything that has to stay put — see
+Reuse needs the PR’s base to be `dev`, and a bump made there still has to be `@(X+1).0.0`. Bump
+twice on `dev` and the promotion to `main` is blocked — collapse the versions back to one major
+first. Because a reused tag points at different bytes than it did yesterday, pin
+`X.Y.Z-<short-sha>` for anything that has to stay put — see
 [What gets tagged](#what-gets-tagged).
 
 ### Enforcement
 
 `scripts/check-version-bumps.sh`, run by the **Version Check** workflow on every PR. It compares
-each package whose files changed against the same file on the PR's base branch:
+each package whose files changed against the same file on the PR’s base branch:
 
 - changed and not bumped → ❌, unless the base is `dev`, where it is ♻️ reuse;
 - changed and bumped to anything but `@(X+1).0.0` → ❌, on every base;
@@ -173,6 +157,9 @@ each package whose files changed against the same file on the PR's base branch:
 Run it locally with the base you intend to target: `./scripts/check-version-bumps.sh dev` or
 `./scripts/check-version-bumps.sh main`. It diffs `<base>...HEAD`, so it reads **committed**
 state — uncommitted edits are invisible to it.
+
+The check gates PRs, not the registry: if a wrong major already got published, correcting it is
+a manual deploy — ask the team.
 
 ## WIT dependencies
 

@@ -20,11 +20,9 @@ set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 
-# dev is the integration branch and its registry tags are mutable — every publish overwrites
-# X.Y.Z in place. So while a change is still being iterated on, a package may keep the major it
-# already took on dev instead of burning a new one per PR. The promotion PR (dev -> main) is
-# where the bump becomes mandatory, and it compares against main, so however many times a
-# package was republished on dev, the promotion must still show exactly one major step.
+# dev is an integration branch, not a production environment, so overwriting a version that is
+# still in development is safe: a changed package may keep the major it already took there. The
+# promotion PR compares against main, which still has to show exactly one major step.
 REUSE_ALLOWED_ON="dev"
 
 main() {
