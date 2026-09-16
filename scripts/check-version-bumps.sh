@@ -20,6 +20,13 @@ set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 
+# dev is the integration branch and its registry tags are mutable — every publish overwrites
+# X.Y.Z in place. So while a change is still being iterated on, a package may keep the major it
+# already took on dev instead of burning a new one per PR. The promotion PR (dev -> main) is
+# where the bump becomes mandatory, and it compares against main, so however many times a
+# package was republished on dev, the promotion must still show exactly one major step.
+REUSE_ALLOWED_ON="dev"
+
 main() {
   # Make the base ref available (no-op if already fetched, e.g. local dev).
   git fetch -q origin "$BASE_REF" 2>/dev/null || true
@@ -34,6 +41,14 @@ main() {
   fi
 
   echo "Comparing against base: ${BASE}"
+
+  if [ "$BASE_REF" = "$REUSE_ALLOWED_ON" ]; then
+    allow_reuse=true
+    echo "Base is ${REUSE_ALLOWED_ON}: a changed package may reuse the version it already has there."
+  else
+    allow_reuse=false
+  fi
+
   changed="$(git diff --name-only "${BASE}...HEAD")"
   if [ -z "$changed" ]; then
     echo "No changes vs base. Nothing to check."
@@ -95,6 +110,10 @@ require_bump() {
     return 0
   fi
   if [ "$cur" = "$base" ]; then
+    if [ "$allow_reuse" = true ]; then
+      echo "♻️  ${label}: changed, version reused @${cur} — allowed on ${BASE_REF}"
+      return 0
+    fi
     errors+=("${label} — changed but version NOT bumped (still @${cur}); bump the version in ${vfile}")
     echo "❌ ${label}: changed, version still @${cur}"
     return 0
