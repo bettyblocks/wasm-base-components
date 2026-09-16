@@ -55,6 +55,7 @@ interface types {
         name: string,
         ai-model-name: string,
         url: string,
+        api-key: string,
         tools: option<list<json-string>>
     }
 
