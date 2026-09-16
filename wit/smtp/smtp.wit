@@ -1,4 +1,4 @@
-package betty-blocks-types:smtp@2.0.0;
+package betty-blocks-types:smtp@3.0.0;
 
 interface client {
     record credentials {
