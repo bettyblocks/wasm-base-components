@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.23.0...v1.24.0) (2026-09-16)
+
+
+### Features
+
+* move every WIT package and component to a fresh major ([5d70a1e](https://github.com/bettyblocks/wasm-base-components/commit/5d70a1e530f634ab3857f7c4e8748e0fce8637ec))
+
 # [1.23.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.22.0...v1.23.0) (2026-09-16)
 
 
