@@ -55,8 +55,8 @@ interface types {
         name: string,
         ai-model-name: string,
         url: string,
+        tools: option<list<json-string>>,
         api-key: string,
-        tools: option<list<json-string>>
     }
 
     type betty-value = json-string;
