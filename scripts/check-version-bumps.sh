@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # CI guard: every package whose code or WIT changed vs the base branch must also
-# have its WIT package version bumped.
+# have its WIT package version bumped, and that bump must be a major bump —
+# @X.Y.Z -> @(X+1).0.0 — per docs/decisions/001-major-only-wit-version-bumps.md.
 #
 # For each package we compare the version in its `package <ns>:<name>@X.Y.Z;`
 # declaration against the same file on the base branch. A package is considered
@@ -19,6 +20,11 @@ set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 
+# dev is an integration branch, not a production environment, so overwriting a version that is
+# still in development is safe: a changed package may keep the major it already took there. The
+# promotion PR compares against main, which still has to show exactly one major step.
+REUSE_ALLOWED_ON="dev"
+
 main() {
   # Make the base ref available (no-op if already fetched, e.g. local dev).
   git fetch -q origin "$BASE_REF" 2>/dev/null || true
@@ -33,6 +39,14 @@ main() {
   fi
 
   echo "Comparing against base: ${BASE}"
+
+  if [ "$BASE_REF" = "$REUSE_ALLOWED_ON" ]; then
+    allow_reuse=true
+    echo "Base is ${REUSE_ALLOWED_ON}: a changed package may reuse the version it already has there."
+  else
+    allow_reuse=false
+  fi
+
   changed="$(git diff --name-only "${BASE}...HEAD")"
   if [ -z "$changed" ]; then
     echo "No changes vs base. Nothing to check."
@@ -74,7 +88,7 @@ version_of() {
 # require_bump <label> <version-file> <include-ERE> [<exclude-ERE>]
 require_bump() {
   local label="$1" vfile="$2" include="$3" exclude="${4:-}"
-  local hits
+  local hits base_major want
   hits="$(printf '%s\n' "$changed" | grep -E "$include" || true)"
   [ -n "$exclude" ] && hits="$(printf '%s\n' "$hits" | grep -vE "$exclude" || true)"
   hits="$(printf '%s\n' "$hits" | grep -v '^[[:space:]]*$' || true)"
@@ -94,10 +108,24 @@ require_bump() {
     return 0
   fi
   if [ "$cur" = "$base" ]; then
+    if [ "$allow_reuse" = true ]; then
+      echo "♻️  ${label}: changed, version reused @${cur} — allowed on ${BASE_REF}"
+      return 0
+    fi
     errors+=("${label} — changed but version NOT bumped (still @${cur}); bump the version in ${vfile}")
     echo "❌ ${label}: changed, version still @${cur}"
+    return 0
+  fi
+
+  # ADR 001: every bump is a major bump — minor and patch stay 0, so each release lands in its
+  # own semver compatibility class and two versions of one package never merge in a build.
+  base_major="${base%%.*}"
+  want="$((base_major + 1)).0.0"
+  if [ "$cur" != "$want" ]; then
+    errors+=("${label} — @${base} → @${cur}; major-only policy requires @${want} (docs/decisions/001)")
+    echo "❌ ${label}: @${base} → @${cur}, expected @${want}"
   else
-    echo "✅ ${label}: changed, version @${base} → @${cur}"
+    echo "✅ ${label}: @${base} → @${cur}"
   fi
 }
 
