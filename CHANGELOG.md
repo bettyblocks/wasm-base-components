@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.3...v1.22.0) (2026-09-16)
+
+
+### Features
+
+* add smpt to bettyblocks registry ([29e33f2](https://github.com/bettyblocks/wasm-base-components/commit/29e33f20eec48fc1174199ba978b009d0d420c7c))
+
 ## [1.21.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.2...v1.21.3) (2026-09-15)
 
 
