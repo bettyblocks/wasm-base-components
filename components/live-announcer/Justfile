@@ -1,0 +1,20 @@
+fetch-wit-deps:
+    wkg wit fetch
+
+build: fetch-wit-deps
+    wash build --skip-fetch
+
+test:
+    cargo test --bins
+
+integration-test:
+    cargo test --tests '*'
+
+lint: fetch-wit-deps
+    cargo check
+
+formatting *args:
+    cargo fmt --all {{args}}
+
+clippy:
+    cargo clippy --all-targets --all-features -- -D warnings

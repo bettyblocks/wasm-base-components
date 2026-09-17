@@ -13,6 +13,7 @@ The components currently include:
 - log-to-stdout
 - http-mcp
 - logs-writer
+- live-announcer
 
 These are the names used in the component table in
 [`publish-components.yaml`](.github/workflows/publish-components.yaml). The published image name

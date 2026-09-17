@@ -1,0 +1,16 @@
+[package]
+name = "live-announcer"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "live_announcer"
+path = "src/main.rs"
+
+[dependencies]
+jaws-rs = { git = "https://github.com/bettyblocks/jaws-rs.git", version = "0.1.0" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+uuid = { version = "1.8.0", features = ["v4"] }
+waki = "0.5.1"
+wit-bindgen = "0.52.0"
