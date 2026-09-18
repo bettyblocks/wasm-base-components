@@ -1,11 +1,10 @@
-fetch-wit-deps:
-    wkg wit fetch
+import '../../wit-deps.just'
 
 build: fetch-wit-deps
     wash build --skip-fetch
 
 test:
-    cargo test --bins
+    cargo test --lib --bins
 
 integration-test:
     cargo test --tests '*'
