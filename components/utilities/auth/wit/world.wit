@@ -1,6 +1,6 @@
-package betty-blocks-utilities:auth@2.0.0;
+package betty-blocks-utilities:auth@3.0.0;
 
 world auth {
     import wasi:config/store@0.2.0-rc.1;
-    export betty-blocks-types:auth/jwt@2.0.0;
+    export betty-blocks-types:auth/jwt@3.0.0;
 }

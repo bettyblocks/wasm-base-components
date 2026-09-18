@@ -1,2 +1,0 @@
-[overrides]
-"betty-blocks-types:auth" = { path = "../../wit/auth" }

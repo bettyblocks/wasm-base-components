@@ -1,3 +1,46 @@
+# [1.24.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.23.0...v1.24.0) (2026-09-16)
+
+
+### Features
+
+* move every WIT package and component to a fresh major ([5d70a1e](https://github.com/bettyblocks/wasm-base-components/commit/5d70a1e530f634ab3857f7c4e8748e0fce8637ec))
+
+# [1.23.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.22.0...v1.23.0) (2026-09-16)
+
+
+### Features
+
+* add api key ([09fda0a](https://github.com/bettyblocks/wasm-base-components/commit/09fda0a5d473041b67c49da228290819b81f8a8c))
+
+# [1.22.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.3...v1.22.0) (2026-09-16)
+
+
+### Features
+
+* add smpt to bettyblocks registry ([29e33f2](https://github.com/bettyblocks/wasm-base-components/commit/29e33f20eec48fc1174199ba978b009d0d420c7c))
+
+## [1.21.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.2...v1.21.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* read WIT dependencies without the push credentials ([a28e7cf](https://github.com/bettyblocks/wasm-base-components/commit/a28e7cfc8853c932c0035c151eb7e120bfc35010))
+
+## [1.21.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.1...v1.21.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* revert type versions ([6d5669f](https://github.com/bettyblocks/wasm-base-components/commit/6d5669fa3ab9c38fb32a3d08ac9242f6d0774bc6))
+
+## [1.21.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.0...v1.21.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* resolve unadopted WIT dependencies from the registry ([ab46086](https://github.com/bettyblocks/wasm-base-components/commit/ab46086e14b975c8fa3b951afadfdc4924c2aa47))
+* revert to older check version bumps ([84631f4](https://github.com/bettyblocks/wasm-base-components/commit/84631f4d7ae159e3624c41cd106d59d3eacb84f1))
+
 # [1.21.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.20.0...v1.21.0) (2026-09-14)
 
 

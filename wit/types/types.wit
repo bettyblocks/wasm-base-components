@@ -1,4 +1,4 @@
-package betty-blocks-types:types@2.3.0;
+package betty-blocks-types:types@3.0.0;
 
 interface types {
     type json-string = string;
@@ -55,7 +55,8 @@ interface types {
         name: string,
         ai-model-name: string,
         url: string,
-        tools: option<list<json-string>>
+        tools: option<list<json-string>>,
+        api-key: string,
     }
 
     type betty-value = json-string;
