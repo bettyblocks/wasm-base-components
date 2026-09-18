@@ -4,7 +4,7 @@ build: fetch-wit-deps
     wash build --skip-fetch
 
 test:
-    cargo test --lib --bins
+    cargo test --bins
 
 integration-test:
     cargo test --tests '*'
