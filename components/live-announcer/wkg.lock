@@ -3,6 +3,15 @@
 version = 1
 
 [[packages]]
+name = "betty-blocks-types:actions"
+registry = "bettyblocksdev.azurecr.io"
+
+[[packages.versions]]
+requirement = "=2.2.0"
+version = "2.2.0"
+digest = "sha256:f440fc88e5191b8a602e156ef28c8cf06b847cdfc256a70da687c846fc80e175"
+
+[[packages]]
 name = "wasi:http"
 registry = "wasi.dev"
 
