@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.25.0...v1.26.0) (2026-09-21)
+
+
+### Features
+
+* use betty blocks actions type 2.2.0 ([0286edf](https://github.com/bettyblocks/wasm-base-components/commit/0286edf730ab3b7eaa8ac9767d07ac89b5ade12f))
+
 # [1.25.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.24.0...v1.25.0) (2026-09-21)
 
 
