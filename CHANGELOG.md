@@ -1,3 +1,15 @@
+# [1.25.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.24.0...v1.25.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* drop --lib from the live-announcer test recipe ([70e5057](https://github.com/bettyblocks/wasm-base-components/commit/70e5057e0c1552dd691cdf5c04c1b74e28d34493))
+
+
+### Features
+
+* add live-announcer component ([bc5f907](https://github.com/bettyblocks/wasm-base-components/commit/bc5f90704eac82eeaa00dd442736737308656d6c))
+
 # [1.24.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.23.0...v1.24.0) (2026-09-16)
 
 
