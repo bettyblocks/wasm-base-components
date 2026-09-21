@@ -28,6 +28,7 @@ jobs:
           cache-directories: |
             components/http-mcp/target
             components/http-wrapper/target
+            components/live-announcer/target
             components/logs-writer/target
             components/logs-writer/test-component/target
             components/utilities/auth/target
