@@ -17,6 +17,8 @@
 
 use std::{env, process::ExitCode, thread, time::Duration};
 
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
 wit_bindgen::generate!({ generate_all });
 
 use crate::betty_blocks_types::actions::actions;
@@ -185,29 +187,13 @@ fn announce_payload(version: &str, observed_at: &str) -> serde_json::Value {
 }
 
 /// RFC 3339 in UTC, to the second — the shape `DateTime.from_iso8601/1` parses on
-/// the tracker side. Built by hand because the component has no date library and
-/// `wasi:clocks/wall-clock` gives us a bare Unix timestamp.
+/// the tracker side. `wasi:clocks/wall-clock` gives us a bare Unix timestamp, so
+/// the calendar arithmetic is `time`'s.
 fn rfc3339_utc(unix_seconds: u64) -> String {
-    let (days, seconds) = (unix_seconds / 86_400, unix_seconds % 86_400);
-    let (hour, minute, second) = (seconds / 3600, (seconds % 3600) / 60, seconds % 60);
-    let (year, month, day) = civil_from_days(days as i64);
-
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
-}
-
-/// Howard Hinnant's days-from-civil, inverted. Exact for every date we can see.
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-
-    (if m <= 2 { y + 1 } else { y }, m as u32, d as u32)
+    OffsetDateTime::from_unix_timestamp(unix_seconds as i64)
+        .expect("unix timestamp within range")
+        .format(&Rfc3339)
+        .expect("RFC 3339 is always formattable from a UTC timestamp")
 }
 
 fn is_success(status_code: u16) -> bool {
