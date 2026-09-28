@@ -1,4 +1,4 @@
-package betty-blocks-types:types@3.0.0;
+package betty-blocks-types:types@2.4.0;
 
 interface types {
     type json-string = string;
@@ -51,12 +51,33 @@ interface types {
 
     type betty-map = list<key-value>;
 
-    record betty-ai-provider {
+    record http-search-options {
+        description: option<string>
+    }
+
+    record authentication-config {
+        kind: string,
+        value: option<string>
+    }
+
+    record mcp-options {
+        description: option<string>,
+        url: string,
+        authentication: authentication-config,
+
+    }
+
+    variant betty-ai-tool {
+        http-search(http-search-options),
+        mcp(mcp-options)
+    }
+
+    record betty-ai-agent {
         name: string,
         ai-model-name: string,
         url: string,
-        tools: option<list<json-string>>,
         api-key: string,
+        tools: option<list<betty-ai-tool>>
     }
 
     type betty-value = json-string;
