@@ -1,4 +1,4 @@
-package betty-blocks-types:types@2.4.0;
+package betty-blocks-types:types@3.1.0;
 
 interface types {
     type json-string = string;
