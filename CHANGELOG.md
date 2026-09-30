@@ -1,3 +1,10 @@
+## [1.26.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.26.0...v1.26.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* bump actions version ([b00c7d5](https://github.com/bettyblocks/wasm-base-components/commit/b00c7d5d8461506f7319781fb5753ecc7281b805))
+
 # [1.26.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.25.0...v1.26.0) (2026-09-21)
 
 
