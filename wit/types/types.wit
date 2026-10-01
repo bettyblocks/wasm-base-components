@@ -64,7 +64,6 @@ interface types {
         description: option<string>,
         url: string,
         authentication: authentication-config,
-
     }
 
     variant betty-ai-tool {
