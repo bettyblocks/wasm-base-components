@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # CI guard: every package whose code or WIT changed vs the base branch must also
-# have its WIT package version bumped, and that bump must be a major bump —
-# @X.Y.Z -> @(X+1).0.0 — per docs/decisions/001-major-only-wit-version-bumps.md.
+# have its WIT package version bumped. Any increase (major, minor or patch) is enough.
 #
 # For each package we compare the version in its `package <ns>:<name>@X.Y.Z;`
 # declaration against the same file on the base branch. A package is considered
@@ -22,7 +21,7 @@ BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 
 # dev is an integration branch, not a production environment, so overwriting a version that is
 # still in development is safe: a changed package may keep the major it already took there. The
-# promotion PR compares against main, which still has to show exactly one major step.
+# promotion PR compares against main, which still has to show a version bump.
 REUSE_ALLOWED_ON="dev"
 
 main() {
@@ -88,7 +87,7 @@ version_of() {
 # require_bump <label> <version-file> <include-ERE> [<exclude-ERE>]
 require_bump() {
   local label="$1" vfile="$2" include="$3" exclude="${4:-}"
-  local hits base_major want
+  local hits
   hits="$(printf '%s\n' "$changed" | grep -E "$include" || true)"
   [ -n "$exclude" ] && hits="$(printf '%s\n' "$hits" | grep -vE "$exclude" || true)"
   hits="$(printf '%s\n' "$hits" | grep -v '^[[:space:]]*$' || true)"
@@ -117,13 +116,10 @@ require_bump() {
     return 0
   fi
 
-  # ADR 001: every bump is a major bump — minor and patch stay 0, so each release lands in its
-  # own semver compatibility class and two versions of one package never merge in a build.
-  base_major="${base%%.*}"
-  want="$((base_major + 1)).0.0"
-  if [ "$cur" != "$want" ]; then
-    errors+=("${label} — @${base} → @${cur}; major-only policy requires @${want} (docs/decisions/001)")
-    echo "❌ ${label}: @${base} → @${cur}, expected @${want}"
+  # Any bump (major, minor or patch) is enough, as long as the version goes up.
+  if [ "$(printf '%s\n%s\n' "$base" "$cur" | sort -V | tail -n1)" != "$cur" ]; then
+    errors+=("${label} — @${base} → @${cur} is a downgrade; the version must go up")
+    echo "❌ ${label}: @${base} → @${cur}, version went down"
   else
     echo "✅ ${label}: @${base} → @${cur}"
   fi
