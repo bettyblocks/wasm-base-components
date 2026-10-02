@@ -1,3 +1,11 @@
+# [1.27.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.26.1...v1.27.0) (2026-10-02)
+
+
+### Features
+
+* allow minor and patch version bumps ([79ee745](https://github.com/bettyblocks/wasm-base-components/commit/79ee7458da225157bb3fe212db73ca7748791801))
+* rename ai-provider to betty-ai-agent and update types ([b866517](https://github.com/bettyblocks/wasm-base-components/commit/b866517358fde0866c49f54d30a88415968dd81f))
+
 ## [1.26.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.26.0...v1.26.1) (2026-09-30)
 
 
