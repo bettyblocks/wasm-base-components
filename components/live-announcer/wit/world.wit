@@ -1,0 +1,10 @@
+package betty-blocks-utilities:live-announcer@1.0.0;
+
+world main {
+    // The app component in the same workload exports this; the announcer reads the
+    // version it is actually serving from `health()`. Same interface version the
+    // http-wrapper imports.
+    import betty-blocks-types:actions/actions@3.0.0;
+
+    import wasi:http/outgoing-handler@0.2.2;
+}

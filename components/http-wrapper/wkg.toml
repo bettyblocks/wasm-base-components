@@ -1,3 +1,0 @@
-[overrides]
-"betty-blocks-types:actions" = { path = "../../wit/actions" }
-"betty-blocks-types:types" = { path = "../../wit/types" }

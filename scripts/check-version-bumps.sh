@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # CI guard: every package whose code or WIT changed vs the base branch must also
-# have its WIT package version bumped.
+# have its WIT package version bumped. Any increase (major, minor or patch) is enough.
 #
 # For each package we compare the version in its `package <ns>:<name>@X.Y.Z;`
 # declaration against the same file on the base branch. A package is considered
@@ -12,21 +12,17 @@
 # Generated/tooling files never trigger the requirement: wit/deps/ (gitignored),
 # target/ (gitignored), wkg.lock, .wash/, tests/, docs, Justfile, etc.
 #
-# One WIT-only exemption: a change that does nothing but repoint a `use`/`import`/
-# `export` at a new version of *another* package. WIT resolves dependencies by exact
-# version, so bumping one package forces every consumer to edit that line; demanding a
-# bump there too would cascade a single leaf change across the whole dependency graph
-# (and on through each consumer's own consumers). Such a package still describes the
-# same interface, so it keeps its version. Anything else in the .wit differing -- a new
-# record, a changed signature, or the package's own `package ...@X.Y.Z;` line -- is a
-# real change and still requires a bump.
-#
 # Usage:
 #   GITHUB_BASE_REF=main ./scripts/check-version-bumps.sh
 #   ./scripts/check-version-bumps.sh <base-ref-or-sha>
 set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
+
+# dev is an integration branch, not a production environment, so overwriting a version that is
+# still in development is safe: a changed package may keep the major it already took there. The
+# promotion PR compares against main, which still has to show a version bump.
+REUSE_ALLOWED_ON="dev"
 
 main() {
   # Make the base ref available (no-op if already fetched, e.g. local dev).
@@ -42,6 +38,14 @@ main() {
   fi
 
   echo "Comparing against base: ${BASE}"
+
+  if [ "$BASE_REF" = "$REUSE_ALLOWED_ON" ]; then
+    allow_reuse=true
+    echo "Base is ${REUSE_ALLOWED_ON}: a changed package may reuse the version it already has there."
+  else
+    allow_reuse=false
+  fi
+
   changed="$(git diff --name-only "${BASE}...HEAD")"
   if [ -z "$changed" ]; then
     echo "No changes vs base. Nothing to check."
@@ -80,30 +84,6 @@ version_of() {
   grep -m1 -E '^package ' | sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p'
 }
 
-# Drop the version tag from every reference to another package, so that a change which
-# only repoints a dependency compares equal to the base. The `package ...@X.Y.Z;` line is
-# deliberately left intact: that version is the one require_bump checks.
-normalize_wit() {
-  sed -E '/^[[:space:]]*package[[:space:]]/!s/@[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?//g'
-}
-
-# Reads changed paths on stdin. True only when every one of them is a .wit file whose
-# sole difference from the base is the version on a reference to another package.
-only_dep_version_refs_changed() {
-  local f
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    case "$f" in
-    *.wit) ;;
-    *) return 1 ;; # non-WIT input (src/, Cargo.toml, ...) -- a bump is genuinely required
-    esac
-    [ -f "$f" ] || return 1                             # deleted
-    git show "${BASE}:${f}" >/dev/null 2>&1 || return 1  # newly added
-    diff -q <(git show "${BASE}:${f}" | normalize_wit) <(normalize_wit <"$f") >/dev/null || return 1
-  done
-  return 0
-}
-
 # require_bump <label> <version-file> <include-ERE> [<exclude-ERE>]
 require_bump() {
   local label="$1" vfile="$2" include="$3" exclude="${4:-}"
@@ -112,11 +92,6 @@ require_bump() {
   [ -n "$exclude" ] && hits="$(printf '%s\n' "$hits" | grep -vE "$exclude" || true)"
   hits="$(printf '%s\n' "$hits" | grep -v '^[[:space:]]*$' || true)"
   [ -z "$hits" ] && return 0 # nothing relevant to this package changed
-
-  if printf '%s\n' "$hits" | only_dep_version_refs_changed; then
-    echo "⏭️  ${label}: only dependency version references changed — no bump required"
-    return 0
-  fi
 
   local cur base
   cur="$(version_of <"$vfile" 2>/dev/null)"
@@ -132,10 +107,21 @@ require_bump() {
     return 0
   fi
   if [ "$cur" = "$base" ]; then
+    if [ "$allow_reuse" = true ]; then
+      echo "♻️  ${label}: changed, version reused @${cur} — allowed on ${BASE_REF}"
+      return 0
+    fi
     errors+=("${label} — changed but version NOT bumped (still @${cur}); bump the version in ${vfile}")
     echo "❌ ${label}: changed, version still @${cur}"
+    return 0
+  fi
+
+  # Any bump (major, minor or patch) is enough, as long as the version goes up.
+  if [ "$(printf '%s\n%s\n' "$base" "$cur" | sort -V | tail -n1)" != "$cur" ]; then
+    errors+=("${label} — @${base} → @${cur} is a downgrade; the version must go up")
+    echo "❌ ${label}: @${base} → @${cur}, version went down"
   else
-    echo "✅ ${label}: changed, version @${base} → @${cur}"
+    echo "✅ ${label}: @${base} → @${cur}"
   fi
 }
 

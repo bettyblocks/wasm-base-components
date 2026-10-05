@@ -1,3 +1,94 @@
+## [1.27.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.0...v1.27.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* update WIT package versioning policy documentation ([18cb589](https://github.com/bettyblocks/wasm-base-components/commit/18cb58997ec38e9291891e533d21a99cc3b52e09))
+
+# [1.27.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.26.1...v1.27.0) (2026-10-02)
+
+
+### Features
+
+* allow minor and patch version bumps ([79ee745](https://github.com/bettyblocks/wasm-base-components/commit/79ee7458da225157bb3fe212db73ca7748791801))
+* rename ai-provider to betty-ai-agent and update types ([b866517](https://github.com/bettyblocks/wasm-base-components/commit/b866517358fde0866c49f54d30a88415968dd81f))
+
+## [1.26.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.26.0...v1.26.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* bump actions version ([b00c7d5](https://github.com/bettyblocks/wasm-base-components/commit/b00c7d5d8461506f7319781fb5753ecc7281b805))
+
+# [1.26.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.25.0...v1.26.0) (2026-09-21)
+
+
+### Features
+
+* use betty blocks actions type 2.2.0 ([0286edf](https://github.com/bettyblocks/wasm-base-components/commit/0286edf730ab3b7eaa8ac9767d07ac89b5ade12f))
+
+# [1.25.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.24.0...v1.25.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* drop --lib from the live-announcer test recipe ([70e5057](https://github.com/bettyblocks/wasm-base-components/commit/70e5057e0c1552dd691cdf5c04c1b74e28d34493))
+
+
+### Features
+
+* add live-announcer component ([bc5f907](https://github.com/bettyblocks/wasm-base-components/commit/bc5f90704eac82eeaa00dd442736737308656d6c))
+
+# [1.24.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.23.0...v1.24.0) (2026-09-16)
+
+
+### Features
+
+* move every WIT package and component to a fresh major ([5d70a1e](https://github.com/bettyblocks/wasm-base-components/commit/5d70a1e530f634ab3857f7c4e8748e0fce8637ec))
+
+# [1.23.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.22.0...v1.23.0) (2026-09-16)
+
+
+### Features
+
+* add api key ([09fda0a](https://github.com/bettyblocks/wasm-base-components/commit/09fda0a5d473041b67c49da228290819b81f8a8c))
+
+# [1.22.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.3...v1.22.0) (2026-09-16)
+
+
+### Features
+
+* add smpt to bettyblocks registry ([29e33f2](https://github.com/bettyblocks/wasm-base-components/commit/29e33f20eec48fc1174199ba978b009d0d420c7c))
+
+## [1.21.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.2...v1.21.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* read WIT dependencies without the push credentials ([a28e7cf](https://github.com/bettyblocks/wasm-base-components/commit/a28e7cfc8853c932c0035c151eb7e120bfc35010))
+
+## [1.21.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.1...v1.21.2) (2026-09-15)
+
+
+### Bug Fixes
+
+* revert type versions ([6d5669f](https://github.com/bettyblocks/wasm-base-components/commit/6d5669fa3ab9c38fb32a3d08ac9242f6d0774bc6))
+
+## [1.21.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.21.0...v1.21.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* resolve unadopted WIT dependencies from the registry ([ab46086](https://github.com/bettyblocks/wasm-base-components/commit/ab46086e14b975c8fa3b951afadfdc4924c2aa47))
+* revert to older check version bumps ([84631f4](https://github.com/bettyblocks/wasm-base-components/commit/84631f4d7ae159e3624c41cd106d59d3eacb84f1))
+
+# [1.21.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.20.0...v1.21.0) (2026-09-14)
+
+
+### Features
+
+* add new type ai provider ([db751c9](https://github.com/bettyblocks/wasm-base-components/commit/db751c931e0874fc39dfcdffdae91644a5c0edb3))
+
 # [1.20.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.19.0...v1.20.0) (2026-09-02)
 
 

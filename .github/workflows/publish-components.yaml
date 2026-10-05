@@ -79,6 +79,7 @@ jobs:
         log-to-stdout|components/target/wasm32-wasip2/release/log_to_stdout.wasm|components/utilities/log-to-stdout/wit/world.wit|log-to-stdout|log-to-stdout
         http-mcp|components/http-mcp/target/wasm32-wasip2/release/mcp_component.wasm|components/http-mcp/wit/world.wit|http-mcp|mcp
         logs-writer|components/logs-writer/target/wasm32-wasip2/release/logs_writer.wasm|components/logs-writer/wit/world.wit|logs-writer|logs-writer
+        live-announcer|components/live-announcer/target/wasm32-wasip2/release/live_announcer.wasm|components/live-announcer/wit/world.wit|live-announcer|live-announcer
 
     steps:
       # Everything below is anchored to the build's commit, not to the commit this publish run sits on.
