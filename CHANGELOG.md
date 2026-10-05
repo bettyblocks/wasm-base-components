@@ -1,3 +1,10 @@
+## [1.27.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.0...v1.27.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* update WIT package versioning policy documentation ([18cb589](https://github.com/bettyblocks/wasm-base-components/commit/18cb58997ec38e9291891e533d21a99cc3b52e09))
+
 # [1.27.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.26.1...v1.27.0) (2026-10-02)
 
 
