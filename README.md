@@ -115,35 +115,36 @@ equivalent-but-different bytes under a tag someone may already have pinned.
 
 ## Versioning
 
-**Every published release of a WIT package or component increments the major. Minor and patch
-are always `0`.**
+**Every published release of a WIT package or component must increase its version.** Any
+increase — major, minor or patch — is accepted, as long as the version goes up.
 
 ```
-2.0.0  ->  3.0.0  ->  4.0.0  ->  5.0.0
+2.0.0  ->  2.1.0  ->  2.1.1  ->  3.0.0
 ```
 
 These are the versions written by hand in `wit/<pkg>/*.wit` and `components/<c>/wit/world.wit`.
 They are unrelated to the repo's own release version in `CHANGELOG.md`, which semantic-release
 keeps bumping normally from conventional commits.
 
-The reasoning — what `wit-parser` merges inside one compatibility class, and why that rewrite is
-unsafe — is in [ADR 001](docs/decisions/001-major-only-wit-version-bumps.md).
+Pick the bump by semver, and treat a breaking change as a major: `wit-parser` merges two
+versions of one package that share a compatibility class (the leftmost non-zero component) onto
+the newer one, without checking what is inside a record. The details are in
+[ADR 001](docs/decisions/001-major-only-wit-version-bumps.md), which is superseded as a policy
+but still describes that behaviour.
 
 ### Iterating on dev
 
 `dev` tags are mutable — every publish overwrites `X.Y.Z` in place — so a change still in flight
-does not need a new major per PR. Take the next major **once**, then keep reusing it:
+does not need a new version per PR. Bump **once**, then keep reusing it:
 
 | PR | package version | verdict |
 |---|---|---|
-| first feature PR into `dev` | `2.0.0` → `3.0.0` | ✅ the one bump |
-| follow-up PRs into `dev` | stays `3.0.0` | ♻️ reuse, allowed |
-| promotion PR `dev` → `main` | `2.0.0` → `3.0.0` vs `main` | ✅ exactly one major step |
+| first feature PR into `dev` | `2.0.0` → `2.1.0` | ✅ the bump |
+| follow-up PRs into `dev` | stays `2.1.0` | ♻️ reuse, allowed |
+| promotion PR `dev` → `main` | `2.0.0` → `2.1.0` vs `main` | ✅ version went up |
 
-Reuse needs the PR’s base to be `dev`, and a bump made there still has to be `@(X+1).0.0`. Bump
-twice on `dev` and the promotion to `main` is blocked — collapse the versions back to one major
-first. Because a reused tag points at different bytes than it did yesterday, pin
-`X.Y.Z-<short-sha>` for anything that has to stay put — see
+Reuse needs the PR’s base to be `dev`. Because a reused tag points at different bytes than it
+did yesterday, pin `X.Y.Z-<short-sha>` for anything that has to stay put — see
 [What gets tagged](#what-gets-tagged).
 
 ### Enforcement
@@ -152,15 +153,15 @@ first. Because a reused tag points at different bytes than it did yesterday, pin
 each package whose files changed against the same file on the PR’s base branch:
 
 - changed and not bumped → ❌, unless the base is `dev`, where it is ♻️ reuse;
-- changed and bumped to anything but `@(X+1).0.0` → ❌, on every base;
-- a package with no version on the base is new and may start at any major.
+- changed and the version went down → ❌, on every base;
+- a package with no version on the base is new and may start at any version.
 
 Run it locally with the base you intend to target: `./scripts/check-version-bumps.sh dev` or
 `./scripts/check-version-bumps.sh main`. It diffs `<base>...HEAD`, so it reads **committed**
 state — uncommitted edits are invisible to it.
 
-The check gates PRs, not the registry: if a wrong major already got published, correcting it is
-a manual deploy — ask the team.
+The check gates PRs, not the registry: if a wrong version already got published, correcting it
+is a manual deploy — ask the team.
 
 ## WIT dependencies
 

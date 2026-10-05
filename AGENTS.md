@@ -1,20 +1,20 @@
 # Agent instructions
 
-## Version bumps are major-only
+## Version bumps
 
-**Every published release of a WIT package or component increments the major. Minor and patch
-are always `0`.**
+**Every published release of a WIT package or component must increase its version.** Any
+increase is accepted — major, minor or patch — as long as the version goes up.
 
 ```
-2.0.0  ->  3.0.0  ->  4.0.0  ->  5.0.0
+2.0.0  ->  2.1.0  ->  2.1.1  ->  3.0.0
 ```
 
-This is not a style preference. `wit-parser` buckets versions into a compatibility class (the
-leftmost non-zero component), and two versions of one package in the same class within a single
-build get silently merged — the older consumer's imports are rewritten onto the newer version
-without any check of what is inside a record. Renamed fields, reordered fields and signedness
-flips all pass. A new major puts every release in its own class, so the merge never has a pair
-to act on. Full reasoning: [ADR 001](docs/decisions/001-major-only-wit-version-bumps.md).
+Follow semver when picking which component to bump. Be aware that `wit-parser` buckets versions
+into a compatibility class (the leftmost non-zero component), and two versions of one package in
+the same class within a single build get merged onto the newer one without checking what is
+inside a record. A breaking change shipped as a minor or patch is therefore silently rebound
+onto older consumers — breaking changes need a new major. Background:
+[ADR 001](docs/decisions/001-major-only-wit-version-bumps.md) (superseded).
 
 Applies to the hand-written `package …@X.Y.Z;` line in:
 
@@ -27,23 +27,17 @@ semantic-release manages from conventional commits. Leave that alone.
 ### The dev exception
 
 `dev` tags are mutable; every publish overwrites `X.Y.Z` in place. So while a change is still
-being iterated on, a package may **reuse** the major it already took on `dev` rather than
-burning a new one per PR.
+being iterated on, a package may **reuse** the version it already took on `dev` rather than
+bumping again per PR.
 
 - PR based on `dev` → reusing the current version is allowed.
 - PR `dev` → `main` → the bump is mandatory, measured against `main`.
 
-Take the next major **once**, then reuse it until the change is promoted. Do not bump a second
-time on `dev`: `2.0.0` → `3.0.0` → `4.0.0` passes each dev PR and then blocks the promotion,
-because `main` would be asked to jump two majors. If you find yourself about to bump a package
-whose version already leads `main` by one major, reuse it instead.
-
-Reuse never relaxes the shape — a bump made on `dev` must still be `@(X+1).0.0`. `3.0.0` →
-`3.0.1` is rejected everywhere.
+A version is never allowed to go down, on any base.
 
 ## When you change a WIT package
 
-1. Bump the package's own `package …@X.Y.Z;` to the next major (or reuse, per above).
+1. Bump the package's own `package …@X.Y.Z;` (or reuse, per above).
 2. **Repoint every reference to it** — `use`/`import`/`export` lines naming that package, in
    both `wit/` and `components/`. Everything that reaches one package must name the same
    version of it; `wkg` keys dependencies by name without the version, so the first version it

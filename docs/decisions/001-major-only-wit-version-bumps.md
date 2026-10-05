@@ -2,10 +2,15 @@
 
 ## Status
 
-**Accepted.** Applies to every WIT package under `wit/` (namespace `betty-blocks-types`) and
-every component under `components/` (namespace `betty-blocks-utilities`).
+**Superseded.** Major-only bumps are no longer required: since commit `79ee745` ("feat: allow
+minor and patch version bumps"), `scripts/check-version-bumps.sh` accepts any version increase —
+major, minor or patch. See [Versioning](../../README.md#versioning) for the current rule.
 
-Enforced by `scripts/check-version-bumps.sh` via the `Version Check` workflow.
+The analysis below of what `wit-parser` merges inside one compatibility class still holds, and is
+kept as the reason breaking changes should take a new major.
+
+Originally applied to every WIT package under `wit/` (namespace `betty-blocks-types`) and every
+component under `components/` (namespace `betty-blocks-utilities`).
 
 First ADR in this repository. It fixes the numbering rule that actions-compiler's
 `docs/decisions/001-wit-and-component-versioning.md` and its never-collapse Resolve depend on.
@@ -98,8 +103,8 @@ failure above reproduces on a purely **additive** `2.0.0 → 2.1.0`.
 
 ### Enforcement
 
-Enforced in CI by `scripts/check-version-bumps.sh`, run by the **Version Check** workflow on
-every PR. A package with no version on the base branch is new and may start at any major.
+Was enforced in CI by `scripts/check-version-bumps.sh`, run by the **Version Check** workflow on
+every PR. No longer enforced — see [Status](#status).
 
 ## Consequences
 
