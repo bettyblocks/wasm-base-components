@@ -1,3 +1,15 @@
+# [1.28.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.1...v1.28.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* trigger pipelines ([177bd2e](https://github.com/bettyblocks/wasm-base-components/commit/177bd2e1f2472f5884565c0525bbf28ead91504b))
+
+
+### Features
+
+* add betty-schema-model type to types 3.1.0 ([b30a07f](https://github.com/bettyblocks/wasm-base-components/commit/b30a07f00a37aab3c5b7e57579feff944c9cff1c))
+
 ## [1.27.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.0...v1.27.1) (2026-10-05)
 
 
