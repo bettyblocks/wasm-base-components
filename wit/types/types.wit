@@ -81,5 +81,26 @@ interface types {
 
     type betty-value = json-string;
 
+    record betty-send-mail {
+        host: string,
+        port: u16,
+        username: string,
+        password: string,
+        secure: option<bool>,
+        sender-email: string,
+        sender-name: option<string>,
+        to-email: string,
+        to-name: option<string>,
+        cc: option<string>,
+        reply-to: option<string>,
+        bcc: option<string>,
+        subject: option<string>,
+        body: option<string>,
+        variables: option<betty-map>,
+        attachments: option<betty-map>,
+        attachments-col: option<betty-collection>,
+        attachments-col-property: option<list<betty-property>>
+    }
+    
     type betty-schema-model = string;
 }
