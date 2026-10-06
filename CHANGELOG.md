@@ -1,3 +1,10 @@
+# [1.31.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.30.0...v1.31.0) (2026-10-06)
+
+
+### Features
+
+* add betty-array type to types 3.1.0 ([c475dc5](https://github.com/bettyblocks/wasm-base-components/commit/c475dc5e014fb760ff6ef51f5dbef3699ca3f772))
+
 # [1.30.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.29.0...v1.30.0) (2026-10-06)
 
 
