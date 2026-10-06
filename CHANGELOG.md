@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.28.0...v1.29.0) (2026-10-06)
+
+
+### Features
+
+* add send mail type ([7f2fe05](https://github.com/bettyblocks/wasm-base-components/commit/7f2fe05df2449d2cad8654a3b16dde08feafd9f8))
+
 # [1.28.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.1...v1.28.0) (2026-10-06)
 
 
