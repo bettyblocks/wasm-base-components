@@ -81,5 +81,5 @@ interface types {
 
     type betty-value = json-string;
 
-    type betty-template = string;
+    type betty-multiline-text = string;
 }
