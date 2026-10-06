@@ -1,3 +1,10 @@
+# [1.30.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.29.0...v1.30.0) (2026-10-06)
+
+
+### Features
+
+* add betty-expression type to types 3.1.0 ([ff24635](https://github.com/bettyblocks/wasm-base-components/commit/ff2463575bf1f74964bada743af0485a07e35773))
+
 # [1.29.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.28.0...v1.29.0) (2026-10-06)
 
 
