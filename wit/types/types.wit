@@ -103,4 +103,11 @@ interface types {
     }
     
     type betty-schema-model = string;
+
+    record betty-expression {
+        expression: string,
+        variables: json-string,
+        schema-model: option<betty-schema-model>,
+        debug-logging: option<bool>
+    }
 }
