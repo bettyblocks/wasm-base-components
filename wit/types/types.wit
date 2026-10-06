@@ -101,4 +101,6 @@ interface types {
         attachments-col: option<betty-collection>,
         attachments-col-property: option<list<betty-property>>
     }
+    
+    type betty-schema-model = string;
 }
