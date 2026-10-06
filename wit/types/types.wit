@@ -1,4 +1,4 @@
-package betty-blocks-types:types@3.0.0;
+package betty-blocks-types:types@3.1.0;
 
 interface types {
     type json-string = string;
@@ -80,4 +80,13 @@ interface types {
     }
 
     type betty-value = json-string;
+
+    type betty-schema-model = string;
+
+    record betty-expression {
+        expression: string,
+        variables: json-string,
+        schema-model: option<betty-schema-model>,
+        debug-logging: option<bool>
+    }
 }
