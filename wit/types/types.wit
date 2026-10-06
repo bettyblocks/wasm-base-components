@@ -81,6 +81,8 @@ interface types {
 
     type betty-value = json-string;
 
+    type betty-array = json-string;
+
     record betty-send-mail {
         host: string,
         port: u16,
