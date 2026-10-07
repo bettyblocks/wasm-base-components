@@ -112,4 +112,36 @@ interface types {
         schema-model: option<betty-schema-model>,
         debug-logging: option<bool>
     }
+
+    enum betty-http-method {
+        get,
+        post,
+        put,
+        patch,
+        delete,
+        head,
+        options
+    }
+
+    enum betty-http-protocol {
+        http,
+        https
+    }
+
+    record betty-http-request {
+        method: betty-http-method,
+        headers: option<json-string>,
+        protocol: betty-http-protocol,
+        url: string,
+        url-parameters: option<json-string>,
+        query-parameters: option<json-string>,
+        body: option<string>,
+        body-parameters: option<json-string>,
+        schema-model: option<betty-schema-model>
+    }
+
+    record betty-http-response {
+        response-code: u16,
+        %as: json-string
+    }
 }
