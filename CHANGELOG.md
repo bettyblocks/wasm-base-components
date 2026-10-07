@@ -1,3 +1,10 @@
+# [1.32.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.31.0...v1.32.0) (2026-10-07)
+
+
+### Features
+
+* add betty-http types to types 3.1.0 ([07b73ff](https://github.com/bettyblocks/wasm-base-components/commit/07b73ff6dc631f20ae32703ed246b87034e271a0))
+
 # [1.31.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.30.0...v1.31.0) (2026-10-06)
 
 
