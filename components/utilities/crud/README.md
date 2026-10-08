@@ -1,3 +1,3 @@
 # Crud component
 
-CRUD component using the data api helper
+CRUD component using the data-api resource
