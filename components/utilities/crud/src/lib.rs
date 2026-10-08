@@ -1,7 +1,6 @@
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks_types::data_api::data_api::request;
-use crate::betty_blocks_types::data_api::data_api::HelperContext;
+use crate::betty_blocks_types::data_api::data_api::DataApi;
 use crate::betty_blocks_types::types::types::{BettyProperty, BettyPropertyMap, BettyPropertyPath};
 use crate::exports::betty_blocks_types::crud::crud::{
     BettyModel, BettyPropertyMapping, BettyRecordJson, Guest,
@@ -273,7 +272,7 @@ fn create_fetch_record_query(model_name: &str, query_name: &str, fragment: &Grap
 }
 
 fn fetch_record(
-    helper_context: HelperContext,
+    data_api: &DataApi,
     model_name: &str,
     id: &str,
     fragment: &GraphQL,
@@ -281,8 +280,7 @@ fn fetch_record(
     let query_name = format!("one{model_name}",);
     let query = create_fetch_record_query(model_name, &query_name, fragment);
 
-    let result = request(
-        &helper_context,
+    let result = data_api.request(
         &query,
         &serde_json::json!(
         {
@@ -380,19 +378,19 @@ fn get_record_id(gql_result: &str, mutation_name: &str) -> Result<String, String
 fn get_affected_record(
     request_result: &str,
     mutation_name: &str,
-    helper_context: HelperContext,
+    data_api: &DataApi,
     model_name: &str,
     fragment: &GraphQL,
 ) -> Result<String, String> {
     let id = get_record_id(request_result, mutation_name)?;
-    fetch_record(helper_context, model_name, &id, fragment)
+    fetch_record(data_api, model_name, &id, fragment)
 }
 
 struct CrudComponent {}
 
 impl Guest for CrudComponent {
     fn create(
-        helper_context: HelperContext,
+        data_api: &DataApi,
         model: BettyModel,
         mapping: BettyPropertyMapping,
         validation_sets: Option<Vec<String>>,
@@ -411,26 +409,18 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context.clone(),
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
-            Ok(data) => get_affected_record(
-                &data,
-                &mutation_name,
-                helper_context,
-                &model.name,
-                &fragment,
-            ),
+            Ok(data) => {
+                get_affected_record(&data, &mutation_name, data_api, &model.name, &fragment)
+            }
             Err(e) => Err(e),
         }
     }
 
     fn update(
-        helper_context: HelperContext,
+        data_api: &DataApi,
         model: BettyModel,
         record_id: String,
         mapping: BettyPropertyMapping,
@@ -451,26 +441,18 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context.clone(),
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
-            Ok(data) => get_affected_record(
-                &data,
-                &mutation_name,
-                helper_context,
-                &model.name,
-                &fragment,
-            ),
+            Ok(data) => {
+                get_affected_record(&data, &mutation_name, data_api, &model.name, &fragment)
+            }
             Err(e) => Err(e),
         }
     }
 
     fn upsert(
-        helper_context: HelperContext,
+        data_api: &DataApi,
         model: BettyModel,
         mapping: BettyPropertyMapping,
         unique_by: BettyProperty,
@@ -491,29 +473,17 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context.clone(),
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
-            Ok(data) => get_affected_record(
-                &data,
-                &mutation_name,
-                helper_context,
-                &model.name,
-                &fragment,
-            ),
+            Ok(data) => {
+                get_affected_record(&data, &mutation_name, data_api, &model.name, &fragment)
+            }
             Err(e) => Err(e),
         }
     }
 
-    fn delete(
-        helper_context: HelperContext,
-        model: BettyModel,
-        record_id: String,
-    ) -> Result<String, String> {
+    fn delete(data_api: &DataApi, model: BettyModel, record_id: String) -> Result<String, String> {
         let mutation_name = format!("delete{}", model.name);
         let mutation = format_delete_mutation(&mutation_name);
         let input = serde_json::json!(
@@ -522,11 +492,7 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context,
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
             Ok(_) => Ok(serde_json::json!({"result": "Record deleted"}).to_string()),
