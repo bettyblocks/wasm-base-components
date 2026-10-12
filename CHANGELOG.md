@@ -1,3 +1,10 @@
+## [1.34.4](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.3...v1.34.4) (2026-10-12)
+
+
+### Bug Fixes
+
+* add extra logging ([490c782](https://github.com/bettyblocks/wasm-base-components/commit/490c782e62d7bf4531a37027e6a66e28b63cf8d9))
+
 ## [1.34.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.2...v1.34.3) (2026-10-12)
 
 
