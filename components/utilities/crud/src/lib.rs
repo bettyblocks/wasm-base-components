@@ -375,14 +375,38 @@ fn get_record_id(gql_result: &str, mutation_name: &str) -> Result<String, String
     }
 }
 
+/// Inside a mass mutate capture the data-api does not send a create mutation but
+/// answers it with a negative placeholder id, to be swapped for a reserved id when
+/// the capture is applied. Real ids are positive integers or uuids, so a leading
+/// `-` is unambiguous.
+fn is_pending_id(id: &str) -> bool {
+    id.starts_with('-')
+}
+
+/// The record as it will exist once the capture is applied: the assigned
+/// properties plus the placeholder id. Nothing can be fetched for it yet.
+fn pending_record(id: &str, assigned_properties: &serde_json::Value) -> String {
+    let mut record = assigned_properties.clone();
+    if let serde_json::Value::Object(record) = &mut record {
+        record.insert("id".to_string(), serde_json::Value::String(id.to_string()));
+    }
+    serde_json::to_string(&record).unwrap()
+}
+
 fn get_affected_record(
     request_result: &str,
     mutation_name: &str,
     data_api: &DataApi,
     model_name: &str,
     fragment: &GraphQL,
+    assigned_properties: &serde_json::Value,
 ) -> Result<String, String> {
     let id = get_record_id(request_result, mutation_name)?;
+    // A captured record does not exist yet; fetching it would cost a round trip
+    // per record and return nothing.
+    if is_pending_id(&id) {
+        return Ok(pending_record(&id, assigned_properties));
+    }
     fetch_record(data_api, model_name, &id, fragment)
 }
 
@@ -412,9 +436,14 @@ impl Guest for CrudComponent {
         let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
-            Ok(data) => {
-                get_affected_record(&data, &mutation_name, data_api, &model.name, &fragment)
-            }
+            Ok(data) => get_affected_record(
+                &data,
+                &mutation_name,
+                data_api,
+                &model.name,
+                &fragment,
+                &assign_properties,
+            ),
             Err(e) => Err(e),
         }
     }
@@ -444,9 +473,14 @@ impl Guest for CrudComponent {
         let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
-            Ok(data) => {
-                get_affected_record(&data, &mutation_name, data_api, &model.name, &fragment)
-            }
+            Ok(data) => get_affected_record(
+                &data,
+                &mutation_name,
+                data_api,
+                &model.name,
+                &fragment,
+                &assign_properties,
+            ),
             Err(e) => Err(e),
         }
     }
@@ -476,9 +510,14 @@ impl Guest for CrudComponent {
         let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
-            Ok(data) => {
-                get_affected_record(&data, &mutation_name, data_api, &model.name, &fragment)
-            }
+            Ok(data) => get_affected_record(
+                &data,
+                &mutation_name,
+                data_api,
+                &model.name,
+                &fragment,
+                &assign_properties,
+            ),
             Err(e) => Err(e),
         }
     }
@@ -1273,6 +1312,26 @@ mutation ($id: Int!) {
   }
 }"#
             ),
+        );
+    }
+
+    #[test]
+    fn is_pending_id_should_only_match_capture_placeholders() {
+        assert!(is_pending_id("-1"));
+        assert!(is_pending_id("-42"));
+        assert!(!is_pending_id("1"));
+        assert!(!is_pending_id("42"));
+        assert!(!is_pending_id("c7a0e4d6-3c6b-4a4d-9d6f-2f0b7f1f2a3b"));
+    }
+
+    #[test]
+    fn pending_record_should_combine_placeholder_id_with_assigned_properties() {
+        let assigned_properties = serde_json::json!({ "name": "Pikachu", "trainer": { "id": 7 } });
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&pending_record("-1", &assigned_properties))
+                .unwrap(),
+            serde_json::json!({ "id": "-1", "name": "Pikachu", "trainer": { "id": 7 } })
         );
     }
 
