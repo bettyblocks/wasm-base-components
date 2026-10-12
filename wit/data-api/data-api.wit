@@ -1,4 +1,4 @@
-package betty-blocks-types:data-api@3.1.0;
+package betty-blocks-types:data-api@3.0.0;
 
 interface data-api {
     use betty-blocks-types:types/types@3.0.0.{json-string};
