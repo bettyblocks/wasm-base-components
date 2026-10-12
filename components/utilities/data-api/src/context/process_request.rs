@@ -98,8 +98,12 @@ pub fn extract_mutation_data(
                         Ok(id)
                     }
                     // Create with a specified negative ID
-                    Ok(_) => Err("create mutations cannot specify a negative id"),
-                    Err(_) => Err("create mutation variables are improperly formatted"),
+                    Ok(_) => Err(String::from(
+                        "create mutations cannot specify a negative id",
+                    )),
+                    Err(error) => Err(format!(
+                        "create mutation variables are improperly formatted: {error}"
+                    )),
                 }
             }
             "update" => {
@@ -114,7 +118,7 @@ pub fn extract_mutation_data(
                                 ..
                             },
                         ..
-                    }) => Err("could not find id input for update query"),
+                    }) => Err(String::from("could not find id input for update query")),
                     // Update with a specified ID
                     Ok(
                         variables @ MutationInput {
@@ -135,14 +139,16 @@ pub fn extract_mutation_data(
 
                         Ok(id)
                     }
-                    Err(_) => Err("update mutation variables are improperly formatted"),
+                    Err(error) => Err(format!(
+                        "update mutation variables are improperly formatted: {error}"
+                    )),
                 }
             }
             "delete" => {
                 let variables @ DeleteInput {
                     id: MutationIdInput(id),
-                } = serde_json::from_str(&variables).map_err(|_| {
-                    String::from("delete mutation variables are improperly formatted")
+                } = serde_json::from_str(&variables).map_err(|error| {
+                    format!("delete mutation variables are improperly formatted: {error}")
                 })?;
 
                 capture_data
@@ -362,7 +368,8 @@ mod tests {
             )
             .unwrap_err()
             .as_str(),
-            "create mutation variables are improperly formatted"
+            "create mutation variables are improperly formatted: \
+             unsupported validation set: custom at line 1 column 43"
         );
     }
 
