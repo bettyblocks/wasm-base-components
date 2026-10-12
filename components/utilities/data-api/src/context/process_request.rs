@@ -313,6 +313,58 @@ mod tests {
     }
 
     #[test]
+    fn validation_sets_list_test() {
+        let mut capture_data = CaptureData::default();
+        capture_data.capture_stack.push(Default::default());
+
+        let request_raw_mock = RequestRawMock::with_expect(Default::default(), Default::default());
+
+        let mutation = String::from(
+            r#"mutation($input: UserInput, $validationSets: [String]) {
+            createUser(input: $input, validationSets: $validationSets) {
+                id
+            }
+        }"#,
+        );
+
+        for variables in [
+            r#"{"input": {"name": "a"}, "validationSets": ["default"]}"#,
+            r#"{"input": {"name": "b"}, "validationSets": ["empty"]}"#,
+        ] {
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                mutation.clone(),
+                String::from(variables),
+            )
+            .unwrap();
+        }
+
+        let validation_sets: Vec<ValidationSets> = capture_data.capture_stack[0]
+            .create
+            .iter()
+            .map(|entry| entry.variables.validation_sets)
+            .collect();
+
+        assert_eq!(
+            validation_sets,
+            [ValidationSets::Default, ValidationSets::Empty]
+        );
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                mutation,
+                String::from(r#"{"input": {}, "validationSets": ["custom"]}"#),
+            )
+            .unwrap_err()
+            .as_str(),
+            "create mutation variables are improperly formatted"
+        );
+    }
+
+    #[test]
     fn internal_id_generation_test() {
         let mut capture_data = CaptureData::default();
         capture_data.capture_stack.push(Default::default());

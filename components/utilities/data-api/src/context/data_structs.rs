@@ -79,11 +79,33 @@ pub struct DeleteInput {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(try_from = "Vec<String>", into = "Vec<String>")]
 pub enum ValidationSets {
     Empty,
     #[default]
     Default,
+}
+
+// The GraphQL argument is `[String]`, so callers (e.g. the crud component) send a list,
+// while the capture itself only distinguishes between "default" and "empty".
+impl From<ValidationSets> for Vec<String> {
+    fn from(value: ValidationSets) -> Self {
+        vec![value.as_str().to_string()]
+    }
+}
+
+impl TryFrom<Vec<String>> for ValidationSets {
+    type Error = String;
+
+    fn try_from(names: Vec<String>) -> Result<Self, Self::Error> {
+        names
+            .iter()
+            .try_fold(ValidationSets::Empty, |acc, name| match name.as_str() {
+                "default" => Ok(ValidationSets::Default),
+                "empty" => Ok(acc),
+                other => Err(format!("unsupported validation set: {other}")),
+            })
+    }
 }
 
 impl ValidationSets {

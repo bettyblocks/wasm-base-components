@@ -229,7 +229,7 @@ fn id_reserving_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input":[{"id":4},{"id":7,"subordinates":{"_replace":[{"id":4}]}}],"validationSets":"default"}"#,
+                r#"{"input":[{"id":4},{"id":7,"subordinates":{"_replace":[{"id":4}]}}],"validationSets":["default"]}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -266,13 +266,13 @@ fn pending_capture_test() {
     let mut mutation1 = PendingMutation::new(
         "createUser",
         "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
-        r#"{"input":{"name":"John"},"validationSets":"default"}"#,
+        r#"{"input":{"name":"John"},"validationSets":["default"]}"#,
     );
 
     let mutation2 = PendingMutation::new(
         "updateUser",
         "mutation { updateUser(input: $input, validationSets: $validationSets) { id } }",
-        r#"{"input":{"id":-1,"name":"Joe"},"validationSets":"default"}"#,
+        r#"{"input":{"id":-1,"name":"Joe"},"validationSets":["default"]}"#,
     );
 
     let mutation3 = PendingMutation::new(
@@ -311,7 +311,7 @@ fn pending_capture_test() {
             .try_into()
             .unwrap();
     mutation1.variables =
-        String::from(r#"{"input":{"id":-1,"name":"John"},"validationSets":"default"}"#);
+        String::from(r#"{"input":{"id":-1,"name":"John"},"validationSets":["default"]}"#);
     assert_eq!(
         TryInto::<[_; 1]>::try_into(create_mutations).unwrap(),
         [mutation1]
@@ -331,7 +331,7 @@ fn discard_capture_test() {
     let mutation1 = PendingMutation::new(
         "createUser",
         "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
-        r#"{"input":{"id":1,"name":"John"},"validationSets":"default"}"#,
+        r#"{"input":{"id":1,"name":"John"},"validationSets":["default"]}"#,
     );
 
     let mut component = instantiate_component([]);
@@ -362,19 +362,19 @@ fn nested_capture_test() {
     let mutation1 = PendingMutation::new(
         "createUser",
         "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
-        r#"{"input":{"name":"John"},"validationSets":"default"}"#,
+        r#"{"input":{"name":"John"},"validationSets":["default"]}"#,
     );
 
     let mutation2 = PendingMutation::new(
         "createUser",
         "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
-        r#"{"input":{"name":"Joe","subordinates":{"_replace":[{"id":-1}]}},"validationSets":"default"}"#,
+        r#"{"input":{"name":"Joe","subordinates":{"_replace":[{"id":-1}]}},"validationSets":["default"]}"#,
     );
 
     let mutation3 = PendingMutation::new(
         "createUser",
         "mutation { createUser(input: $input, validationSets: $validationSets) { id } }",
-        r#"{"input":{"name":"James","subordinates":{"_replace":[{"id":-1},{"id":-2}]}},"validationSets":"default"}"#,
+        r#"{"input":{"name":"James","subordinates":{"_replace":[{"id":-1},{"id":-2}]}},"validationSets":["default"]}"#,
     );
 
     let mut component = instantiate_component([
@@ -391,7 +391,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input":[{"id":2,"name":"Joe","subordinates":{"_replace":[{"id":1}]}}],"validationSets":"default"}"#,
+                r#"{"input":[{"id":2,"name":"Joe","subordinates":{"_replace":[{"id":1}]}}],"validationSets":["default"]}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -411,7 +411,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input":[{"id":3,"name":"James","subordinates":{"_replace":[{"id":1},{"id":2}]}}],"validationSets":"default"}"#,
+                r#"{"input":[{"id":3,"name":"James","subordinates":{"_replace":[{"id":1},{"id":2}]}}],"validationSets":["default"]}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
@@ -421,7 +421,7 @@ fn nested_capture_test() {
         (
             (
                 "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
-                r#"{"input":[{"id":1,"name":"John"}],"validationSets":"default"}"#,
+                r#"{"input":[{"id":1,"name":"John"}],"validationSets":["default"]}"#,
             ),
             DataApiResult {
                 status: Status::Ok as i32,
