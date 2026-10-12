@@ -65,6 +65,31 @@ pub struct MutationInput {
     pub validation_sets: ValidationSets,
 }
 
+// The update mutation of the data API takes the id as a separate `$id` argument, while the
+// captured update is sent as an upsert that needs the id inside the input.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+pub struct UpdateMutationInput {
+    #[serde(default)]
+    pub id: MutationIdInput,
+    #[serde(flatten)]
+    pub mutation_input: MutationInput,
+}
+
+impl From<UpdateMutationInput> for MutationInput {
+    fn from(
+        UpdateMutationInput {
+            id,
+            mut mutation_input,
+        }: UpdateMutationInput,
+    ) -> Self {
+        if let MutationIdInput(0) = mutation_input.input.id {
+            mutation_input.input.id = id;
+        }
+
+        mutation_input
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MutationInputVariable {
     #[serde(default)]
