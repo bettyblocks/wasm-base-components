@@ -1,3 +1,15 @@
+# [1.34.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.33.0...v1.34.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* accept top-level ids for update mutations ([d2eafbe](https://github.com/bettyblocks/wasm-base-components/commit/d2eafbecdc6abc6214db0da68d7cde3c5c464a0b))
+
+
+### Features
+
+* parse validation sets from a list of strings ([c6082cf](https://github.com/bettyblocks/wasm-base-components/commit/c6082cf6c9ffe8d63f3a6d36abd6eaffe17d6624))
+
 # [1.33.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.32.0...v1.33.0) (2026-10-12)
 
 
