@@ -1,7 +1,7 @@
-package betty-blocks-types:crud@4.0.0;
+package betty-blocks-types:crud@4.1.0;
 
 interface crud {
-    use betty-blocks-types:data-api/data-api@3.0.0.{data-api};
+    use betty-blocks-types:data-api/data-api@3.1.0.{data-api};
     use betty-blocks-types:types/types@3.0.0.{betty-model, betty-property-mapping, betty-property, betty-record-json};
 
     create: func(data-api: borrow<data-api>, model: betty-model, mapping: betty-property-mapping, validation-sets: option<list<string>>) -> result<betty-record-json, string>;
