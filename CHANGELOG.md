@@ -1,3 +1,10 @@
+# [1.33.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.32.0...v1.33.0) (2026-10-12)
+
+
+### Features
+
+* update crud to use data-api resource ([22a46ef](https://github.com/bettyblocks/wasm-base-components/commit/22a46ef49f3ecab3e75298e8fc903a9cfb60c81f))
+
 # [1.32.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.31.0...v1.32.0) (2026-10-07)
 
 
