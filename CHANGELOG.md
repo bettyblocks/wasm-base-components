@@ -1,3 +1,10 @@
+## [1.34.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.0...v1.34.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* bump crud and data-api ([3afbf87](https://github.com/bettyblocks/wasm-base-components/commit/3afbf8731651bce7841c6bdd00940522bc69afc2))
+
 # [1.34.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.33.0...v1.34.0) (2026-10-12)
 
 
