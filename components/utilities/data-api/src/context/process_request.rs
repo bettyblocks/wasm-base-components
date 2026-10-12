@@ -103,7 +103,9 @@ pub fn extract_mutation_data(
                 }
             }
             "update" => {
-                match serde_json::from_str(&variables) {
+                match serde_json::from_str::<UpdateMutationInput>(&variables)
+                    .map(MutationInput::from)
+                {
                     // Update without a specified ID
                     Ok(MutationInput {
                         input:
@@ -310,6 +312,122 @@ mod tests {
             }
         ));
         assert!(update.is_empty());
+    }
+
+    #[test]
+    fn validation_sets_list_test() {
+        let mut capture_data = CaptureData::default();
+        capture_data.capture_stack.push(Default::default());
+
+        let request_raw_mock = RequestRawMock::with_expect(Default::default(), Default::default());
+
+        let mutation = String::from(
+            r#"mutation($input: UserInput, $validationSets: [String]) {
+            createUser(input: $input, validationSets: $validationSets) {
+                id
+            }
+        }"#,
+        );
+
+        for variables in [
+            r#"{"input": {"name": "a"}, "validationSets": ["default"]}"#,
+            r#"{"input": {"name": "b"}, "validationSets": ["empty"]}"#,
+        ] {
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                mutation.clone(),
+                String::from(variables),
+            )
+            .unwrap();
+        }
+
+        let validation_sets: Vec<ValidationSets> = capture_data.capture_stack[0]
+            .create
+            .iter()
+            .map(|entry| entry.variables.validation_sets)
+            .collect();
+
+        assert_eq!(
+            validation_sets,
+            [ValidationSets::Default, ValidationSets::Empty]
+        );
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                mutation,
+                String::from(r#"{"input": {}, "validationSets": ["custom"]}"#),
+            )
+            .unwrap_err()
+            .as_str(),
+            "create mutation variables are improperly formatted"
+        );
+    }
+
+    #[test]
+    fn update_with_top_level_id_test() {
+        let mut capture_data = CaptureData::default();
+        capture_data.capture_stack.push(Default::default());
+
+        let request_raw_mock = RequestRawMock::with_expect(Default::default(), Default::default());
+
+        let mutation = String::from(
+            r#"mutation($id: Int!, $input: UserInput, $validationSets: [String]) {
+            updateUser(id: $id, input: $input, validationSets: $validationSets) {
+                id
+            }
+        }"#,
+        );
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                mutation.clone(),
+                String::from(
+                    r#"{"id": "5", "input": {"name": "Joe"}, "validationSets": ["empty"]}"#
+                ),
+            )
+            .unwrap()
+            .as_str(),
+            r#"{"data":{"updateUser":{"id":"5"}}}"#
+        );
+
+        assert_eq!(
+            extract_mutation_data(
+                &request_raw_mock,
+                &mut capture_data,
+                mutation,
+                String::from(r#"{"input": {"name": "Joe"}}"#),
+            )
+            .unwrap_err()
+            .as_str(),
+            "could not find id input for update query"
+        );
+
+        let [
+            MassMutateEntry {
+                model_name,
+                variables:
+                    MutationInput {
+                        input: MutationInputVariable { id, other_inputs },
+                        validation_sets,
+                    },
+            },
+        ] = capture_data
+            .capture_stack
+            .pop()
+            .unwrap()
+            .update
+            .try_into()
+            .unwrap();
+
+        assert_eq!(model_name.as_str(), "User");
+        assert_eq!(id, MutationIdInput(5));
+        assert_eq!(other_inputs.get("name").unwrap(), "Joe");
+        assert_eq!(validation_sets, ValidationSets::Empty);
     }
 
     #[test]
