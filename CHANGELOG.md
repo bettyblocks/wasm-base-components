@@ -1,3 +1,10 @@
+## [1.34.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.2...v1.34.3) (2026-10-12)
+
+
+### Bug Fixes
+
+* change versions ([12e1747](https://github.com/bettyblocks/wasm-base-components/commit/12e1747530e225204f0a109ca36b01398fccc234))
+
 ## [1.34.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.1...v1.34.2) (2026-10-12)
 
 
