@@ -1,3 +1,11 @@
+## [1.34.5](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.4...v1.34.5) (2026-10-13)
+
+
+### Bug Fixes
+
+* **crud:** skip the record fetch for captured mutations ([1194ac8](https://github.com/bettyblocks/wasm-base-components/commit/1194ac885170f17803f522c2771495798c716df6))
+* **data-api:** use the bettyblocks fork of wasmcloud-grpc-client ([1247d5e](https://github.com/bettyblocks/wasm-base-components/commit/1247d5e1207f24292c9281afd5d8f8e81f60c7cb))
+
 ## [1.34.4](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.3...v1.34.4) (2026-10-12)
 
 
