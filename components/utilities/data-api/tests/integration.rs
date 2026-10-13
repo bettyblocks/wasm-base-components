@@ -462,3 +462,93 @@ fn nested_capture_test() {
 
     call_data_api_resource!(resource.call_apply_capture()).unwrap();
 }
+
+/// A request body larger than the outgoing body buffer of the host must not hang.
+///
+/// wasmtime's `wasi:http` outgoing body only buffers two writes before the
+/// request is handed to the host, so a client that writes the whole body in
+/// 4 KiB chunks before calling `outgoing-handler.handle` deadlocks on anything
+/// bigger than 4 KiB (PHOEN-1806).
+#[test]
+fn large_request_body_test() {
+    let query = "query { allPokemon { totalCount } }";
+    let variables = format!(r#"{{"padding":"{}"}}"#, "x".repeat(16 * 1024));
+
+    let mut component = instantiate_component([(
+        (query, variables.as_str()),
+        DataApiResult {
+            status: Status::Ok as i32,
+            result: format_result_json(serde_json::json!({"allPokemon": {"totalCount": 1}})),
+        },
+    )]);
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(query, &variables)).unwrap(),
+        r#"{"data":{"allPokemon":{"totalCount":1}}}"#
+    );
+}
+
+/// Applying a capture with many records sends one `upsertMany` whose body is far
+/// larger than 4 KiB; this mirrors a mass mutate around a loop of 100 creates.
+#[test]
+fn apply_capture_with_many_records_test() {
+    const RECORDS: usize = 100;
+    let payload = "p".repeat(100);
+    let reserved_ids: Vec<i32> = (1..=RECORDS as i32).map(|i| 1000 + i).collect();
+
+    let upsert_input: Vec<serde_json::Value> = reserved_ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| serde_json::json!({"id": id, "name": format!("pokemon {i}"), "payload": payload}))
+        .collect();
+    let upsert_variables =
+        serde_json::json!({"input": upsert_input, "validationSets": ["default"]}).to_string();
+    assert!(upsert_variables.len() > 4 * 1024);
+
+    let mut component = instantiate_component([
+        (
+            (
+                "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
+                r#"{"model":"Pokemon","amount":100}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(
+                    serde_json::json!({"reserveRecords": {"ids": reserved_ids}}),
+                ),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyPokemon(input: $input, validationSets: $validationSets) { id } }",
+                upsert_variables.as_str(),
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+    ]);
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    for i in 0..RECORDS {
+        let variables =
+            serde_json::json!({"input": {"name": format!("pokemon {i}"), "payload": payload}})
+                .to_string();
+        assert_eq!(
+            call_data_api_resource!(resource.call_request(
+                "mutation ($input: PokemonInput, $validationSets: [String]) { createPokemon(input: $input, validationSets: $validationSets) { id } }",
+                &variables
+            ))
+            .unwrap(),
+            format!(r#"{{"data":{{"createPokemon":{{"id":"-{}"}}}}}}"#, i + 1)
+        );
+    }
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+}
