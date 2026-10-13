@@ -1,3 +1,10 @@
+# [1.35.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.5...v1.35.0) (2026-10-13)
+
+
+### Features
+
+* add tools to mcp-options ([3ede4bc](https://github.com/bettyblocks/wasm-base-components/commit/3ede4bc9a6f620e4ba725982e9ae83c1b5a612f9))
+
 ## [1.34.5](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.4...v1.34.5) (2026-10-13)
 
 
