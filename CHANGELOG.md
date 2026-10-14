@@ -1,3 +1,10 @@
+## [1.36.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.2...v1.36.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* **data-api:** pin wasmcloud-grpc-client to bettyblocks master ([91f6e5d](https://github.com/bettyblocks/wasm-base-components/commit/91f6e5d4122e1502868503c21441d38fb16c22c1)), closes [bettyblocks/wasmcloud-grpc-client#1](https://github.com/bettyblocks/wasmcloud-grpc-client/issues/1)
+
 ## [1.36.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.1...v1.36.2) (2026-10-14)
 
 
