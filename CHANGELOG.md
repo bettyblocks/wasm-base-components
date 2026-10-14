@@ -1,3 +1,10 @@
+# [1.36.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.35.0...v1.36.0) (2026-10-14)
+
+
+### Features
+
+* add betty-unique-by type to types 3.2.0 ([9d27e33](https://github.com/bettyblocks/wasm-base-components/commit/9d27e33be6c1e5ddd4639b3a19635a69132d9ccc))
+
 # [1.35.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.5...v1.35.0) (2026-10-13)
 
 
