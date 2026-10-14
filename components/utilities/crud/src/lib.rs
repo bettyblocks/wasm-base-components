@@ -1,7 +1,6 @@
 wit_bindgen::generate!({ generate_all });
 
-use crate::betty_blocks_types::data_api::data_api::request;
-use crate::betty_blocks_types::data_api::data_api::HelperContext;
+use crate::betty_blocks_types::data_api::data_api::DataApi;
 use crate::betty_blocks_types::types::types::{BettyProperty, BettyPropertyMap, BettyPropertyPath};
 use crate::exports::betty_blocks_types::crud::crud::{
     BettyModel, BettyPropertyMapping, BettyRecordJson, Guest,
@@ -273,7 +272,7 @@ fn create_fetch_record_query(model_name: &str, query_name: &str, fragment: &Grap
 }
 
 fn fetch_record(
-    helper_context: HelperContext,
+    data_api: &DataApi,
     model_name: &str,
     id: &str,
     fragment: &GraphQL,
@@ -281,8 +280,7 @@ fn fetch_record(
     let query_name = format!("one{model_name}",);
     let query = create_fetch_record_query(model_name, &query_name, fragment);
 
-    let result = request(
-        &helper_context,
+    let result = data_api.request(
         &query,
         &serde_json::json!(
         {
@@ -377,22 +375,46 @@ fn get_record_id(gql_result: &str, mutation_name: &str) -> Result<String, String
     }
 }
 
+/// Inside a mass mutate capture the data-api does not send a create mutation but
+/// answers it with a negative placeholder id, to be swapped for a reserved id when
+/// the capture is applied. Real ids are positive integers or uuids, so a leading
+/// `-` is unambiguous.
+fn is_pending_id(id: &str) -> bool {
+    id.starts_with('-')
+}
+
+/// The record as it will exist once the capture is applied: the assigned
+/// properties plus the placeholder id. Nothing can be fetched for it yet.
+fn pending_record(id: &str, assigned_properties: &serde_json::Value) -> String {
+    let mut record = assigned_properties.clone();
+    if let serde_json::Value::Object(record) = &mut record {
+        record.insert("id".to_string(), serde_json::Value::String(id.to_string()));
+    }
+    serde_json::to_string(&record).unwrap()
+}
+
 fn get_affected_record(
     request_result: &str,
     mutation_name: &str,
-    helper_context: HelperContext,
+    data_api: &DataApi,
     model_name: &str,
     fragment: &GraphQL,
+    assigned_properties: &serde_json::Value,
 ) -> Result<String, String> {
     let id = get_record_id(request_result, mutation_name)?;
-    fetch_record(helper_context, model_name, &id, fragment)
+    // A captured record does not exist yet; fetching it would cost a round trip
+    // per record and return nothing.
+    if is_pending_id(&id) {
+        return Ok(pending_record(&id, assigned_properties));
+    }
+    fetch_record(data_api, model_name, &id, fragment)
 }
 
 struct CrudComponent {}
 
 impl Guest for CrudComponent {
     fn create(
-        helper_context: HelperContext,
+        data_api: &DataApi,
         model: BettyModel,
         mapping: BettyPropertyMapping,
         validation_sets: Option<Vec<String>>,
@@ -411,26 +433,23 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context.clone(),
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
             Ok(data) => get_affected_record(
                 &data,
                 &mutation_name,
-                helper_context,
+                data_api,
                 &model.name,
                 &fragment,
+                &assign_properties,
             ),
             Err(e) => Err(e),
         }
     }
 
     fn update(
-        helper_context: HelperContext,
+        data_api: &DataApi,
         model: BettyModel,
         record_id: String,
         mapping: BettyPropertyMapping,
@@ -451,26 +470,23 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context.clone(),
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
             Ok(data) => get_affected_record(
                 &data,
                 &mutation_name,
-                helper_context,
+                data_api,
                 &model.name,
                 &fragment,
+                &assign_properties,
             ),
             Err(e) => Err(e),
         }
     }
 
     fn upsert(
-        helper_context: HelperContext,
+        data_api: &DataApi,
         model: BettyModel,
         mapping: BettyPropertyMapping,
         unique_by: BettyProperty,
@@ -491,29 +507,22 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context.clone(),
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
             Ok(data) => get_affected_record(
                 &data,
                 &mutation_name,
-                helper_context,
+                data_api,
                 &model.name,
                 &fragment,
+                &assign_properties,
             ),
             Err(e) => Err(e),
         }
     }
 
-    fn delete(
-        helper_context: HelperContext,
-        model: BettyModel,
-        record_id: String,
-    ) -> Result<String, String> {
+    fn delete(data_api: &DataApi, model: BettyModel, record_id: String) -> Result<String, String> {
         let mutation_name = format!("delete{}", model.name);
         let mutation = format_delete_mutation(&mutation_name);
         let input = serde_json::json!(
@@ -522,11 +531,7 @@ impl Guest for CrudComponent {
             }
         );
 
-        let result = request(
-            &helper_context,
-            &mutation,
-            &serde_json::to_string(&input).unwrap(),
-        );
+        let result = data_api.request(&mutation, &serde_json::to_string(&input).unwrap());
 
         match result {
             Ok(_) => Ok(serde_json::json!({"result": "Record deleted"}).to_string()),
@@ -1307,6 +1312,26 @@ mutation ($id: Int!) {
   }
 }"#
             ),
+        );
+    }
+
+    #[test]
+    fn is_pending_id_should_only_match_capture_placeholders() {
+        assert!(is_pending_id("-1"));
+        assert!(is_pending_id("-42"));
+        assert!(!is_pending_id("1"));
+        assert!(!is_pending_id("42"));
+        assert!(!is_pending_id("c7a0e4d6-3c6b-4a4d-9d6f-2f0b7f1f2a3b"));
+    }
+
+    #[test]
+    fn pending_record_should_combine_placeholder_id_with_assigned_properties() {
+        let assigned_properties = serde_json::json!({ "name": "Pikachu", "trainer": { "id": 7 } });
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&pending_record("-1", &assigned_properties))
+                .unwrap(),
+            serde_json::json!({ "id": "-1", "name": "Pikachu", "trainer": { "id": 7 } })
         );
     }
 

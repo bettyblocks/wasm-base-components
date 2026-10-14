@@ -65,6 +65,31 @@ pub struct MutationInput {
     pub validation_sets: ValidationSets,
 }
 
+// The update mutation of the data API takes the id as a separate `$id` argument, while the
+// captured update is sent as an upsert that needs the id inside the input.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize)]
+pub struct UpdateMutationInput {
+    #[serde(default)]
+    pub id: MutationIdInput,
+    #[serde(flatten)]
+    pub mutation_input: MutationInput,
+}
+
+impl From<UpdateMutationInput> for MutationInput {
+    fn from(
+        UpdateMutationInput {
+            id,
+            mut mutation_input,
+        }: UpdateMutationInput,
+    ) -> Self {
+        if let MutationIdInput(0) = mutation_input.input.id {
+            mutation_input.input.id = id;
+        }
+
+        mutation_input
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MutationInputVariable {
     #[serde(default)]
@@ -79,11 +104,33 @@ pub struct DeleteInput {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(try_from = "Vec<String>", into = "Vec<String>")]
 pub enum ValidationSets {
     Empty,
     #[default]
     Default,
+}
+
+// The GraphQL argument is `[String]`, so callers (e.g. the crud component) send a list,
+// while the capture itself only distinguishes between "default" and "empty".
+impl From<ValidationSets> for Vec<String> {
+    fn from(value: ValidationSets) -> Self {
+        vec![value.as_str().to_string()]
+    }
+}
+
+impl TryFrom<Vec<String>> for ValidationSets {
+    type Error = String;
+
+    fn try_from(names: Vec<String>) -> Result<Self, Self::Error> {
+        names
+            .iter()
+            .try_fold(ValidationSets::Empty, |acc, name| match name.as_str() {
+                "default" => Ok(ValidationSets::Default),
+                "empty" => Ok(acc),
+                other => Err(format!("unsupported validation set: {other}")),
+            })
+    }
 }
 
 impl ValidationSets {

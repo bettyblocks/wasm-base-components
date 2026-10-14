@@ -1,3 +1,120 @@
+## [1.36.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.0...v1.36.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* bump data api version ([826a44b](https://github.com/bettyblocks/wasm-base-components/commit/826a44b2ef39e6850a33a2d836c3ffb20e237ca8))
+* trigger pipelines ([289acb1](https://github.com/bettyblocks/wasm-base-components/commit/289acb1fc144d49fabe38a29daa93d9c5e550b85))
+
+# [1.36.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.35.0...v1.36.0) (2026-10-14)
+
+
+### Features
+
+* add betty-unique-by type to types 3.2.0 ([9d27e33](https://github.com/bettyblocks/wasm-base-components/commit/9d27e33be6c1e5ddd4639b3a19635a69132d9ccc))
+
+# [1.35.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.5...v1.35.0) (2026-10-13)
+
+
+### Features
+
+* add tools to mcp-options ([3ede4bc](https://github.com/bettyblocks/wasm-base-components/commit/3ede4bc9a6f620e4ba725982e9ae83c1b5a612f9))
+
+## [1.34.5](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.4...v1.34.5) (2026-10-13)
+
+
+### Bug Fixes
+
+* **crud:** skip the record fetch for captured mutations ([1194ac8](https://github.com/bettyblocks/wasm-base-components/commit/1194ac885170f17803f522c2771495798c716df6))
+* **data-api:** use the bettyblocks fork of wasmcloud-grpc-client ([1247d5e](https://github.com/bettyblocks/wasm-base-components/commit/1247d5e1207f24292c9281afd5d8f8e81f60c7cb))
+
+## [1.34.4](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.3...v1.34.4) (2026-10-12)
+
+
+### Bug Fixes
+
+* add extra logging ([490c782](https://github.com/bettyblocks/wasm-base-components/commit/490c782e62d7bf4531a37027e6a66e28b63cf8d9))
+
+## [1.34.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.2...v1.34.3) (2026-10-12)
+
+
+### Bug Fixes
+
+* change versions ([12e1747](https://github.com/bettyblocks/wasm-base-components/commit/12e1747530e225204f0a109ca36b01398fccc234))
+
+## [1.34.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.1...v1.34.2) (2026-10-12)
+
+
+### Bug Fixes
+
+* bump version ([3410ad5](https://github.com/bettyblocks/wasm-base-components/commit/3410ad56137a26012f7352f1643b47371d95abf4))
+
+## [1.34.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.34.0...v1.34.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* bump crud and data-api ([3afbf87](https://github.com/bettyblocks/wasm-base-components/commit/3afbf8731651bce7841c6bdd00940522bc69afc2))
+
+# [1.34.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.33.0...v1.34.0) (2026-10-12)
+
+
+### Bug Fixes
+
+* accept top-level ids for update mutations ([d2eafbe](https://github.com/bettyblocks/wasm-base-components/commit/d2eafbecdc6abc6214db0da68d7cde3c5c464a0b))
+
+
+### Features
+
+* parse validation sets from a list of strings ([c6082cf](https://github.com/bettyblocks/wasm-base-components/commit/c6082cf6c9ffe8d63f3a6d36abd6eaffe17d6624))
+
+# [1.33.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.32.0...v1.33.0) (2026-10-12)
+
+
+### Features
+
+* update crud to use data-api resource ([22a46ef](https://github.com/bettyblocks/wasm-base-components/commit/22a46ef49f3ecab3e75298e8fc903a9cfb60c81f))
+
+# [1.32.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.31.0...v1.32.0) (2026-10-07)
+
+
+### Features
+
+* add betty-http types to types 3.1.0 ([07b73ff](https://github.com/bettyblocks/wasm-base-components/commit/07b73ff6dc631f20ae32703ed246b87034e271a0))
+
+# [1.31.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.30.0...v1.31.0) (2026-10-06)
+
+
+### Features
+
+* add betty-array type to types 3.1.0 ([c475dc5](https://github.com/bettyblocks/wasm-base-components/commit/c475dc5e014fb760ff6ef51f5dbef3699ca3f772))
+
+# [1.30.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.29.0...v1.30.0) (2026-10-06)
+
+
+### Features
+
+* add betty-expression type to types 3.1.0 ([ff24635](https://github.com/bettyblocks/wasm-base-components/commit/ff2463575bf1f74964bada743af0485a07e35773))
+
+# [1.29.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.28.0...v1.29.0) (2026-10-06)
+
+
+### Features
+
+* add send mail type ([7f2fe05](https://github.com/bettyblocks/wasm-base-components/commit/7f2fe05df2449d2cad8654a3b16dde08feafd9f8))
+
+# [1.28.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.1...v1.28.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* trigger pipelines ([177bd2e](https://github.com/bettyblocks/wasm-base-components/commit/177bd2e1f2472f5884565c0525bbf28ead91504b))
+
+
+### Features
+
+* add betty-schema-model type to types 3.1.0 ([b30a07f](https://github.com/bettyblocks/wasm-base-components/commit/b30a07f00a37aab3c5b7e57579feff944c9cff1c))
+
 ## [1.27.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.27.0...v1.27.1) (2026-10-05)
 
 

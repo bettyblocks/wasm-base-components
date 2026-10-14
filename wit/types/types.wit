@@ -1,4 +1,4 @@
-package betty-blocks-types:types@3.0.0;
+package betty-blocks-types:types@3.2.0;
 
 interface types {
     type json-string = string;
@@ -44,6 +44,8 @@ interface types {
 
     type betty-property-mapping = list<betty-property-map>;
 
+    type betty-unique-by = list<betty-property-path>;
+
     record key-value {
         key: string,
         value: option<json-string>
@@ -64,6 +66,7 @@ interface types {
         description: option<string>,
         url: string,
         authentication: authentication-config,
+        enabled-tools: option<list<string>>,
     }
 
     variant betty-ai-tool {
@@ -80,4 +83,68 @@ interface types {
     }
 
     type betty-value = json-string;
+
+    type betty-array = json-string;
+
+    record betty-send-mail {
+        host: string,
+        port: u16,
+        username: string,
+        password: string,
+        secure: option<bool>,
+        sender-email: string,
+        sender-name: option<string>,
+        to-email: string,
+        to-name: option<string>,
+        cc: option<string>,
+        reply-to: option<string>,
+        bcc: option<string>,
+        subject: option<string>,
+        body: option<string>,
+        variables: option<betty-map>,
+        attachments: option<betty-map>,
+        attachments-col: option<betty-collection>,
+        attachments-col-property: option<list<betty-property>>
+    }
+    
+    type betty-schema-model = string;
+
+    record betty-expression {
+        expression: string,
+        variables: json-string,
+        schema-model: option<betty-schema-model>,
+        debug-logging: option<bool>
+    }
+
+    enum betty-http-method {
+        get,
+        post,
+        put,
+        patch,
+        delete,
+        head,
+        options
+    }
+
+    enum betty-http-protocol {
+        http,
+        https
+    }
+
+    record betty-http-request {
+        method: betty-http-method,
+        headers: option<json-string>,
+        protocol: betty-http-protocol,
+        url: string,
+        url-parameters: option<json-string>,
+        query-parameters: option<json-string>,
+        body: option<string>,
+        body-parameters: option<json-string>,
+        schema-model: option<betty-schema-model>
+    }
+
+    record betty-http-response {
+        response-code: u16,
+        %as: json-string
+    }
 }

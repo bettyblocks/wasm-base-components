@@ -2,6 +2,15 @@ name: CI
 
 on:
   pull_request:
+  # Runs on dev only to seed the rust caches: a PR can restore caches from its base branch,
+  # but never from another PR.
+  push:
+    branches: [dev]
+
+env:
+  # No debug info: CI never needs it, and it is a large share of compile, link and cache size.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
   validate-source-branch:
@@ -17,26 +26,41 @@ jobs:
             exit 1
           fi
 
-  run_ci:
+  list-components:
     runs-on: ubuntu-24.04
+    outputs:
+      components: ${{ steps.list.outputs.components }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-all-crates: "true"
-          cache-directories: |
-            components/http-mcp/target
-            components/http-wrapper/target
-            components/live-announcer/target
-            components/logs-writer/target
-            components/logs-writer/test-component/target
-            components/utilities/auth/target
-            components/utilities/crud/target
-            components/utilities/data-api/target
-            components/utilities/log-to-stdout/target
-            components/utilities/pdf-generator/target
-            components/utilities/upload-file/target
+      - name: List components
+        id: list
+        run: |
+          components=$(
+            find components -mindepth 2 -name Justfile -not -path '*/target/*' -printf '%h\n' \
+              | sort \
+              | jq -Rsc 'split("\n") | map(select(. != "")) | map({
+                  dir: .,
+                  name: sub("^components/"; ""),
+                  key: (sub("^components/"; "") | gsub("/"; "-"))
+                })'
+          )
+          echo "$components" | jq .
+          echo "components=$components" >> "$GITHUB_OUTPUT"
+
+  component:
+    name: component (${{ matrix.component.name }})
+    needs: list-components
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.list-components.outputs.components) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.component.dir }}
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Install stable Rust toolchain
         # uses: dtolnay/rust-toolchain@stable
@@ -44,6 +68,31 @@ jobs:
         with:
           targets: wasm32-wasip2
           components: clippy, rustfmt
+
+      # Each crate under the component (e.g. logs-writer/test-component) has its own lockfile
+      # and target dir, which is not always ./target (log-to-stdout sets one in .cargo/config).
+      - name: Resolve cache workspaces
+        id: cache-workspaces
+        env:
+          COMPONENT_DIR: ${{ matrix.component.dir }}
+        run: |
+          {
+            echo 'workspaces<<EOF'
+            find . -name Cargo.toml -not -path '*/target/*' -not -path '*/wit/*' -printf '%h\n' \
+              | while read -r ws; do
+                  target=$(cargo metadata --no-deps --format-version 1 --manifest-path "$ws/Cargo.toml" | jq -r .target_directory)
+                  echo "${COMPONENT_DIR}${ws#.} -> $(realpath -m --relative-to="$ws" "$target")"
+                done
+            echo EOF
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.component.key }}
+          workspaces: ${{ steps.cache-workspaces.outputs.workspaces }}
+          cache-all-crates: "true"
+          # PRs only restore. Saving from every PR would evict the dev caches they rely on.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
@@ -62,26 +111,35 @@ jobs:
           curl -fsSL https://wasmcloud.com/sh | INSTALL_DIR=/usr/local/bin bash
           wash --version
 
-      - name: Run component linting
-        run: |
-          just lint-all
+      - name: Run linting
+        run: just lint
 
       - name: Check formatting
-        run: |
-          just format-ci
+        run: just formatting --check
 
-      - name: Run component builds
-        run: |
-          just build-all
+      - name: Run build
+        run: just build
 
-      - name: Run component clippy checks
-        run: |
-          just clippy-all
+      - name: Run clippy checks
+        run: just clippy
 
-      - name: Run component tests
-        run: |
-          just test-all
+      - name: Run tests
+        run: just test
 
-      - name: Run component integration tests
+      - name: Run integration tests
+        run: just integration-test
+
+  # Required status check: keeps a single stable name over the per-component jobs.
+  run_ci:
+    needs: component
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check component results
+        env:
+          RESULT: ${{ needs.component.result }}
         run: |
-          just integration-test-all
+          if [ "$RESULT" != "success" ]; then
+            echo "::error::One or more component jobs did not succeed: $RESULT"
+            exit 1
+          fi

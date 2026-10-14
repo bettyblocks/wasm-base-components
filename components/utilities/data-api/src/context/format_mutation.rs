@@ -440,9 +440,9 @@ mod tests {
         for key in upsert_many_inputs.keys() {
             match key.as_str() {
                 "User" => 
-                    expected_requests.push_back((String::from("mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }"), String::from(r#"{"input":[{"id":1},{"id":2,"key":"value"}],"validationSets":"empty"}"#))),
+                    expected_requests.push_back((String::from("mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }"), String::from(r#"{"input":[{"id":1},{"id":2,"key":"value"}],"validationSets":["empty"]}"#))),
                 "Oozer" => 
-                    expected_requests.push_back((String::from("mutation { upsertManyOozer(input: $input, validationSets: $validationSets) { id } }"), String::from(r#"{"input":[{"id":1}],"validationSets":"default"}"#))),
+                    expected_requests.push_back((String::from("mutation { upsertManyOozer(input: $input, validationSets: $validationSets) { id } }"), String::from(r#"{"input":[{"id":1}],"validationSets":["default"]}"#))),
                 _ => panic!("Unexpected request model")
             }
         }
