@@ -44,6 +44,8 @@ interface types {
 
     type betty-property-mapping = list<betty-property-map>;
 
+    type betty-unique-by = list<betty-property-path>;
+
     record key-value {
         key: string,
         value: option<json-string>
