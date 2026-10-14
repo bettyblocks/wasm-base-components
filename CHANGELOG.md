@@ -1,3 +1,11 @@
+## [1.36.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.0...v1.36.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* bump data api version ([826a44b](https://github.com/bettyblocks/wasm-base-components/commit/826a44b2ef39e6850a33a2d836c3ffb20e237ca8))
+* trigger pipelines ([289acb1](https://github.com/bettyblocks/wasm-base-components/commit/289acb1fc144d49fabe38a29daa93d9c5e550b85))
+
 # [1.36.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.35.0...v1.36.0) (2026-10-14)
 
 
