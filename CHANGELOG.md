@@ -1,3 +1,11 @@
+## [1.36.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.1...v1.36.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* point data-api chain at types 3.2.0 ([07a7c70](https://github.com/bettyblocks/wasm-base-components/commit/07a7c70f08a0a9a230de7a88b756db2c5af8390c))
+* trigger pipelines ([1e36aaa](https://github.com/bettyblocks/wasm-base-components/commit/1e36aaac4e9d05361034dcff4066adddd66f70f4))
+
 ## [1.36.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.0...v1.36.1) (2026-10-14)
 
 
