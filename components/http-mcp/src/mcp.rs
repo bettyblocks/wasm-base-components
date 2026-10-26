@@ -10,6 +10,81 @@ use serde_json::Value;
 
 type Headers = Vec<(String, Vec<u8>)>;
 
+/// What went wrong, so the http layer can pick the status code.
+#[derive(Debug, PartialEq)]
+pub enum FailureKind {
+    /// a json rpc error, answered with 200
+    Rpc,
+    /// no or an invalid token, answered with 401
+    Unauthenticated,
+    /// a valid token that may not access the resource, answered with 403
+    Forbidden,
+    /// the token could not be validated, answered with 503
+    Unavailable,
+}
+
+pub struct RpcFailure {
+    pub kind: FailureKind,
+    pub response: JsonrpcErrorResponse,
+    /// the value of the `WWW-Authenticate` header, for unauthenticated failures
+    pub www_authenticate: Option<String>,
+}
+
+impl RpcFailure {
+    fn rpc(response: JsonrpcErrorResponse) -> Self {
+        Self {
+            kind: FailureKind::Rpc,
+            response,
+            www_authenticate: None,
+        }
+    }
+
+    fn auth(error: AuthError, id: Option<RequestId>, server_config: &McpServerConfig) -> Self {
+        let message = format!("Auth error: {}", auth_error_message(&error));
+        let (kind, www_authenticate) = match error {
+            AuthError::MalformedToken | AuthError::ValidationFailed(_) => (
+                FailureKind::Unauthenticated,
+                Some(www_authenticate(server_config)),
+            ),
+            AuthError::Forbidden(_) => (FailureKind::Forbidden, None),
+            AuthError::Unavailable(_) => (FailureKind::Unavailable, None),
+            AuthError::MissingConfig(_) => (FailureKind::Rpc, None),
+        };
+
+        Self {
+            kind,
+            response: create_error_response(-32000, &message, id),
+            www_authenticate,
+        }
+    }
+}
+
+/// Points the client to the authorization server of the auth profile (RFC 9728).
+fn www_authenticate(server_config: &McpServerConfig) -> String {
+    match &server_config.resource_metadata_url {
+        Some(url) => format!("Bearer resource_metadata=\"{url}\""),
+        None => "Bearer".to_string(),
+    }
+}
+
+#[derive(Debug)]
+enum HandlerError {
+    Auth(AuthError),
+    Message(String),
+}
+
+impl From<String> for HandlerError {
+    fn from(message: String) -> Self {
+        Self::Message(message)
+    }
+}
+
+impl From<&str> for HandlerError {
+    fn from(message: &str) -> Self {
+        Self::Message(message.to_string())
+    }
+}
+
 #[derive(serde::Deserialize)]
 struct JsonrpcRequestWithoutId {
     pub method: String,
@@ -21,7 +96,7 @@ pub async fn process_rpc(
     headers: &Headers,
     wasmcloud_host: &str,
     application_id: &str,
-) -> Result<Option<JsonrpcResponse>, JsonrpcErrorResponse> {
+) -> Result<Option<JsonrpcResponse>, RpcFailure> {
     match serde_json::from_str::<JsonrpcRequestWithoutId>(body) {
         // short circuit notifications
         // these are just events that the client sends so the backend can do bookkeeping, it is expected that these return no content
@@ -35,11 +110,11 @@ pub async fn process_rpc(
     let request_obj: JsonrpcRequest = match serde_json::from_str(body) {
         Ok(r) => r,
         Err(e) => {
-            return Err(create_error_response(
+            return Err(RpcFailure::rpc(create_error_response(
                 -32700,
                 &format!("Invalid JSON-RPC request: {e}"),
                 None,
-            ));
+            )));
         }
     };
 
@@ -48,24 +123,28 @@ pub async fn process_rpc(
     let server_config = match config::load_server_config(server_id) {
         Ok(cfg) => cfg,
         Err(e) => {
-            return Err(create_error_response(
+            return Err(RpcFailure::rpc(create_error_response(
                 -32000,
                 &format!("Failed to load server config: {e}"),
                 id,
-            ));
+            )));
         }
     };
 
     let params = match request_obj.params {
         Some(p) => Some(serde_json::to_value(p).map_err(|e| {
-            create_error_response(-32600, &format!("Invalid params: {e}"), id.clone())
+            RpcFailure::rpc(create_error_response(
+                -32600,
+                &format!("Invalid params: {e}"),
+                id.clone(),
+            ))
         })?),
         None => None,
     };
 
     let result = match request_obj.method.as_str() {
-        "initialize" => handle_initialize(headers, &server_config),
-        "tools/list" => handle_list_tools(headers, &server_config),
+        "initialize" => handle_initialize(headers, application_id, &server_config),
+        "tools/list" => handle_list_tools(headers, application_id, &server_config),
         "tools/call" => {
             handle_call_tool(
                 &server_config,
@@ -77,50 +156,62 @@ pub async fn process_rpc(
             .await
         }
         _ => {
-            return Err(create_error_response(
+            return Err(RpcFailure::rpc(create_error_response(
                 -32601,
                 &format!("Method not found: {}", request_obj.method),
                 id,
-            ));
+            )));
         }
     };
 
     match result {
         Ok(result_value) => match create_success_response(id, result_value) {
             Ok(resp) => Ok(Some(resp)),
-            Err(e) => Err(create_error_response(
+            Err(e) => Err(RpcFailure::rpc(create_error_response(
                 -32603,
                 &format!("Failed to build response: {e}"),
                 None,
-            )),
+            ))),
         },
-        Err(e) => Err(create_error_response(-32000, &e, id)),
+        Err(HandlerError::Auth(e)) => Err(RpcFailure::auth(e, id, &server_config)),
+        Err(HandlerError::Message(e)) => {
+            Err(RpcFailure::rpc(create_error_response(-32000, &e, id)))
+        }
     }
 }
 
-fn check_allowed_to_list(headers: &Headers, server_id: &str) -> Result<(), String> {
-    if let Err(e) = allowed_to_list(headers, server_id) {
-        return Err(format!("Auth error: {}", auth_error_message(e)));
-    }
-
-    Ok(())
+fn check_allowed_to_list(
+    headers: &Headers,
+    application_id: &str,
+    server_id: &str,
+) -> Result<(), HandlerError> {
+    allowed_to_list(headers, application_id, server_id).map_err(HandlerError::Auth)
 }
 
-fn handle_initialize(headers: &Headers, server_config: &McpServerConfig) -> Result<Value, String> {
-    check_allowed_to_list(headers, &server_config.id)?;
+fn handle_initialize(
+    headers: &Headers,
+    application_id: &str,
+    server_config: &McpServerConfig,
+) -> Result<Value, HandlerError> {
+    check_allowed_to_list(headers, application_id, &server_config.id)?;
     let result = crate::config::build_initialize_result(server_config);
-    serde_json::to_value(result).map_err(|e| format!("Failed to serialize initialize result: {e}"))
+    serde_json::to_value(result)
+        .map_err(|e| format!("Failed to serialize initialize result: {e}").into())
 }
 
-fn handle_list_tools(headers: &Headers, server_config: &McpServerConfig) -> Result<Value, String> {
-    check_allowed_to_list(headers, &server_config.id)?;
+fn handle_list_tools(
+    headers: &Headers,
+    application_id: &str,
+    server_config: &McpServerConfig,
+) -> Result<Value, HandlerError> {
+    check_allowed_to_list(headers, application_id, &server_config.id)?;
     let result = ListToolsResult {
         tools: server_config.tools.iter().map(|t| t.tool.clone()).collect(),
         next_cursor: None,
         meta: None,
     };
 
-    serde_json::to_value(result).map_err(|e| format!("Failed to serialize tools list: {e}"))
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize tools list: {e}").into())
 }
 
 async fn handle_call_tool(
@@ -129,7 +220,7 @@ async fn handle_call_tool(
     params: Option<Value>,
     wasmcloud_host: &str,
     application_id: &str,
-) -> Result<Value, String> {
+) -> Result<Value, HandlerError> {
     let params = params.ok_or("Missing params for tools/call")?;
     let call_params: CallToolRequestParams =
         serde_json::from_value(params).map_err(|e| format!("Invalid tool call parameters: {e}"))?;
@@ -145,9 +236,8 @@ async fn handle_call_tool(
         &tool_with_action.tool.input_schema,
     )?;
 
-    if let Err(e) = allowed_to_call(headers, &tool_with_action.action_id) {
-        return Err(format!("Auth error: {}", auth_error_message(e)));
-    }
+    allowed_to_call(headers, application_id, &tool_with_action.action_id)
+        .map_err(HandlerError::Auth)?;
 
     let configurations = config::load_betty_config().unwrap_or(String::from("{}"));
 
@@ -173,7 +263,7 @@ async fn handle_call_tool(
         meta: None,
     };
 
-    serde_json::to_value(result).map_err(|e| format!("Failed to serialize tool result: {e}"))
+    serde_json::to_value(result).map_err(|e| format!("Failed to serialize tool result: {e}").into())
 }
 
 pub fn create_success_response(
@@ -208,10 +298,13 @@ pub fn create_error_response(
     )
 }
 
-fn auth_error_message(e: AuthError) -> String {
+fn auth_error_message(e: &AuthError) -> String {
     match e {
         AuthError::MalformedToken => "malformed token".to_string(),
-        AuthError::MissingConfig(msg) | AuthError::ValidationFailed(msg) => msg,
+        AuthError::MissingConfig(msg)
+        | AuthError::ValidationFailed(msg)
+        | AuthError::Forbidden(msg)
+        | AuthError::Unavailable(msg) => msg.clone(),
     }
 }
 
@@ -353,7 +446,9 @@ mod tests {
         let headers: Headers = vec![];
         let result = handle_call_tool(&config, &headers, None, "host", "app-id").await;
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Missing params for tools/call");
+        assert!(
+            matches!(result.unwrap_err(), HandlerError::Message(msg) if msg == "Missing params for tools/call")
+        );
     }
 
     #[tokio::test]
@@ -363,7 +458,10 @@ mod tests {
         let result = handle_call_tool(&config, &headers, Some(json!({})), "host", "app-id").await;
         assert!(result.is_err());
         assert!(
-            result.unwrap_err().contains("Invalid tool call parameters"),
+            matches!(
+                result.unwrap_err(),
+                HandlerError::Message(msg) if msg.contains("Invalid tool call parameters")
+            ),
             "empty object should fail because 'name' is required"
         );
     }
@@ -431,5 +529,56 @@ mod tests {
         assert_eq!(deserialized["id"], 42);
         assert_eq!(deserialized["error"]["code"], -32601);
         assert_eq!(deserialized["error"]["message"], "Method not found");
+    }
+
+    fn server_config_with_url(url: Option<&str>) -> McpServerConfig {
+        let mut config = make_test_server_config();
+        config.resource_metadata_url = url.map(str::to_string);
+        config
+    }
+
+    #[test]
+    fn test_unauthenticated_failures_point_to_the_resource_metadata() {
+        let config = server_config_with_url(Some("https://app.betty.app/meta"));
+
+        for error in [
+            AuthError::MalformedToken,
+            AuthError::ValidationFailed("expired".to_string()),
+        ] {
+            let failure = RpcFailure::auth(error, Some(RequestId::Integer(1)), &config);
+            assert_eq!(failure.kind, FailureKind::Unauthenticated);
+            assert_eq!(
+                failure.www_authenticate.as_deref(),
+                Some(r#"Bearer resource_metadata="https://app.betty.app/meta""#)
+            );
+        }
+    }
+
+    #[test]
+    fn test_unauthenticated_failure_without_resource_metadata() {
+        let failure = RpcFailure::auth(
+            AuthError::MalformedToken,
+            Some(RequestId::Integer(1)),
+            &server_config_with_url(None),
+        );
+        assert_eq!(failure.kind, FailureKind::Unauthenticated);
+        assert_eq!(failure.www_authenticate.as_deref(), Some("Bearer"));
+    }
+
+    #[test]
+    fn test_other_auth_failures() {
+        let config = server_config_with_url(Some("https://app.betty.app/meta"));
+        let kind = |error| RpcFailure::auth(error, None, &config);
+
+        let forbidden = kind(AuthError::Forbidden("no".to_string()));
+        assert_eq!(forbidden.kind, FailureKind::Forbidden);
+        assert_eq!(forbidden.www_authenticate, None);
+
+        let unavailable = kind(AuthError::Unavailable("down".to_string()));
+        assert_eq!(unavailable.kind, FailureKind::Unavailable);
+        assert_eq!(unavailable.www_authenticate, None);
+
+        let missing_config = kind(AuthError::MissingConfig("missing".to_string()));
+        assert_eq!(missing_config.kind, FailureKind::Rpc);
     }
 }

@@ -88,7 +88,13 @@ The component deserializes the config into `McpServersConfig` (`mcp-servers`) an
 
 - Requests are limited to **10 MB** to guard against malicious payloads and DoS attempts.
 - Requests must have `Content-Type: application/json`.
-- JWT verification is enforced — requests without a valid token will return `Unauthorized`.
+- JWT verification is enforced for MCP servers with an authentication profile, the auth component validates the token:
+  - `kind: "api-key"` (or no `kind`) — signed with the secret of the profile.
+  - `kind: "data-api"` — the token of an end user, validated by the data-api.
+- Failed authentication is answered with an HTTP status next to the JSON-RPC error:
+  - `401` — no or an invalid token. For `data-api` profiles the response has `WWW-Authenticate: Bearer resource_metadata="<url>"` so MCP clients can start the OAuth flow. The url is the `resource-metadata-url` of the server in `mcps`.
+  - `403` — a valid token of another auth profile.
+  - `503` — the token could not be validated (the data-api is unavailable).
 
 
 ## Build & test

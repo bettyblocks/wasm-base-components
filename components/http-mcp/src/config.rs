@@ -75,14 +75,20 @@ pub fn build_initialize_result(server_config: &McpServerConfig) -> InitializeRes
 }
 
 fn parse_server_config(raw: &str, server_id: &str) -> Result<McpServerConfig, String> {
-    let config: McpServersConfig = serde_json::from_str(raw)
+    let mut config: McpServersConfig = serde_json::from_str(raw)
         .map_err(|e| format!("Failed to parse mcp_servers config: {e}"))?;
 
-    config
+    let mut server = config
         .mcp_servers
         .into_iter()
         .find(|s| s.id == server_id)
-        .ok_or_else(|| format!("MCP server '{server_id}' not found in configuration"))
+        .ok_or_else(|| format!("MCP server '{server_id}' not found in configuration"))?;
+    server.resource_metadata_url = config
+        .mcps
+        .remove(server_id)
+        .and_then(|auth| auth.resource_metadata_url);
+
+    Ok(server)
 }
 
 #[cfg(test)]
@@ -128,6 +134,41 @@ mod tests {
             }
         ]
     }"#;
+
+    #[test]
+    fn test_parse_server_config_has_no_resource_metadata_url_without_mcps() {
+        let config = parse_server_config(TEST_MCP_CONFIG, "weather-server-001").unwrap();
+        assert_eq!(config.resource_metadata_url, None);
+    }
+
+    #[test]
+    fn test_parse_server_config_reads_resource_metadata_url_of_the_server() {
+        let raw = TEST_MCP_CONFIG.replacen(
+            "\"mcp-servers\"",
+            r#""mcps": {
+                "weather-server-001": {
+                    "authentication-profile-id": "profile-1",
+                    "kind": "data-api",
+                    "resource-metadata-url": "https://app.betty.app/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/profile-1"
+                },
+                "calculator-server-001": {
+                    "authentication-profile-id": "profile-2",
+                    "kind": "api-key"
+                }
+            },
+            "mcp-servers""#,
+            1,
+        );
+
+        let weather = parse_server_config(&raw, "weather-server-001").unwrap();
+        assert_eq!(
+            weather.resource_metadata_url.as_deref(),
+            Some("https://app.betty.app/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/profile-1")
+        );
+
+        let calculator = parse_server_config(&raw, "calculator-server-001").unwrap();
+        assert_eq!(calculator.resource_metadata_url, None);
+    }
 
     #[test]
     fn test_parse_server_config_finds_existing_server() {
@@ -191,6 +232,7 @@ mod tests {
         let config = McpServerConfig {
             id: "empty-server".to_string(),
             tools: vec![],
+            resource_metadata_url: None,
         };
         let result = build_initialize_result(&config);
 
