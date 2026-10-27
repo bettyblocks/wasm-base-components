@@ -16,6 +16,21 @@ inside a record. A breaking change shipped as a minor or patch is therefore sile
 onto older consumers — breaking changes need a new major. Background:
 [ADR 001](docs/decisions/001-major-only-wit-version-bumps.md) (superseded).
 
+### Packages that export a resource cannot be bumped in isolation
+
+A resource is identified by the exact package version that declares it. `data-api@3.0.0` and
+`data-api@3.1.0` therefore define two *different* `data-api` resource types, even when the
+interface text is identical. A component that reaches both — one via its own import, the other
+through a dependency such as `crud` — ends up with handles of two unrelated types and fails to
+link. This broke `upsert` on edge in `native-wasm-components` (#146, reverted in #155) and is
+why the data-api chain bump from PR #130 was rolled back on `dev`.
+
+So for `data-api` (and any other package that exports a resource): a new version is a
+whole-chain change. In the **same release** you must move every package that depends on it
+(`crud`, `upload-file`, `pdf-generator`, their components) **and** every consumer in
+`native-wasm-components` on every live branch (`edge`, `acceptance`, `main`). If that cannot be
+done in one go, do not bump it.
+
 Applies to the hand-written `package …@X.Y.Z;` line in:
 
 - `wit/<pkg>/*.wit` — namespace `betty-blocks-types`
