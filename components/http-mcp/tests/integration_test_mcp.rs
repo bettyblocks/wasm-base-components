@@ -222,6 +222,8 @@ fn grpc_validate_jwt_result(ok: bool, result: &str) -> Vec<u8> {
     frame
 }
 
+/// The mock data-api finds the token in the protobuf request by searching its bytes: the jwt is
+/// a plain string field, so this saves decoding the message.
 fn contains(haystack: &[u8], needle: &str) -> bool {
     haystack
         .windows(needle.len())

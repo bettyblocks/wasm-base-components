@@ -8,14 +8,34 @@ pub struct McpServersConfig {
     pub mcp_servers: Vec<McpServerConfig>,
     /// the auth config per mcp server id, absent in configs of mcp servers without auth
     #[serde(default)]
-    pub mcps: HashMap<String, McpAuthConfig>,
+    pub mcps: HashMap<String, McpsEntry>,
+}
+
+/// An entry of `mcps`: the compiler leaves out `kind` for public mcp servers.
+#[derive(Deserialize)]
+#[serde(untagged)]
+pub enum McpsEntry {
+    Auth(McpAuthConfig),
+    Public(PublicMcp),
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct McpAuthConfig {
-    /// where the client finds the authorization server, only set for data-api auth profiles
-    pub resource_metadata_url: Option<String>,
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct PublicMcp {
+    #[allow(dead_code)]
+    authentication_profile_id: Option<String>,
+}
+
+/// How the token of an mcp server is validated.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum McpAuthConfig {
+    ApiKey,
+    DataApi {
+        /// where the client finds the authorization server (RFC 9728)
+        #[serde(rename = "resource-metadata-url")]
+        resource_metadata_url: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -32,5 +52,5 @@ pub struct McpServerConfig {
     pub tools: Vec<ToolWithAction>,
     /// filled from `mcps` when the config is loaded, not part of the server entry itself
     #[serde(skip)]
-    pub resource_metadata_url: Option<String>,
+    pub auth: Option<McpAuthConfig>,
 }

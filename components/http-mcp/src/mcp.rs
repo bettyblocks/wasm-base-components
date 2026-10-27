@@ -1,7 +1,7 @@
 use crate::actions;
 use crate::betty_blocks_types::auth::jwt::{allowed_to_call, allowed_to_list, AuthError};
 use crate::config;
-use crate::types::McpServerConfig;
+use crate::types::{McpAuthConfig, McpServerConfig};
 use rust_mcp_schema::{
     CallToolRequestParams, CallToolResult, JsonrpcErrorResponse, JsonrpcRequest, JsonrpcResponse,
     JsonrpcResultResponse, ListToolsResult, RequestId, RpcError,
@@ -61,9 +61,11 @@ impl RpcFailure {
 
 /// Points the client to the authorization server of the auth profile (RFC 9728).
 fn www_authenticate(server_config: &McpServerConfig) -> String {
-    match &server_config.resource_metadata_url {
-        Some(url) => format!("Bearer resource_metadata=\"{url}\""),
-        None => "Bearer".to_string(),
+    match &server_config.auth {
+        Some(McpAuthConfig::DataApi {
+            resource_metadata_url,
+        }) => format!("Bearer resource_metadata=\"{resource_metadata_url}\""),
+        Some(McpAuthConfig::ApiKey) | None => "Bearer".to_string(),
     }
 }
 
@@ -533,7 +535,12 @@ mod tests {
 
     fn server_config_with_url(url: Option<&str>) -> McpServerConfig {
         let mut config = make_test_server_config();
-        config.resource_metadata_url = url.map(str::to_string);
+        config.auth = Some(match url {
+            Some(url) => McpAuthConfig::DataApi {
+                resource_metadata_url: url.to_string(),
+            },
+            None => McpAuthConfig::ApiKey,
+        });
         config
     }
 

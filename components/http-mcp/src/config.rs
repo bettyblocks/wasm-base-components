@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::types::{McpServerConfig, McpServersConfig};
+use crate::types::{McpAuthConfig, McpServerConfig, McpServersConfig, McpsEntry};
 use crate::wasi::cli::environment::get_environment;
 use crate::wasi::config::store::get;
 use rust_mcp_schema::{
@@ -83,10 +83,11 @@ fn parse_server_config(raw: &str, server_id: &str) -> Result<McpServerConfig, St
         .into_iter()
         .find(|s| s.id == server_id)
         .ok_or_else(|| format!("MCP server '{server_id}' not found in configuration"))?;
-    server.resource_metadata_url = config
-        .mcps
-        .remove(server_id)
-        .and_then(|auth| auth.resource_metadata_url);
+    // `remove` hands over the owned entry, so nothing has to be cloned out of the config
+    server.auth = match config.mcps.remove(server_id) {
+        Some(McpsEntry::Auth(auth)) => Some(auth),
+        Some(McpsEntry::Public(_)) | None => None,
+    };
 
     Ok(server)
 }
@@ -136,9 +137,9 @@ mod tests {
     }"#;
 
     #[test]
-    fn test_parse_server_config_has_no_resource_metadata_url_without_mcps() {
+    fn test_parse_server_config_has_no_auth_without_mcps() {
         let config = parse_server_config(TEST_MCP_CONFIG, "weather-server-001").unwrap();
-        assert_eq!(config.resource_metadata_url, None);
+        assert_eq!(config.auth, None);
     }
 
     #[test]
@@ -162,12 +163,14 @@ mod tests {
 
         let weather = parse_server_config(&raw, "weather-server-001").unwrap();
         assert_eq!(
-            weather.resource_metadata_url.as_deref(),
-            Some("https://app.betty.app/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/profile-1")
+            weather.auth,
+            Some(McpAuthConfig::DataApi {
+                resource_metadata_url: "https://app.betty.app/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/profile-1".to_string()
+            })
         );
 
         let calculator = parse_server_config(&raw, "calculator-server-001").unwrap();
-        assert_eq!(calculator.resource_metadata_url, None);
+        assert_eq!(calculator.auth, Some(McpAuthConfig::ApiKey));
     }
 
     #[test]
@@ -232,7 +235,7 @@ mod tests {
         let config = McpServerConfig {
             id: "empty-server".to_string(),
             tools: vec![],
-            resource_metadata_url: None,
+            auth: None,
         };
         let result = build_initialize_result(&config);
 
