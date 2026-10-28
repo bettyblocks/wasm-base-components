@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::types::{McpAuthConfig, McpServerConfig, McpServersConfig, McpsEntry};
+use crate::types::{McpServerConfig, McpServersConfig, McpsEntry};
 use crate::wasi::cli::environment::get_environment;
 use crate::wasi::config::store::get;
 use rust_mcp_schema::{
@@ -95,6 +95,7 @@ fn parse_server_config(raw: &str, server_id: &str) -> Result<McpServerConfig, St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::McpAuthConfig;
 
     const TEST_MCP_CONFIG: &str = r#"{
         "mcp-servers": [

@@ -16,7 +16,8 @@ pub struct McpServersConfig {
 #[serde(untagged)]
 pub enum McpsEntry {
     Auth(McpAuthConfig),
-    Public(PublicMcp),
+    /// only matched so the entry parses, there is nothing to read from it
+    Public(#[allow(dead_code)] PublicMcp),
 }
 
 #[derive(Deserialize)]
