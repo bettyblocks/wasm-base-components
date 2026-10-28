@@ -1,3 +1,16 @@
+# [1.37.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.4...v1.37.0) (2026-10-28)
+
+
+### Bug Fixes
+
+* generate the wkg.toml of the fixture components in the http-mcp build ([0595d56](https://github.com/bettyblocks/wasm-base-components/commit/0595d564b7c49dd38a199185040d28cc318cee3b))
+* remove the compiler warnings of the mcp auth config ([5adaa00](https://github.com/bettyblocks/wasm-base-components/commit/5adaa00504e630a9977d03e82173b635f2abe3c1))
+
+
+### Features
+
+* validate end user jwts of mcp servers via the data-api ([1889cc4](https://github.com/bettyblocks/wasm-base-components/commit/1889cc4dfaa7a22e4ae25f7390680236755cec09))
+
 ## [1.36.4](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.3...v1.36.4) (2026-10-27)
 
 
