@@ -1,5 +1,15 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Writes the wkg.toml of a component, so wkg takes the wit packages that are not released yet
+/// from this checkout instead of the registry. It is gitignored, so a fresh checkout has none.
+fn generate_wkg_toml(component_dir: &Path, manifest_dir: &Path) {
+    let status = Command::new(manifest_dir.join("../../scripts/generate-wkg-toml.sh"))
+        .current_dir(component_dir)
+        .status()
+        .expect("Failed to run generate-wkg-toml.sh");
+    assert!(status.success(), "generate-wkg-toml.sh failed");
+}
 
 fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
@@ -30,6 +40,7 @@ fn main() {
     assert!(status.success(), "mcp-component WASM build failed");
 
     println!("cargo:warning=Fetching WIT deps for jwt-auth-component...");
+    generate_wkg_toml(&auth_dir, &manifest_dir);
     let status = Command::new("wkg")
         .args(["wit", "fetch"])
         .current_dir(&auth_dir)
@@ -55,6 +66,7 @@ fn main() {
     assert!(status.success(), "jwt-auth-component WASM build failed");
 
     println!("cargo:warning=Fetching WIT deps for data-api-component...");
+    generate_wkg_toml(&data_api_dir, &manifest_dir);
     let status = Command::new("wkg")
         .args(["wit", "fetch"])
         .current_dir(&data_api_dir)
