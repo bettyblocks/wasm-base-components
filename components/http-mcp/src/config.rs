@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::types::{McpServerConfig, McpServersConfig};
+use crate::types::{McpServerConfig, McpServersConfig, McpsEntry};
 use crate::wasi::cli::environment::get_environment;
 use crate::wasi::config::store::get;
 use rust_mcp_schema::{
@@ -75,19 +75,27 @@ pub fn build_initialize_result(server_config: &McpServerConfig) -> InitializeRes
 }
 
 fn parse_server_config(raw: &str, server_id: &str) -> Result<McpServerConfig, String> {
-    let config: McpServersConfig = serde_json::from_str(raw)
+    let mut config: McpServersConfig = serde_json::from_str(raw)
         .map_err(|e| format!("Failed to parse mcp_servers config: {e}"))?;
 
-    config
+    let mut server = config
         .mcp_servers
         .into_iter()
         .find(|s| s.id == server_id)
-        .ok_or_else(|| format!("MCP server '{server_id}' not found in configuration"))
+        .ok_or_else(|| format!("MCP server '{server_id}' not found in configuration"))?;
+    // `remove` hands over the owned entry, so nothing has to be cloned out of the config
+    server.auth = match config.mcps.remove(server_id) {
+        Some(McpsEntry::Auth(auth)) => Some(auth),
+        Some(McpsEntry::Public(_)) | None => None,
+    };
+
+    Ok(server)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::McpAuthConfig;
 
     const TEST_MCP_CONFIG: &str = r#"{
         "mcp-servers": [
@@ -128,6 +136,43 @@ mod tests {
             }
         ]
     }"#;
+
+    #[test]
+    fn test_parse_server_config_has_no_auth_without_mcps() {
+        let config = parse_server_config(TEST_MCP_CONFIG, "weather-server-001").unwrap();
+        assert_eq!(config.auth, None);
+    }
+
+    #[test]
+    fn test_parse_server_config_reads_resource_metadata_url_of_the_server() {
+        let raw = TEST_MCP_CONFIG.replacen(
+            "\"mcp-servers\"",
+            r#""mcps": {
+                "weather-server-001": {
+                    "authentication-profile-id": "profile-1",
+                    "kind": "data-api",
+                    "resource-metadata-url": "https://app.betty.app/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/profile-1"
+                },
+                "calculator-server-001": {
+                    "authentication-profile-id": "profile-2",
+                    "kind": "api-key"
+                }
+            },
+            "mcp-servers""#,
+            1,
+        );
+
+        let weather = parse_server_config(&raw, "weather-server-001").unwrap();
+        assert_eq!(
+            weather.auth,
+            Some(McpAuthConfig::DataApi {
+                resource_metadata_url: "https://app.betty.app/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/profile-1".to_string()
+            })
+        );
+
+        let calculator = parse_server_config(&raw, "calculator-server-001").unwrap();
+        assert_eq!(calculator.auth, Some(McpAuthConfig::ApiKey));
+    }
 
     #[test]
     fn test_parse_server_config_finds_existing_server() {
@@ -191,6 +236,7 @@ mod tests {
         let config = McpServerConfig {
             id: "empty-server".to_string(),
             tools: vec![],
+            auth: None,
         };
         let result = build_initialize_result(&config);
 

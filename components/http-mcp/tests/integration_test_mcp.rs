@@ -40,10 +40,23 @@ const JWT_AUTH_COMPONENT_WASM: &[u8] = include_bytes!(concat!(
     "/tests/fixtures/jwt_auth_component.wasm"
 ));
 
+const DATA_API_COMPONENT_WASM: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/data_api_component.wasm"
+));
+
 const TEST_SECRET: &str = "test-hs256-secret-key-for-integration-tests";
 const TEST_PROFILE_ID: &str = "test-profile-001";
 const TEST_ACTION_ID: &str = "action-weather-get";
 const TEST_SERVER_ID: &str = "weather-server-001";
+/// an mcp server whose auth profile is validated by the data-api
+const USER_SERVER_ID: &str = "user-server-001";
+const USER_ACTION_ID: &str = "action-user-get";
+const USER_PROFILE_ID: &str = "user-profile-001";
+const RESOURCE_METADATA_URL: &str = "https://test.betty.app/.well-known/oauth-protected-resource/api/runtime/test-app-id/authentication_profile/user-profile-001";
+/// the mock data-api accepts these tokens, anything else is rejected as expired
+const USER_TOKEN: &str = "user-token-of-user-profile";
+const OTHER_PROFILE_USER_TOKEN: &str = "user-token-of-other-profile";
 const WRONG_SECRET: &str = "wrong-secret-that-will-fail-hs256-validation";
 
 #[derive(Serialize)]
@@ -89,14 +102,20 @@ fn auth_component_config() -> HashMap<String, String> {
         (
             "actions".to_string(),
             json!({
-                TEST_ACTION_ID: { "authentication-profile-id": TEST_PROFILE_ID }
+                TEST_ACTION_ID: { "authentication-profile-id": TEST_PROFILE_ID, "kind": "api-key" },
+                USER_ACTION_ID: { "authentication-profile-id": USER_PROFILE_ID, "kind": "data-api" }
             })
             .to_string(),
         ),
         (
             "mcps".to_string(),
             json!({
-                TEST_SERVER_ID: { "authentication-profile-id": TEST_PROFILE_ID }
+                TEST_SERVER_ID: { "authentication-profile-id": TEST_PROFILE_ID, "kind": "api-key" },
+                USER_SERVER_ID: {
+                    "authentication-profile-id": USER_PROFILE_ID,
+                    "kind": "data-api",
+                    "resource-metadata-url": RESOURCE_METADATA_URL
+                }
             })
             .to_string(),
         ),
@@ -109,7 +128,8 @@ fn mcp_component_config() -> HashMap<String, String> {
             "mcp_servers".to_string(),
             json!({
                 "actions": {
-                    TEST_ACTION_ID: { "authentication-profile-id": TEST_PROFILE_ID }
+                    TEST_ACTION_ID: { "authentication-profile-id": TEST_PROFILE_ID, "kind": "api-key" },
+                    USER_ACTION_ID: { "authentication-profile-id": USER_PROFILE_ID, "kind": "data-api" }
                 },
                 "mcp-servers": [
                     {
@@ -128,10 +148,26 @@ fn mcp_component_config() -> HashMap<String, String> {
                                 }
                             }
                         ]
+                    },
+                    {
+                        "id": USER_SERVER_ID,
+                        "tools": [
+                            {
+                                "action-id": USER_ACTION_ID,
+                                "name": "get_user",
+                                "description": "Gets the current user",
+                                "inputSchema": { "type": "object", "properties": {} }
+                            }
+                        ]
                     }
                 ],
                 "mcps": {
-                    TEST_SERVER_ID: { "authentication-profile-id": TEST_PROFILE_ID }
+                    TEST_SERVER_ID: { "authentication-profile-id": TEST_PROFILE_ID, "kind": "api-key" },
+                    USER_SERVER_ID: {
+                        "authentication-profile-id": USER_PROFILE_ID,
+                        "kind": "data-api",
+                        "resource-metadata-url": RESOURCE_METADATA_URL
+                    }
                 }
             })
             .to_string(),
@@ -169,11 +205,70 @@ async fn start_mock_action_server() -> Result<SocketAddr> {
     Ok(addr)
 }
 
+/// A protobuf `ValidateJWTResult`, framed as a unary gRPC message.
+fn grpc_validate_jwt_result(ok: bool, result: &str) -> Vec<u8> {
+    assert!(result.len() < 128, "the length is encoded as a single byte");
+
+    let mut message = Vec::new();
+    if !ok {
+        message.extend([0x08, 0x01]); // status = ERROR
+    }
+    message.extend([0x12, result.len() as u8]); // result
+    message.extend(result.as_bytes());
+
+    let mut frame = vec![0];
+    frame.extend((message.len() as u32).to_be_bytes());
+    frame.extend(message);
+    frame
+}
+
+/// The mock data-api finds the token in the protobuf request by searching its bytes: the jwt is
+/// a plain string field, so this saves decoding the message.
+fn contains(haystack: &[u8], needle: &str) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle.as_bytes())
+}
+
+/// Plays the data-api: knows the tokens of two users, rejects every other token.
+async fn start_mock_data_api() -> Result<SocketAddr> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+
+    let app = axum::Router::new().route(
+        "/data_grpc.DataAPI/ValidateJWT",
+        axum::routing::post(|body: bytes::Bytes| async move {
+            let frame = if contains(&body, OTHER_PROFILE_USER_TOKEN) {
+                grpc_validate_jwt_result(true, r#"{"user_id":2,"auth_profile":"other-profile"}"#)
+            } else if contains(&body, USER_TOKEN) {
+                grpc_validate_jwt_result(
+                    true,
+                    &json!({"user_id": 1, "auth_profile": USER_PROFILE_ID}).to_string(),
+                )
+            } else {
+                grpc_validate_jwt_result(false, r#"{"code":"EXPIRED","message":"Token expired"}"#)
+            };
+
+            (
+                [(axum::http::header::CONTENT_TYPE, "application/grpc")],
+                frame,
+            )
+        }),
+    );
+
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    Ok(addr)
+}
+
 async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
     let port = find_available_port().await?;
     let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
 
     let mock_action_addr = start_mock_action_server().await?;
+    let mock_data_api_addr = start_mock_data_api().await?;
 
     let engine = Engine::builder().build()?;
     let http_plugin = HttpServer::new(DevRouter::default(), addr).await?;
@@ -230,6 +325,27 @@ async fn setup() -> Result<(Arc<Host>, SocketAddr)> {
                     pool_size: 1,
                     max_invocations: 100,
                 },
+                Component {
+                    name: "data-api".to_string(),
+                    bytes: bytes::Bytes::from_static(DATA_API_COMPONENT_WASM),
+                    digest: None,
+                    local_resources: LocalResources {
+                        memory_limit_mb: 128,
+                        cpu_limit: 1,
+                        config: HashMap::new(),
+                        environment: HashMap::from([
+                            (
+                                "GRPC_SERVER_URI".to_string(),
+                                format!("http://{mock_data_api_addr}"),
+                            ),
+                            ("JAWS_SECRET_KEY".to_string(), "jaws-secret".to_string()),
+                        ]),
+                        volume_mounts: vec![],
+                        allowed_hosts: vec![mock_data_api_addr.to_string()].into(),
+                    },
+                    pool_size: 1,
+                    max_invocations: 100,
+                },
             ],
             host_interfaces: vec![
                 WitInterface {
@@ -281,13 +397,14 @@ fn client() -> reqwest::Client {
     reqwest::Client::new()
 }
 
-async fn rpc(
+async fn rpc_response(
     addr: SocketAddr,
+    server_id: &str,
     token: Option<&str>,
     body: serde_json::Value,
-) -> Result<serde_json::Value> {
+) -> Result<reqwest::Response> {
     let mut req = client()
-        .post(format!("http://{addr}/api/mcp/{TEST_SERVER_ID}"))
+        .post(format!("http://{addr}/api/mcp/{server_id}"))
         .header("Content-Type", "application/json");
     if let Some(t) = token {
         req = req.header("Authorization", format!("Bearer {t}"));
@@ -295,7 +412,16 @@ async fn rpc(
     timeout(Duration::from_secs(10), req.json(&body).send())
         .await
         .context("request timed out")?
-        .context("request failed")?
+        .context("request failed")
+}
+
+async fn rpc(
+    addr: SocketAddr,
+    token: Option<&str>,
+    body: serde_json::Value,
+) -> Result<serde_json::Value> {
+    rpc_response(addr, TEST_SERVER_ID, token, body)
+        .await?
         .json()
         .await
         .context("failed to parse response as JSON")
@@ -437,6 +563,96 @@ async fn test_error_handling() -> Result<()> {
     .context("failed")?
     .status();
     assert_eq!(status.as_u16(), 405);
+
+    Ok(())
+}
+
+fn list_req() -> serde_json::Value {
+    json!({"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1})
+}
+
+#[tokio::test]
+async fn test_api_key_without_token_is_unauthorized() -> Result<()> {
+    let (_host, addr) = setup().await?;
+
+    let response = rpc_response(addr, TEST_SERVER_ID, None, list_req()).await?;
+
+    assert_eq!(response.status().as_u16(), 401);
+    assert_eq!(response.headers()["www-authenticate"], "Bearer");
+    let body: serde_json::Value = response.json().await?;
+    assert!(body["error"].is_object(), "body: {body}");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_data_api_without_token_points_to_the_resource_metadata() -> Result<()> {
+    let (_host, addr) = setup().await?;
+
+    let response = rpc_response(addr, USER_SERVER_ID, None, list_req()).await?;
+
+    assert_eq!(response.status().as_u16(), 401);
+    assert_eq!(
+        response.headers()["www-authenticate"],
+        format!("Bearer resource_metadata=\"{RESOURCE_METADATA_URL}\"").as_str()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_data_api_rejected_token_is_unauthorized() -> Result<()> {
+    let (_host, addr) = setup().await?;
+
+    let response = rpc_response(addr, USER_SERVER_ID, Some("expired-token"), list_req()).await?;
+
+    assert_eq!(response.status().as_u16(), 401);
+    assert!(response.headers().contains_key("www-authenticate"));
+    let body: serde_json::Value = response.json().await?;
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Token expired"),
+        "body: {body}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_data_api_token_of_another_profile_is_forbidden() -> Result<()> {
+    let (_host, addr) = setup().await?;
+
+    let response = rpc_response(
+        addr,
+        USER_SERVER_ID,
+        Some(OTHER_PROFILE_USER_TOKEN),
+        list_req(),
+    )
+    .await?;
+
+    assert_eq!(response.status().as_u16(), 403);
+    assert!(!response.headers().contains_key("www-authenticate"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_data_api_valid_token() -> Result<()> {
+    let (_host, addr) = setup().await?;
+
+    let response = rpc_response(addr, USER_SERVER_ID, Some(USER_TOKEN), list_req()).await?;
+
+    assert_eq!(response.status().as_u16(), 200);
+    let body: serde_json::Value = response.json().await?;
+    let names: Vec<&str> = body["result"]["tools"]
+        .as_array()
+        .expect("tools must be array")
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    assert_eq!(names, ["get_user"], "body: {body}");
 
     Ok(())
 }

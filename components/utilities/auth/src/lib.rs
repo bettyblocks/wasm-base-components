@@ -10,6 +10,7 @@ pub mod bindings {
     wit_bindgen::generate!({ generate_all });
 }
 
+use crate::bindings::betty_blocks_types::auth::validator::ValidateError;
 use crate::bindings::exports::betty_blocks_types::auth::jwt::{AuthError, Guest};
 
 type Headers = Vec<(String, Vec<u8>)>;
@@ -25,6 +26,15 @@ struct JwtPayload {
     auth_profile_id: String,
 }
 
+/// The claims of a token that the data-api validated.
+#[derive(Debug, Deserialize)]
+struct DataApiClaims {
+    auth_profile: String,
+}
+
+/// Validates a token with the data-api, returns the claims as json.
+type ValidateJwt<'a> = &'a dyn Fn(&str, &str) -> Result<String, ValidateError>;
+
 type AuthProfileConfig = HashMap<String, String>;
 
 #[derive(Deserialize)]
@@ -33,11 +43,25 @@ enum Access {
     Private(String),
 }
 
+/// How the token of an auth profile is validated.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum AuthKind {
+    /// signed with the secret of the auth profile, validated by this component
+    #[default]
+    ApiKey,
+    /// the token of an end user, validated by the data-api
+    DataApi,
+}
+
 #[derive(Deserialize)]
 struct ResourceAuthConfig {
     /// the auth profile configured for this resource, None means that it is a public resource
     #[serde(rename = "authentication-profile-id")]
     authentication_profile_id: Option<String>,
+    /// absent in configs compiled before the data-api kind existed, those are api keys
+    #[serde(default)]
+    kind: AuthKind,
 }
 
 impl ResourceAuthConfig {
@@ -147,16 +171,39 @@ fn fetch_validated_profile(headers: &[(String, Vec<u8>)]) -> Result<String, Auth
     Ok(jwt_profile_id)
 }
 
+fn fetch_profile_from_data_api(
+    headers: &[(String, Vec<u8>)],
+    application_id: &str,
+    validate_jwt: ValidateJwt,
+) -> Result<String, AuthError> {
+    let token = extract_bearer_token(headers)?;
+    let claims = validate_jwt(application_id, &token).map_err(|e| match e {
+        ValidateError::Invalid(msg) => AuthError::ValidationFailed(msg),
+        ValidateError::Unavailable(msg) => AuthError::Unavailable(msg),
+    })?;
+    let claims: DataApiClaims = serde_json::from_str(&claims).map_err(|e| {
+        AuthError::ValidationFailed(format!("Missing auth profile in validated claims: {e}"))
+    })?;
+    Ok(claims.auth_profile)
+}
+
 fn check_profile_authorization(
     headers: &Headers,
+    application_id: &str,
     resource_cfg: &ResourceAuthConfig,
     error_msg: &'static str,
+    validate_jwt: ValidateJwt,
 ) -> Result<(), AuthError> {
     match resource_cfg.as_access() {
         Access::Private(auth_profile_id) => {
-            let jwt_profile_id = fetch_validated_profile(headers)?;
+            let jwt_profile_id = match resource_cfg.kind {
+                AuthKind::ApiKey => fetch_validated_profile(headers)?,
+                AuthKind::DataApi => {
+                    fetch_profile_from_data_api(headers, application_id, validate_jwt)?
+                }
+            };
             if jwt_profile_id != auth_profile_id {
-                return Err(AuthError::ValidationFailed(error_msg.into()));
+                return Err(AuthError::Forbidden(error_msg.into()));
             }
             Ok(())
         }
@@ -165,7 +212,11 @@ fn check_profile_authorization(
 }
 
 impl Guest for Component {
-    fn allowed_to_call(headers: Headers, action_id: String) -> Result<(), AuthError> {
+    fn allowed_to_call(
+        headers: Headers,
+        application_id: String,
+        action_id: String,
+    ) -> Result<(), AuthError> {
         let actions = load_actions_config()?;
         let action_cfg = actions
             .get(&action_id)
@@ -173,12 +224,18 @@ impl Guest for Component {
 
         check_profile_authorization(
             &headers,
+            &application_id,
             action_cfg,
             "Forbidden: auth profile does not allow this action",
+            &crate::bindings::betty_blocks_types::auth::validator::validate_jwt,
         )
     }
 
-    fn allowed_to_list(headers: Headers, mcp_id: String) -> Result<(), AuthError> {
+    fn allowed_to_list(
+        headers: Headers,
+        application_id: String,
+        mcp_id: String,
+    ) -> Result<(), AuthError> {
         let mcps = load_mcps_config()?;
         let mcp_cfg = mcps
             .get(&mcp_id)
@@ -186,8 +243,10 @@ impl Guest for Component {
 
         check_profile_authorization(
             &headers,
+            &application_id,
             mcp_cfg,
             "Forbidden: auth profile does not allow to list this mcp server",
+            &crate::bindings::betty_blocks_types::auth::validator::validate_jwt,
         )
     }
 }
@@ -298,17 +357,46 @@ mod tests {
         assert!(matches!(result, Err(AuthError::ValidationFailed(_))));
     }
 
+    const APP_ID: &str = "app-id";
+
+    fn api_key_cfg(profile: Option<&str>) -> ResourceAuthConfig {
+        ResourceAuthConfig {
+            authentication_profile_id: profile.map(str::to_string),
+            kind: AuthKind::ApiKey,
+        }
+    }
+
+    fn data_api_cfg(profile: &str) -> ResourceAuthConfig {
+        ResourceAuthConfig {
+            authentication_profile_id: Some(profile.to_string()),
+            kind: AuthKind::DataApi,
+        }
+    }
+
+    /// An api key must never be sent to the data-api.
+    fn no_data_api(_: &str, _: &str) -> Result<String, ValidateError> {
+        panic!("the data-api must not be called")
+    }
+
+    fn check(
+        headers: &Headers,
+        cfg: &ResourceAuthConfig,
+        error_msg: &'static str,
+        validate: ValidateJwt,
+    ) -> Result<(), AuthError> {
+        check_profile_authorization(headers, APP_ID, cfg, error_msg, validate)
+    }
+
     #[test]
     fn test_check_profile_authorization_works() {
         let token = make_jwt_token(b"secret", "profile-abc", 3600);
         let headers = make_auth_headers(&token);
 
-        check_profile_authorization(
+        check(
             &headers,
-            &ResourceAuthConfig {
-                authentication_profile_id: Some("profile-abc".to_string()),
-            },
+            &api_key_cfg(Some("profile-abc")),
             "",
+            &no_data_api,
         )
         .unwrap();
     }
@@ -318,12 +406,11 @@ mod tests {
         let token = make_jwt_token(b"secret", "profile-xyz", 3600);
         let headers = make_auth_headers(&token);
 
-        let actual = check_profile_authorization(
+        let actual = check(
             &headers,
-            &ResourceAuthConfig {
-                authentication_profile_id: Some("profile-abc".to_string()),
-            },
+            &api_key_cfg(Some("profile-abc")),
             "",
+            &no_data_api,
         )
         .unwrap_err();
         let expected = AuthError::ValidationFailed("Unknown auth profile in JWT".to_string());
@@ -336,15 +423,14 @@ mod tests {
         let headers = make_auth_headers(&token);
 
         let error_msg = "here";
-        let actual = check_profile_authorization(
+        let actual = check(
             &headers,
-            &ResourceAuthConfig {
-                authentication_profile_id: Some("profile-xyz".to_string()),
-            },
+            &api_key_cfg(Some("profile-xyz")),
             error_msg,
+            &no_data_api,
         )
         .unwrap_err();
-        let expected = AuthError::ValidationFailed(error_msg.to_string());
+        let expected = AuthError::Forbidden(error_msg.to_string());
         assert_eq!(actual.to_string(), expected.to_string());
     }
 
@@ -352,13 +438,88 @@ mod tests {
     fn test_check_profile_authorization_public() {
         let headers = make_auth_headers("testing");
 
-        check_profile_authorization(
-            &headers,
-            &ResourceAuthConfig {
-                authentication_profile_id: None,
-            },
-            "",
+        check(&headers, &api_key_cfg(None), "", &no_data_api).unwrap()
+    }
+
+    #[test]
+    fn test_check_profile_authorization_public_without_token() {
+        check(&vec![], &api_key_cfg(None), "", &no_data_api).unwrap()
+    }
+
+    #[test]
+    fn test_config_without_kind_is_an_api_key() {
+        let cfg: ResourceAuthConfig =
+            serde_json::from_str(r#"{"authentication-profile-id": "profile-abc"}"#).unwrap();
+        assert_eq!(cfg.kind, AuthKind::ApiKey);
+    }
+
+    #[test]
+    fn test_config_with_data_api_kind() {
+        let cfg: ResourceAuthConfig = serde_json::from_str(
+            r#"{"authentication-profile-id": "profile-abc", "kind": "data-api", "resource-metadata-url": "https://example.com"}"#,
         )
-        .unwrap()
+        .unwrap();
+        assert_eq!(cfg.kind, AuthKind::DataApi);
+    }
+
+    #[test]
+    fn test_config_with_api_key_kind_and_no_profile() {
+        let cfg: ResourceAuthConfig =
+            serde_json::from_str(r#"{"authentication-profile-id": null}"#).unwrap();
+        assert!(matches!(cfg.as_access(), Access::Public));
+    }
+
+    #[test]
+    fn test_data_api_works() {
+        let headers = make_auth_headers("user-token");
+        let validate = |app_id: &str, jwt: &str| {
+            assert_eq!(app_id, APP_ID);
+            assert_eq!(jwt, "user-token");
+            Ok(r#"{"user_id": 1, "auth_profile": "profile-abc"}"#.to_string())
+        };
+
+        check(&headers, &data_api_cfg("profile-abc"), "", &validate).unwrap();
+    }
+
+    #[test]
+    fn test_data_api_wrong_profile_is_forbidden() {
+        let headers = make_auth_headers("user-token");
+        let validate = |_: &str, _: &str| Ok(r#"{"auth_profile": "profile-xyz"}"#.to_string());
+
+        let actual = check(&headers, &data_api_cfg("profile-abc"), "nope", &validate).unwrap_err();
+        assert!(matches!(actual, AuthError::Forbidden(msg) if msg == "nope"));
+    }
+
+    #[test]
+    fn test_data_api_invalid_token() {
+        let headers = make_auth_headers("user-token");
+        let validate = |_: &str, _: &str| Err(ValidateError::Invalid("expired".to_string()));
+
+        let actual = check(&headers, &data_api_cfg("profile-abc"), "", &validate).unwrap_err();
+        assert!(matches!(actual, AuthError::ValidationFailed(msg) if msg == "expired"));
+    }
+
+    #[test]
+    fn test_data_api_unavailable() {
+        let headers = make_auth_headers("user-token");
+        let validate = |_: &str, _: &str| Err(ValidateError::Unavailable("down".to_string()));
+
+        let actual = check(&headers, &data_api_cfg("profile-abc"), "", &validate).unwrap_err();
+        assert!(matches!(actual, AuthError::Unavailable(msg) if msg == "down"));
+    }
+
+    #[test]
+    fn test_data_api_claims_without_auth_profile() {
+        let headers = make_auth_headers("user-token");
+        let validate = |_: &str, _: &str| Ok(r#"{"user_id": 1}"#.to_string());
+
+        let actual = check(&headers, &data_api_cfg("profile-abc"), "", &validate).unwrap_err();
+        assert!(matches!(actual, AuthError::ValidationFailed(_)));
+    }
+
+    #[test]
+    fn test_data_api_without_token_is_malformed() {
+        let actual = check(&vec![], &data_api_cfg("profile-abc"), "", &no_data_api).unwrap_err();
+        assert!(matches!(actual, AuthError::MalformedToken));
     }
 }

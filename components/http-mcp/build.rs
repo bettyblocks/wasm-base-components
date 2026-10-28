@@ -1,5 +1,15 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Writes the wkg.toml of a component, so wkg takes the wit packages that are not released yet
+/// from this checkout instead of the registry. It is gitignored, so a fresh checkout has none.
+fn generate_wkg_toml(component_dir: &Path, manifest_dir: &Path) {
+    let status = Command::new(manifest_dir.join("../../scripts/generate-wkg-toml.sh"))
+        .current_dir(component_dir)
+        .status()
+        .expect("Failed to run generate-wkg-toml.sh");
+    assert!(status.success(), "generate-wkg-toml.sh failed");
+}
 
 fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();
@@ -17,6 +27,7 @@ fn main() {
 
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let auth_dir = manifest_dir.join("../utilities/auth");
+    let data_api_dir = manifest_dir.join("../utilities/data-api");
     let fixtures_dir = manifest_dir.join("tests/fixtures");
 
     std::fs::create_dir_all(&fixtures_dir).expect("Failed to create tests/fixtures directory");
@@ -29,6 +40,7 @@ fn main() {
     assert!(status.success(), "mcp-component WASM build failed");
 
     println!("cargo:warning=Fetching WIT deps for jwt-auth-component...");
+    generate_wkg_toml(&auth_dir, &manifest_dir);
     let status = Command::new("wkg")
         .args(["wit", "fetch"])
         .current_dir(&auth_dir)
@@ -53,6 +65,32 @@ fn main() {
         .expect("Failed to compile jwt-auth-component");
     assert!(status.success(), "jwt-auth-component WASM build failed");
 
+    println!("cargo:warning=Fetching WIT deps for data-api-component...");
+    generate_wkg_toml(&data_api_dir, &manifest_dir);
+    let status = Command::new("wkg")
+        .args(["wit", "fetch"])
+        .current_dir(&data_api_dir)
+        .status()
+        .expect("Failed to run wkg wit fetch for data-api-component");
+    assert!(
+        status.success(),
+        "wkg wit fetch failed for data-api-component"
+    );
+
+    println!("cargo:warning=Building data-api-component for wasm32-wasip2...");
+    let status = Command::new("cargo")
+        .args([
+            "build",
+            "--manifest-path",
+            "../utilities/data-api/Cargo.toml",
+            "--target",
+            "wasm32-wasip2",
+            "--release",
+        ])
+        .status()
+        .expect("Failed to compile data-api-component");
+    assert!(status.success(), "data-api-component WASM build failed");
+
     let artifacts: &[(&std::path::Path, &str, &str)] = &[
         (
             manifest_dir.as_path(),
@@ -63,6 +101,11 @@ fn main() {
             auth_dir.as_path(),
             "jwt_auth_component.wasm",
             "jwt_auth_component.wasm",
+        ),
+        (
+            data_api_dir.as_path(),
+            "data_api_component.wasm",
+            "data_api_component.wasm",
         ),
     ];
     for (crate_dir, src_name, dest_name) in artifacts {
@@ -89,5 +132,7 @@ fn main() {
     println!("cargo::rerun-if-changed=wasmcloud.toml");
     println!("cargo::rerun-if-changed=../utilities/auth/src/");
     println!("cargo::rerun-if-changed=../utilities/auth/wasmcloud.toml");
+    println!("cargo::rerun-if-changed=../utilities/data-api/src/");
+    println!("cargo::rerun-if-changed=../utilities/data-api/proto/");
     println!("cargo::rerun-if-env-changed=SKIP_WASM_BUILD");
 }
