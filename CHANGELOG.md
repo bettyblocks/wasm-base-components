@@ -1,3 +1,30 @@
+## [1.36.4](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.3...v1.36.4) (2026-10-27)
+
+
+### Bug Fixes
+
+* **data-api:** bump component to 3.1.1 for grpc-client pin ([20cf401](https://github.com/bettyblocks/wasm-base-components/commit/20cf4015511c9ae18a8e4bdc5aa7383cff7f7b04))
+
+
+### Reverts
+
+* roll back data-api chain bump to types 3.2.0 ([85bf46b](https://github.com/bettyblocks/wasm-base-components/commit/85bf46bf0d41035db8c8a60d183b6c56cc3e75ff)), closes [#130](https://github.com/bettyblocks/wasm-base-components/issues/130) [#146](https://github.com/bettyblocks/wasm-base-components/issues/146) [#155](https://github.com/bettyblocks/wasm-base-components/issues/155)
+
+## [1.36.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.2...v1.36.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* **data-api:** pin wasmcloud-grpc-client to bettyblocks master ([91f6e5d](https://github.com/bettyblocks/wasm-base-components/commit/91f6e5d4122e1502868503c21441d38fb16c22c1)), closes [bettyblocks/wasmcloud-grpc-client#1](https://github.com/bettyblocks/wasmcloud-grpc-client/issues/1)
+
+## [1.36.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.1...v1.36.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* point data-api chain at types 3.2.0 ([07a7c70](https://github.com/bettyblocks/wasm-base-components/commit/07a7c70f08a0a9a230de7a88b756db2c5af8390c))
+* trigger pipelines ([1e36aaa](https://github.com/bettyblocks/wasm-base-components/commit/1e36aaac4e9d05361034dcff4066adddd66f70f4))
+
 ## [1.36.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.0...v1.36.1) (2026-10-14)
 
 
