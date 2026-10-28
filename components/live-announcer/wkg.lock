@@ -12,6 +12,15 @@ version = "2.2.0"
 digest = "sha256:f440fc88e5191b8a602e156ef28c8cf06b847cdfc256a70da687c846fc80e175"
 
 [[packages]]
+name = "betty-blocks-types:types"
+registry = "bettyblocksdev.azurecr.io"
+
+[[packages.versions]]
+requirement = "=3.0.0"
+version = "3.0.0"
+digest = "sha256:71075a02b5784186434bcec2220867cef1d46c4fde6e92032a4b04b7a452d456"
+
+[[packages]]
 name = "wasi:http"
 registry = "wasi.dev"
 
