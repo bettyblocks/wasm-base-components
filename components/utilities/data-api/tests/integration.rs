@@ -281,6 +281,12 @@ fn pending_capture_test() {
         r#"{"id":-1}"#,
     );
 
+    let mut mutation4 = PendingMutation::new(
+        "upsertUser",
+        "mutation { upsertUser(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }",
+        r#"{"input":{"email":"joe@example.com"},"uniqueBy":["email"],"validationSets":["default"]}"#,
+    );
+
     let mut component = instantiate_component([]);
 
     let mut resource = DataApiResource::new(&mut component);
@@ -305,11 +311,21 @@ fn pending_capture_test() {
         r#"{"data":{"deleteUser":{"id":"-1"}}}"#
     );
 
-    let [create_mutations, update_mutations, delete_mutations] =
-        call_data_api_resource!(resource.call_pending_capture())
-            .unwrap()
-            .try_into()
-            .unwrap();
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(&mutation4.mutation, &mutation4.variables))
+            .unwrap(),
+        r#"{"data":{"upsertUser":{"id":"-2"}}}"#
+    );
+
+    let [
+        create_mutations,
+        update_mutations,
+        upsert_mutations,
+        delete_mutations,
+    ] = call_data_api_resource!(resource.call_pending_capture())
+        .unwrap()
+        .try_into()
+        .unwrap();
     mutation1.variables =
         String::from(r#"{"input":{"id":-1,"name":"John"},"validationSets":["default"]}"#);
     assert_eq!(
@@ -319,6 +335,13 @@ fn pending_capture_test() {
     assert_eq!(
         TryInto::<[_; 1]>::try_into(update_mutations).unwrap(),
         [mutation2]
+    );
+    mutation4.variables = String::from(
+        r#"{"input":{"id":-2,"email":"joe@example.com"},"validationSets":["default"],"uniqueBy":["email"]}"#,
+    );
+    assert_eq!(
+        TryInto::<[_; 1]>::try_into(upsert_mutations).unwrap(),
+        [mutation4]
     );
     assert_eq!(
         TryInto::<[_; 1]>::try_into(delete_mutations).unwrap(),
@@ -549,6 +572,440 @@ fn apply_capture_with_many_records_test() {
             format!(r#"{{"data":{{"createPokemon":{{"id":"-{}"}}}}}}"#, i + 1)
         );
     }
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+}
+
+/// Upserts in a mass mutate get a placeholder ID like a create. When the capture is applied, one
+/// lookup per model and unique field decides which records exist: those are written with
+/// `uniqueBy` and without ID, the others with a reserved ID. A later step can refer to an
+/// upserted record by its placeholder.
+#[test]
+fn upsert_capture_test() {
+    let mut component = instantiate_component([
+        (
+            (
+                "query($where: CustomerFilterInput) { allCustomer(where: $where, take: 200) { results { id email } } }",
+                r#"{"where":{"email":{"in":["ann@example.com","bob@example.com"]}}}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"allCustomer": {"results": [
+                    {"id": 7, "email": "Ann@Example.com"}
+                ]}})),
+            },
+        ),
+        (
+            (
+                "query($where: OrderFilterInput) { allOrder(where: $where, take: 200) { results { id number } } }",
+                r#"{"where":{"number":{"in":["A-1"]}}}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"allOrder": {"results": [
+                    {"id": 70, "number": "A-1"}
+                ]}})),
+            },
+        ),
+        (
+            (
+                "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
+                r#"{"model":"Customer","amount":2}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(
+                    serde_json::json!({"reserveRecords": {"ids": [501, 502]}}),
+                ),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"id":502,"name":"Cleo","referrer":{"id":501}}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"email":"bob@example.com","id":501,"name":"Bobby"}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"email":"ANN@example.com ","name":"Annie"}],"uniqueBy":["email"],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyOrder(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"customer":{"id":7},"number":"A-1"}],"uniqueBy":["number"],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            ("query { allCustomer { totalCount } }", "{}"),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"allCustomer": {"totalCount": 3}})),
+            },
+        ),
+    ]);
+
+    let upsert_mutation = "mutation($input: CustomerInput, $uniqueBy: [String!]!, $validationSets: [String]) { upsertCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }";
+    let create_mutation = "mutation ($input: CustomerInput, $validationSets: [String]) { createCustomer(input: $input, validationSets: $validationSets) { id } }";
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    for (variables, expected_id) in [
+        (
+            r#"{"input": {"email": "ann@example.com", "name": "Ann"}, "uniqueBy": ["email"], "validationSets": ["default"]}"#,
+            "-1",
+        ),
+        (
+            r#"{"input": {"email": "bob@example.com", "name": "Bob"}, "uniqueBy": ["email"], "validationSets": ["default"]}"#,
+            "-2",
+        ),
+        (
+            r#"{"input": {"email": "ANN@example.com ", "name": "Annie"}, "uniqueBy": ["email"], "validationSets": ["default"]}"#,
+            "-1",
+        ),
+    ] {
+        assert_eq!(
+            call_data_api_resource!(resource.call_request(upsert_mutation, &variables.to_string()))
+                .unwrap(),
+            format!(r#"{{"data":{{"upsertCustomer":{{"id":"{expected_id}"}}}}}}"#)
+        );
+    }
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            create_mutation,
+            &String::from(r#"{"input": {"name": "Cleo", "referrer": {"id": -2}}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"createCustomer":{"id":"-3"}}}"#
+    );
+
+    let update_mutation = "mutation ($id: Int!, $input: CustomerInput, $validationSets: [String]) { updateCustomer(id: $id, input: $input, validationSets: $validationSets) { id } }";
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            update_mutation,
+            &String::from(r#"{"id": -2, "input": {"name": "Bobby"}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"updateCustomer":{"id":"-2"}}}"#
+    );
+
+    let order_upsert_mutation = "mutation($input: OrderInput, $uniqueBy: [String!]!, $validationSets: [String]) { upsertOrder(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }";
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            order_upsert_mutation,
+            &String::from(
+                r#"{"input": {"number": "A-1", "customer": {"id": -1}}, "uniqueBy": ["number"], "validationSets": ["default"]}"#
+            )
+        ))
+        .unwrap(),
+        r#"{"data":{"upsertOrder":{"id":"-4"}}}"#
+    );
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(
+            resource.call_request("query { allCustomer { totalCount } }", &String::from("{}"))
+        )
+        .unwrap(),
+        r#"{"data":{"allCustomer":{"totalCount":3}}}"#
+    );
+}
+
+/// An inner capture writes the upserted record. When the outer capture upserts the same value
+/// again, it must find the record by that value and not send the id of the record.
+#[test]
+fn upsert_in_outer_capture_after_inner_apply_test() {
+    let mut component = instantiate_component([
+        (
+            (
+                "query($where: CustomerFilterInput) { allCustomer(where: $where, take: 200) { results { id email } } }",
+                r#"{"where":{"email":{"in":["ann@example.com"]}}}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"allCustomer": {"results": []}})),
+            },
+        ),
+        (
+            (
+                "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
+                r#"{"model":"Customer","amount":1}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"reserveRecords": {"ids": [501]}})),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"email":"ann@example.com","id":501,"name":"Ann"}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"email":"ann@example.com","name":"Annie"}],"uniqueBy":["email"],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+    ]);
+
+    let upsert_mutation = "mutation($input: CustomerInput, $uniqueBy: [String!]!, $validationSets: [String]) { upsertCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }";
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    for (name, apply_inner) in [("Ann", true), ("Annie", false)] {
+        let variables = format!(
+            r#"{{"input": {{"email": "ann@example.com", "name": "{name}"}}, "uniqueBy": ["email"]}}"#
+        );
+        assert_eq!(
+            call_data_api_resource!(resource.call_request(upsert_mutation, &variables)).unwrap(),
+            r#"{"data":{"upsertCustomer":{"id":"-1"}}}"#
+        );
+
+        if apply_inner {
+            call_data_api_resource!(resource.call_apply_capture()).unwrap();
+        }
+    }
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+}
+
+/// A discarded upsert must not be looked up, and its unique value must not keep its placeholder.
+#[test]
+fn discard_capture_with_upsert_test() {
+    let mut component = instantiate_component([
+        (
+            (
+                "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
+                r#"{"model":"Customer","amount":2}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(
+                    serde_json::json!({"reserveRecords": {"ids": [601, 602]}}),
+                ),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"id":602,"name":"Cleo"}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+    ]);
+
+    let upsert_mutation = "mutation($input: CustomerInput, $uniqueBy: [String!]!, $validationSets: [String]) { upsertCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }";
+    let create_mutation = "mutation ($input: CustomerInput, $validationSets: [String]) { createCustomer(input: $input, validationSets: $validationSets) { id } }";
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            upsert_mutation,
+            &String::from(r#"{"input": {"email": "ann@example.com"}, "uniqueBy": ["email"]}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"upsertCustomer":{"id":"-1"}}}"#
+    );
+    call_data_api_resource!(resource.call_discard_capture()).unwrap();
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            create_mutation,
+            &String::from(r#"{"input": {"name": "Cleo"}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"createCustomer":{"id":"-2"}}}"#
+    );
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+}
+
+/// A step can update an upserted record by its real ID, for example from a query in the action.
+/// The update comes after the upsert, so its value must be the last value.
+#[test]
+fn update_by_real_id_after_upsert_test() {
+    let find_query =
+        r#"query { allCustomer(where: {email: {eq: "ann@example.com"}}) { results { id } } }"#;
+
+    let mut component = instantiate_component([
+        (
+            (find_query, "{}"),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(
+                    serde_json::json!({"allCustomer": {"results": [{"id": 7}]}}),
+                ),
+            },
+        ),
+        (
+            (
+                "query($where: CustomerFilterInput) { allCustomer(where: $where, take: 200) { results { id email } } }",
+                r#"{"where":{"email":{"in":["ann@example.com"]}}}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"allCustomer": {"results": [
+                    {"id": 7, "email": "ann@example.com"}
+                ]}})),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"email":"ann@example.com","name":"Annie"}],"uniqueBy":["email"],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+    ]);
+
+    let upsert_mutation = "mutation($input: CustomerInput, $uniqueBy: [String!]!, $validationSets: [String]) { upsertCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }";
+    let update_mutation = "mutation ($id: Int!, $input: CustomerInput, $validationSets: [String]) { updateCustomer(id: $id, input: $input, validationSets: $validationSets) { id } }";
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            upsert_mutation,
+            &String::from(
+                r#"{"input": {"email": "ann@example.com", "name": "Ann"}, "uniqueBy": ["email"]}"#
+            )
+        ))
+        .unwrap(),
+        r#"{"data":{"upsertCustomer":{"id":"-1"}}}"#
+    );
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(find_query, &String::from("{}"))).unwrap(),
+        r#"{"data":{"allCustomer":{"results":[{"id":7}]}}}"#
+    );
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            update_mutation,
+            &String::from(r#"{"id": 7, "input": {"name": "Annie"}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"updateCustomer":{"id":"7"}}}"#
+    );
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+}
+
+/// An update by ID before an upsert of the same record is sent first, so the upsert value is the
+/// last value.
+#[test]
+fn update_by_real_id_before_upsert_test() {
+    let mut component = instantiate_component([
+        (
+            (
+                "query($where: CustomerFilterInput) { allCustomer(where: $where, take: 200) { results { id email } } }",
+                r#"{"where":{"email":{"in":["ann@example.com"]}}}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"allCustomer": {"results": [
+                    {"id": 7, "email": "ann@example.com"}
+                ]}})),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"id":7,"name":"Annie"}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"email":"ann@example.com","name":"Ann"}],"uniqueBy":["email"],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+    ]);
+
+    let upsert_mutation = "mutation($input: CustomerInput, $uniqueBy: [String!]!, $validationSets: [String]) { upsertCustomer(input: $input, uniqueBy: $uniqueBy, validationSets: $validationSets) { id } }";
+    let update_mutation = "mutation ($id: Int!, $input: CustomerInput, $validationSets: [String]) { updateCustomer(id: $id, input: $input, validationSets: $validationSets) { id } }";
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            update_mutation,
+            &String::from(r#"{"id": 7, "input": {"name": "Annie"}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"updateCustomer":{"id":"7"}}}"#
+    );
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            upsert_mutation,
+            &String::from(
+                r#"{"input": {"email": "ann@example.com", "name": "Ann"}, "uniqueBy": ["email"]}"#
+            )
+        ))
+        .unwrap(),
+        r#"{"data":{"upsertCustomer":{"id":"-1"}}}"#
+    );
 
     call_data_api_resource!(resource.call_apply_capture()).unwrap();
 }
