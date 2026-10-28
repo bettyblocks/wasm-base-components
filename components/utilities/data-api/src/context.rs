@@ -1,10 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use crate::context::data_structs::{DeleteInput, MutationInput};
+use crate::context::data_structs::{DeleteInput, MutationInput, UpsertKey, UpsertMutationInput};
 use crate::context::format_mutation::{
-    generate_delete_many_inputs, generate_upsert_many_inputs, send_delete_many_mutations,
-    send_upsert_many_mutations,
+    merge_updates_into_found_upserts, send_creates_and_updates, send_deletes, send_upserts,
 };
 use crate::exports::betty_blocks_types::data_api::data_api::{self, GuestDataApi, JsonString};
 use crate::{Config, inner_request};
@@ -32,6 +31,9 @@ pub struct CaptureData {
     model_names_of_local_ids: Vec<ModelName>,
     reserve_id_count_per_model: HashMap<ModelName, u32>,
     reserved_ids: Vec<RealId>,
+    upsert_ids_by_unique_value: HashMap<UpsertKey, InternalId>,
+    unique_values_to_look_up: HashMap<InternalId, (UpsertKey, serde_json::Value)>,
+    existing_record_ids: HashSet<InternalId>,
     capture_stack: Vec<MassMutateEntries>,
 }
 
@@ -40,10 +42,26 @@ pub struct MassMutateEntries {
     create: Vec<MassMutateEntry<MutationInput>>,
     update: Vec<MassMutateEntry<MutationInput>>,
     delete: Vec<MassMutateEntry<DeleteInput>>,
+    upsert: Vec<MassMutateEntry<UpsertMutationInput>>,
+    received: usize,
 }
 
 impl MassMutateEntries {
-    fn as_pending_mutations(&self) -> [Vec<data_api::PendingMutation>; 3] {
+    fn new_entry<T: serde::Serialize>(
+        &mut self,
+        model_name: ModelName,
+        variables: T,
+    ) -> MassMutateEntry<T> {
+        let capture_order = self.received;
+        self.received += 1;
+        MassMutateEntry {
+            model_name,
+            variables,
+            capture_order,
+        }
+    }
+
+    fn as_pending_mutations(&self) -> [Vec<data_api::PendingMutation>; 4] {
         [
             self.create
                 .iter()
@@ -52,6 +70,10 @@ impl MassMutateEntries {
             self.update
                 .iter()
                 .map(|entry| entry.as_pending_mutation("update"))
+                .collect(),
+            self.upsert
+                .iter()
+                .map(|entry| entry.as_pending_mutation("upsert"))
                 .collect(),
             self.delete
                 .iter()
@@ -65,6 +87,7 @@ impl MassMutateEntries {
 pub struct MassMutateEntry<T: serde::Serialize> {
     model_name: String,
     variables: T,
+    capture_order: usize,
 }
 
 pub trait RequestRaw {
@@ -96,30 +119,32 @@ impl GuestDataApi for DataAPIContext {
             create,
             update,
             delete,
+            upsert,
+            ..
         }) = capture_data.capture_stack.pop()
         {
-            let reserved_ids = capture_data.reserve_ids(self)?;
+            let found_records = capture_data.look_up_existing_records(self)?;
+            let new_record_ids = capture_data.reserve_new_record_ids(&found_records, self)?;
+            let resolved_ids = capture_data.resolve_placeholders(&found_records, new_record_ids)?;
+            let (update, upsert) = merge_updates_into_found_upserts(update, upsert, &resolved_ids)?;
+            let upserted_ids: Vec<_> = upsert
+                .iter()
+                .map(|entry| *entry.variables.mutation_input.input.id)
+                .collect();
 
-            send_upsert_many_mutations(
-                generate_upsert_many_inputs(create, update, &reserved_ids)?,
-                self,
-            )?;
-
-            send_delete_many_mutations(generate_delete_many_inputs(delete, &reserved_ids)?, self)?;
+            send_creates_and_updates(create, update, &resolved_ids, self)?;
+            send_upserts(upsert, &resolved_ids, self)?;
+            capture_data.mark_upserts_as_existing_for_outer_capture(upserted_ids);
+            send_deletes(delete, &resolved_ids, self)?;
         }
 
         Ok(())
     }
 
     fn discard_capture(&self) -> Result<String, String> {
-        if self
-            .capture_data
-            .lock()
-            .expect("lock is poisoned")
-            .capture_stack
-            .pop()
-            .is_some()
-        {
+        let mut capture_data = self.capture_data.lock().expect("lock is poisoned");
+        if let Some(discarded) = capture_data.capture_stack.pop() {
+            capture_data.forget_discarded_upserts(discarded.upsert);
             return Ok(String::from("deleted most recent capture stack entry"));
         }
 
