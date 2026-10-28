@@ -91,6 +91,38 @@ impl From<UpdateMutationInput> for MutationInput {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertMutationInput {
+    #[serde(flatten)]
+    pub mutation_input: MutationInput,
+    pub unique_by: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct UpsertKey {
+    pub model: ModelName,
+    pub field: String,
+    pub value: String,
+}
+
+impl UpsertKey {
+    pub fn from_unique_value(model: &str, field: &str, value: &serde_json::Value) -> Option<Self> {
+        let value = match value {
+            serde_json::Value::String(value) => value.trim_end().to_lowercase(),
+            serde_json::Value::Number(value) => value.to_string(),
+            serde_json::Value::Bool(value) => value.to_string(),
+            _ => return None,
+        };
+
+        Some(Self {
+            model: model.to_string(),
+            field: field.to_string(),
+            value,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MutationInputVariable {
     #[serde(default)]
     pub id: MutationIdInput,
@@ -140,10 +172,35 @@ impl ValidationSets {
             ValidationSets::Empty => "empty",
         }
     }
+
+    /// Mutations sent together get one set of validation sets, and the empty set wins.
+    pub fn combine(&mut self, added: ValidationSets) {
+        if let ValidationSets::Empty = added {
+            *self = ValidationSets::Empty;
+        }
+    }
 }
 
 impl std::fmt::Display for ValidationSets {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(value: serde_json::Value) -> Option<String> {
+        UpsertKey::from_unique_value("User", "number", &value).map(|key| key.value)
+    }
+
+    #[test]
+    fn upsert_key_ignores_case_and_trailing_spaces_test() {
+        assert_eq!(
+            key(serde_json::json!("Ann@Example.com ")),
+            key(serde_json::json!("ann@example.com"))
+        );
+        assert_eq!(key(serde_json::Value::Null), None);
     }
 }
