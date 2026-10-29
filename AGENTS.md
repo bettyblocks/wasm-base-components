@@ -65,6 +65,15 @@ A version is never allowed to go down, on any base.
 decides where each dependency comes from: the local checkout when `wit/<pkg>` declares exactly
 the version asked for, the registry otherwise.
 
+## Conventions
+
+- **Component folders:** a component that is started by an HTTP request has the `http-` prefix on
+  its folder name (`http-mcp`, `http-wrapper`, `http-well-known`).
+- **Rust file layout:** put structs and enums at the top of the file, below the `use`s, `mod`s and
+  constants, and put their `impl` blocks and trait impls directly under the type. Functions come
+  after. No clippy lint enforces this (`clippy::arbitrary_source_item_ordering` is opt-in and
+  would need a config), so it is a review convention.
+
 ## Files not to hand-edit
 
 - `wkg.toml` — generated on every build and gitignored. Never commit or edit it.
