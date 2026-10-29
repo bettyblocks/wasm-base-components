@@ -148,38 +148,11 @@ interface types {
         %as: json-string
     }
 
-    enum betty-api-key-location {
-        header,
-        query,
-        cookie
-    }
-
-    record betty-api-key-authentication {
-        location: betty-api-key-location,
-        name: string,
-        prefix: option<string>,
-        value: string
-    }
-
-    record betty-api-oauth2-authentication {
-        token-url: string,
-        client-id: string,
-        client-secret: string,
-        scopes: option<list<string>>
-    }
-
-    variant betty-api-authentication {
-        none,
-        api-key(betty-api-key-authentication),
-        oauth2(betty-api-oauth2-authentication)
-    }
-
     record betty-api {
         software-name: string,
         api-name: string,
         base-url: string,
         path: string,
-        method: betty-http-method,
-        authentication: betty-api-authentication
+        method: betty-http-method
     }
 }
