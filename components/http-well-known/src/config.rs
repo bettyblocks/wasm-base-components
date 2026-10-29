@@ -5,8 +5,16 @@ use crate::wasi::config::store::get;
 use serde::Deserialize;
 use serde_json::Value;
 
-const WASI_CONFIG_KEY: &str = "well_known";
+/// The config of the mcp servers of the application, shared with the http-mcp component.
+const WASI_CONFIG_KEY: &str = "mcp_servers";
 const APPLICATION_ID_ENV: &str = "APPLICATION_ID";
+
+/// The part of the mcp config that is read by this component, the rest is for http-mcp.
+#[derive(Debug, Deserialize)]
+struct McpServersConfig {
+    #[serde(rename = "well-known")]
+    well_known: WellKnownConfig,
+}
 
 /// The discovery documents of one application, keyed by authentication profile id and then by
 /// document name (`oauth-protected-resource`, `oauth-authorization-server`).
@@ -32,7 +40,9 @@ pub fn load_config() -> Result<WellKnownConfig, String> {
 }
 
 pub fn parse_config(raw: &str) -> Result<WellKnownConfig, String> {
-    serde_json::from_str(raw).map_err(|e| format!("Failed to parse {WASI_CONFIG_KEY} config: {e}"))
+    serde_json::from_str::<McpServersConfig>(raw)
+        .map(|config| config.well_known)
+        .map_err(|e| format!("Failed to parse {WASI_CONFIG_KEY} config: {e}"))
 }
 
 #[cfg(test)]
@@ -43,18 +53,22 @@ mod tests {
     fn test_parse_config_reads_documents_per_profile() {
         let config = parse_config(
             r#"{
-                "profiles": {
-                    "profile-1": {
-                        "oauth-protected-resource": { "resource": "https://app.betty.app/profile-1" },
-                        "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-1" }
-                    },
-                    "profile-2": {
-                        "oauth-protected-resource": { "resource": "https://app.betty.app/profile-2" },
-                        "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-2" }
-                    },
-                    "profile-3": {
-                        "oauth-protected-resource": { "resource": "https://app.betty.app/profile-3" },
-                        "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-3" }
+                "app": "my-app",
+                "mcp-servers": [],
+                "well-known": {
+                    "profiles": {
+                        "profile-1": {
+                            "oauth-protected-resource": { "resource": "https://app.betty.app/profile-1" },
+                            "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-1" }
+                        },
+                        "profile-2": {
+                            "oauth-protected-resource": { "resource": "https://app.betty.app/profile-2" },
+                            "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-2" }
+                        },
+                        "profile-3": {
+                            "oauth-protected-resource": { "resource": "https://app.betty.app/profile-3" },
+                            "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-3" }
+                        }
                     }
                 }
             }"#,
@@ -77,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_parse_config_empty_profiles() {
-        let config = parse_config(r#"{"profiles": {}}"#).unwrap();
+        let config = parse_config(r#"{"well-known": {"profiles": {}}}"#).unwrap();
         assert!(config.profiles.is_empty());
     }
 
@@ -88,8 +102,14 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_config_missing_well_known_key() {
+        let result = parse_config(r#"{"mcp-servers": []}"#);
+        assert!(result.unwrap_err().contains("Failed to parse"));
+    }
+
+    #[test]
     fn test_parse_config_missing_profiles_key() {
-        let result = parse_config(r#"{"other": {}}"#);
+        let result = parse_config(r#"{"well-known": {"other": {}}}"#);
         assert!(result.unwrap_err().contains("Failed to parse"));
     }
 }

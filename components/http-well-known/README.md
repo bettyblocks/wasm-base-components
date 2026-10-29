@@ -25,14 +25,17 @@ Ids may only contain `[A-Za-z0-9_-]` (max 64 chars). `app_uuid` must equal the `
 | Source | Key | Purpose |
 |---|---|---|
 | environment | `APPLICATION_ID` | The application this component serves |
-| wasi:config | `well_known` | The documents, as JSON |
+| wasi:config | `mcp_servers` | The mcp config of the application, shared with `http-mcp`. This component reads its `well-known` part |
 
 ```json
 {
-  "profiles": {
-    "<profile_id>": {
-      "oauth-protected-resource": { "...": "..." },
-      "oauth-authorization-server": { "...": "..." }
+  "mcp-servers": ["..."],
+  "well-known": {
+    "profiles": {
+      "<profile_id>": {
+        "oauth-protected-resource": { "...": "..." },
+        "oauth-authorization-server": { "...": "..." }
+      }
     }
   }
 }

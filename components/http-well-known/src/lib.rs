@@ -143,9 +143,11 @@ mod tests {
     fn test_config() -> WellKnownConfig {
         parse_config(
             r#"{
-                "profiles": {
-                    "profile-1": {
-                        "oauth-protected-resource": { "resource": "https://app.betty.app" }
+                "well-known": {
+                    "profiles": {
+                        "profile-1": {
+                            "oauth-protected-resource": { "resource": "https://app.betty.app" }
+                        }
                     }
                 }
             }"#,
