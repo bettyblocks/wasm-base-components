@@ -11,6 +11,32 @@ mod config;
 const DOCUMENTS: [&str; 2] = ["oauth-protected-resource", "oauth-authorization-server"];
 const MAX_ID_LENGTH: usize = 64;
 
+#[derive(Debug, PartialEq)]
+struct Route {
+    document: &'static str,
+    app_uuid: String,
+    profile_id: String,
+}
+
+#[derive(Debug, PartialEq)]
+enum Failure {
+    NotFound,
+    /// something is wrong with the deployment of this component, not with the request
+    Internal(String),
+}
+
+impl Failure {
+    fn into_response(self) -> Response<Body> {
+        match self {
+            Failure::NotFound => status_response(StatusCode::NOT_FOUND),
+            Failure::Internal(message) => {
+                eprintln!("well-known: {message}");
+                status_response(StatusCode::INTERNAL_SERVER_ERROR)
+            }
+        }
+    }
+}
+
 #[wstd::http_server]
 async fn main(request: Request<Body>) -> Result<Response<Body>, wstd::http::Error> {
     Ok(inner_handle(&request))
@@ -54,32 +80,6 @@ fn find_document<'a>(
         .get(&route.profile_id)
         .and_then(|documents| documents.get(route.document))
         .ok_or(Failure::NotFound)
-}
-
-#[derive(Debug, PartialEq)]
-enum Failure {
-    NotFound,
-    /// something is wrong with the deployment of this component, not with the request
-    Internal(String),
-}
-
-impl Failure {
-    fn into_response(self) -> Response<Body> {
-        match self {
-            Failure::NotFound => status_response(StatusCode::NOT_FOUND),
-            Failure::Internal(message) => {
-                eprintln!("well-known: {message}");
-                status_response(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct Route {
-    document: &'static str,
-    app_uuid: String,
-    profile_id: String,
 }
 
 /// Matches `/.well-known/{document}/api/runtime/{app_uuid}/authentication_profile/{profile_id}`
