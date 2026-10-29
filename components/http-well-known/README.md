@@ -1,6 +1,6 @@
 # Well-known component
 
-Serves the OAuth discovery documents (`/.well-known/...`) of one Betty Blocks application, so MCP clients can find out how to log into it. It runs in the mcp workload of the application and needs no backing store: the documents come from the workload config, pre-rendered by actions-compiler on publish.
+Serves the OAuth discovery documents (`/.well-known/...`) of one Betty Blocks application, so MCP clients can find out how to log into it. It runs in a workload of its own (a workload can only have one http component, so it can not share the one of `http-mcp`) and needs no backing store: the documents come from the workload config, pre-rendered by actions-compiler on publish.
 
 CORS is left to the wasmCloud runner.
 
@@ -8,17 +8,17 @@ CORS is left to the wasmCloud runner.
 
 | Path | Returns |
 |---|---|
-| `GET /.well-known/oauth-protected-resource/api/runtime/{app_uuid}/authentication_profile/{profile_id}` | `oauth-protected-resource` document |
-| `GET /.well-known/oauth-authorization-server/api/runtime/{app_uuid}/authentication_profile/{profile_id}` | `oauth-authorization-server` document |
+| `GET /.well-known/oauth-protected-resource/api/mcp/{mcp_id}` | `oauth-protected-resource` document (RFC 9728) of one mcp server. Its `resource` is the url of that server, so every server has its own document, also when servers share an authentication profile |
+| `GET /.well-known/oauth-authorization-server/api/runtime/{app_uuid}/authentication_profile/{profile_id}` | `oauth-authorization-server` document (RFC 8414) of one authentication profile |
 
 | Status | When |
 |---|---|
 | 200 | Document found (`application/json`) |
-| 404 | Other application, unknown profile, missing document, invalid id or unknown path |
+| 404 | Unknown mcp server or profile, other application, invalid id or unknown path |
 | 405 | Method other than `GET` |
 | 500 | Missing or invalid configuration |
 
-Ids may only contain `[A-Za-z0-9_-]` (max 64 chars). `app_uuid` must equal the `APPLICATION_ID` environment variable of the component.
+For the authorization server, the app and profile id may only contain `[A-Za-z0-9_-]` (max 64 chars) and `app_uuid` must equal the `APPLICATION_ID` environment variable of the component.
 
 ## Configuration
 
@@ -31,11 +31,11 @@ Ids may only contain `[A-Za-z0-9_-]` (max 64 chars). `app_uuid` must equal the `
 {
   "mcp-servers": ["..."],
   "well-known": {
-    "profiles": {
-      "<profile_id>": {
-        "oauth-protected-resource": { "...": "..." },
-        "oauth-authorization-server": { "...": "..." }
-      }
+    "oauth-protected-resource": {
+      "<mcp_id>": { "resource": "https://<host>/api/mcp/<mcp_id>", "...": "..." }
+    },
+    "oauth-authorization-server": {
+      "<profile_id>": { "issuer": "...", "...": "..." }
     }
   }
 }

@@ -8,14 +8,24 @@ wit_bindgen::generate!({
 
 mod config;
 
-const DOCUMENTS: [&str; 2] = ["oauth-protected-resource", "oauth-authorization-server"];
 const MAX_ID_LENGTH: usize = 64;
 
+/// The kind of document a path serves.
+#[derive(Debug, Clone, Copy)]
+enum Document {
+    ProtectedResource,
+    AuthorizationServer,
+}
+
 #[derive(Debug, PartialEq)]
-struct Route {
-    document: &'static str,
-    app_uuid: String,
-    profile_id: String,
+enum Route {
+    /// The metadata of one mcp server, `resource` of the document is the url of that server.
+    ProtectedResource { mcp_id: String },
+    /// The metadata of the authorization server of one authentication profile.
+    AuthorizationServer {
+        app_uuid: String,
+        profile_id: String,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -71,45 +81,57 @@ fn find_document<'a>(
     application_id: &str,
     route: &Route,
 ) -> Result<&'a Value, Failure> {
-    if route.app_uuid != application_id {
-        return Err(Failure::NotFound);
+    match route {
+        Route::ProtectedResource { mcp_id } => config.protected_resources.get(mcp_id),
+        Route::AuthorizationServer {
+            app_uuid,
+            profile_id,
+        } if app_uuid == application_id => config.authorization_servers.get(profile_id),
+        Route::AuthorizationServer { .. } => None,
     }
-
-    config
-        .profiles
-        .get(&route.profile_id)
-        .and_then(|documents| documents.get(route.document))
-        .ok_or(Failure::NotFound)
+    .ok_or(Failure::NotFound)
 }
 
-/// Matches `/.well-known/{document}/api/runtime/{app_uuid}/authentication_profile/{profile_id}`
-/// for every document. Anything else, including ids with characters outside `[A-Za-z0-9_-]`,
-/// is no route.
+/// Matches
+/// - `/.well-known/oauth-protected-resource/api/mcp/{mcp_id}`, the url of the mcp server appended
+///   to the well-known prefix (RFC 9728 section 3.1)
+/// - `/.well-known/oauth-authorization-server/api/runtime/{app_uuid}/authentication_profile/{profile_id}`
+///
+/// Anything else, including an app or profile id with characters outside `[A-Za-z0-9_-]`, is no
+/// route.
 fn parse_route(path: &str) -> Option<Route> {
     let mut router = matchit::Router::new();
-    for document in DOCUMENTS {
-        router
-            .insert(
-                format!(
-                    "/.well-known/{document}/api/runtime/{{app_uuid}}/authentication_profile/{{profile_id}}"
-                ),
-                document,
-            )
-            .ok()?;
-    }
+    router
+        .insert(
+            "/.well-known/oauth-protected-resource/api/mcp/{mcp_id}",
+            Document::ProtectedResource,
+        )
+        .ok()?;
+    router
+        .insert(
+            "/.well-known/oauth-authorization-server/api/runtime/{app_uuid}/authentication_profile/{profile_id}",
+            Document::AuthorizationServer,
+        )
+        .ok()?;
 
     let matched = router.at(path).ok()?;
-    let app_uuid = matched.params.get("app_uuid")?;
-    let profile_id = matched.params.get("profile_id")?;
-    if !is_valid_id(app_uuid) || !is_valid_id(profile_id) {
-        return None;
-    }
+    match matched.value {
+        Document::ProtectedResource => Some(Route::ProtectedResource {
+            mcp_id: matched.params.get("mcp_id")?.to_string(),
+        }),
+        Document::AuthorizationServer => {
+            let app_uuid = matched.params.get("app_uuid")?;
+            let profile_id = matched.params.get("profile_id")?;
+            if !is_valid_id(app_uuid) || !is_valid_id(profile_id) {
+                return None;
+            }
 
-    Some(Route {
-        document: matched.value,
-        app_uuid: app_uuid.to_string(),
-        profile_id: profile_id.to_string(),
-    })
+            Some(Route::AuthorizationServer {
+                app_uuid: app_uuid.to_string(),
+                profile_id: profile_id.to_string(),
+            })
+        }
+    }
 }
 
 fn is_valid_id(s: &str) -> bool {
@@ -144,10 +166,12 @@ mod tests {
         parse_config(
             r#"{
                 "well-known": {
-                    "profiles": {
-                        "profile-1": {
-                            "oauth-protected-resource": { "resource": "https://app.betty.app" }
-                        }
+                    "oauth-protected-resource": {
+                        "server-1": { "resource": "https://app.betty.app/api/mcp/server-1" },
+                        "server-2": { "resource": "https://app.betty.app/api/mcp/server-2" }
+                    },
+                    "oauth-authorization-server": {
+                        "profile-1": { "issuer": "https://app.betty.app/profile-1" }
                     }
                 }
             }"#,
@@ -155,9 +179,14 @@ mod tests {
         .unwrap()
     }
 
-    fn route(document: &'static str, app_uuid: &str, profile_id: &str) -> Route {
-        Route {
-            document,
+    fn protected_resource(mcp_id: &str) -> Route {
+        Route::ProtectedResource {
+            mcp_id: mcp_id.to_string(),
+        }
+    }
+
+    fn authorization_server(app_uuid: &str, profile_id: &str) -> Route {
+        Route::AuthorizationServer {
             app_uuid: app_uuid.to_string(),
             profile_id: profile_id.to_string(),
         }
@@ -165,12 +194,9 @@ mod tests {
 
     #[test]
     fn test_parse_route_protected_resource() {
-        let path = format!(
-            "/.well-known/oauth-protected-resource/api/runtime/{APP}/authentication_profile/profile-1"
-        );
         assert_eq!(
-            parse_route(&path),
-            Some(route("oauth-protected-resource", APP, "profile-1"))
+            parse_route("/.well-known/oauth-protected-resource/api/mcp/server-1"),
+            Some(protected_resource("server-1"))
         );
     }
 
@@ -181,16 +207,8 @@ mod tests {
         );
         assert_eq!(
             parse_route(&path),
-            Some(route("oauth-authorization-server", APP, "profile-1"))
+            Some(authorization_server(APP, "profile-1"))
         );
-    }
-
-    #[test]
-    fn test_parse_route_rejects_unknown_document() {
-        let path = format!(
-            "/.well-known/openid-configuration/api/runtime/{APP}/authentication_profile/profile-1"
-        );
-        assert_eq!(parse_route(&path), None);
     }
 
     #[test]
@@ -199,37 +217,45 @@ mod tests {
         assert_eq!(parse_route("/api/mcp/server-1"), None);
         assert_eq!(parse_route("/.well-known/oauth-protected-resource"), None);
         assert_eq!(
-            parse_route("/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/p/extra"),
+            parse_route("/.well-known/oauth-protected-resource/api/mcp/"),
             None
         );
         assert_eq!(
-            parse_route("/.well-known/oauth-protected-resource/api/runtime/app/profile/p"),
+            parse_route("/.well-known/oauth-protected-resource/api/mcp/server-1/extra"),
             None
         );
+        assert_eq!(
+            parse_route("/.well-known/openid-configuration/api/mcp/server-1"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_parse_route_authorization_server_rejects_other_paths() {
+        for path in [
+            // the protected resource is described per mcp server, not per profile
+            format!("/.well-known/oauth-protected-resource/api/runtime/{APP}/authentication_profile/profile-1"),
+            format!("/.well-known/oauth-authorization-server/api/runtime/{APP}/authentication_profile/p/extra"),
+            format!("/.well-known/oauth-authorization-server/api/runtime/{APP}/profile/p"),
+            "/.well-known/oauth-authorization-server/api/runtime//authentication_profile/p"
+                .to_string(),
+        ] {
+            assert_eq!(parse_route(&path), None, "{path}");
+        }
     }
 
     #[test]
     fn test_parse_route_rejects_invalid_ids() {
         for id in ["a:b", "..", "a%2Fb", &"a".repeat(65)] {
             let path = format!(
-                "/.well-known/oauth-protected-resource/api/runtime/{id}/authentication_profile/p"
+                "/.well-known/oauth-authorization-server/api/runtime/{id}/authentication_profile/p"
             );
             assert_eq!(parse_route(&path), None, "app id {id}");
             let path = format!(
-                "/.well-known/oauth-protected-resource/api/runtime/app/authentication_profile/{id}"
+                "/.well-known/oauth-authorization-server/api/runtime/app/authentication_profile/{id}"
             );
             assert_eq!(parse_route(&path), None, "profile id {id}");
         }
-    }
-
-    #[test]
-    fn test_parse_route_rejects_empty_ids() {
-        assert_eq!(
-            parse_route(
-                "/.well-known/oauth-protected-resource/api/runtime//authentication_profile/p"
-            ),
-            None
-        );
     }
 
     #[test]
@@ -244,15 +270,30 @@ mod tests {
     }
 
     #[test]
-    fn test_find_document_returns_the_document() {
+    fn test_find_document_protected_resource_per_mcp_server() {
         let config = test_config();
-        let document = find_document(
-            &config,
-            APP,
-            &route("oauth-protected-resource", APP, "profile-1"),
-        )
-        .unwrap();
-        assert_eq!(document["resource"], "https://app.betty.app");
+        for mcp_id in ["server-1", "server-2"] {
+            let document = find_document(&config, APP, &protected_resource(mcp_id)).unwrap();
+            assert_eq!(
+                document["resource"],
+                format!("https://app.betty.app/api/mcp/{mcp_id}")
+            );
+        }
+    }
+
+    #[test]
+    fn test_find_document_unknown_mcp_server_is_not_found() {
+        let config = test_config();
+        let result = find_document(&config, APP, &protected_resource("server-3"));
+        assert_eq!(result, Err(Failure::NotFound));
+    }
+
+    #[test]
+    fn test_find_document_authorization_server() {
+        let config = test_config();
+        let document =
+            find_document(&config, APP, &authorization_server(APP, "profile-1")).unwrap();
+        assert_eq!(document["issuer"], "https://app.betty.app/profile-1");
     }
 
     #[test]
@@ -261,7 +302,7 @@ mod tests {
         let result = find_document(
             &config,
             "another-app",
-            &route("oauth-protected-resource", APP, "profile-1"),
+            &authorization_server(APP, "profile-1"),
         );
         assert_eq!(result, Err(Failure::NotFound));
     }
@@ -269,22 +310,20 @@ mod tests {
     #[test]
     fn test_find_document_unknown_profile_is_not_found() {
         let config = test_config();
-        let result = find_document(
-            &config,
-            APP,
-            &route("oauth-protected-resource", APP, "profile-2"),
-        );
+        let result = find_document(&config, APP, &authorization_server(APP, "profile-2"));
         assert_eq!(result, Err(Failure::NotFound));
     }
 
     #[test]
-    fn test_find_document_missing_sub_document_is_not_found() {
-        let config = test_config();
-        let result = find_document(
-            &config,
-            APP,
-            &route("oauth-authorization-server", APP, "profile-1"),
+    fn test_find_document_missing_kind_is_not_found() {
+        let config = parse_config(r#"{"well-known": {}}"#).unwrap();
+        assert_eq!(
+            find_document(&config, APP, &protected_resource("server-1")),
+            Err(Failure::NotFound)
         );
-        assert_eq!(result, Err(Failure::NotFound));
+        assert_eq!(
+            find_document(&config, APP, &authorization_server(APP, "profile-1")),
+            Err(Failure::NotFound)
+        );
     }
 }

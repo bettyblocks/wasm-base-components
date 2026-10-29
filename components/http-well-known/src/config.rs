@@ -16,11 +16,15 @@ struct McpServersConfig {
     well_known: WellKnownConfig,
 }
 
-/// The discovery documents of one application, keyed by authentication profile id and then by
-/// document name (`oauth-protected-resource`, `oauth-authorization-server`).
+/// The discovery documents of one application.
 #[derive(Debug, Deserialize)]
 pub struct WellKnownConfig {
-    pub profiles: HashMap<String, HashMap<String, Value>>,
+    /// One document per mcp server, keyed by mcp id.
+    #[serde(rename = "oauth-protected-resource", default)]
+    pub protected_resources: HashMap<String, Value>,
+    /// One document per authentication profile, keyed by profile id.
+    #[serde(rename = "oauth-authorization-server", default)]
+    pub authorization_servers: HashMap<String, Value>,
 }
 
 pub fn load_application_id() -> Result<String, String> {
@@ -50,49 +54,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_config_reads_documents_per_profile() {
+    fn test_parse_config_reads_documents_per_mcp_server_and_profile() {
         let config = parse_config(
             r#"{
                 "app": "my-app",
                 "mcp-servers": [],
                 "well-known": {
-                    "profiles": {
-                        "profile-1": {
-                            "oauth-protected-resource": { "resource": "https://app.betty.app/profile-1" },
-                            "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-1" }
-                        },
-                        "profile-2": {
-                            "oauth-protected-resource": { "resource": "https://app.betty.app/profile-2" },
-                            "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-2" }
-                        },
-                        "profile-3": {
-                            "oauth-protected-resource": { "resource": "https://app.betty.app/profile-3" },
-                            "oauth-authorization-server": { "issuer": "https://app.betty.app/profile-3" }
-                        }
+                    "oauth-protected-resource": {
+                        "server-1": { "resource": "https://app.betty.app/api/mcp/server-1" },
+                        "server-2": { "resource": "https://app.betty.app/api/mcp/server-2" },
+                        "server-3": { "resource": "https://app.betty.app/api/mcp/server-3" }
+                    },
+                    "oauth-authorization-server": {
+                        "profile-1": { "issuer": "https://app.betty.app/profile-1" },
+                        "profile-2": { "issuer": "https://app.betty.app/profile-2" }
                     }
                 }
             }"#,
         )
         .unwrap();
 
-        assert_eq!(config.profiles.len(), 3);
-        for profile in ["profile-1", "profile-2", "profile-3"] {
-            let documents = &config.profiles[profile];
+        assert_eq!(config.protected_resources.len(), 3);
+        for server in ["server-1", "server-2", "server-3"] {
             assert_eq!(
-                documents["oauth-protected-resource"]["resource"],
-                format!("https://app.betty.app/{profile}")
+                config.protected_resources[server]["resource"],
+                format!("https://app.betty.app/api/mcp/{server}")
             );
+        }
+
+        assert_eq!(config.authorization_servers.len(), 2);
+        for profile in ["profile-1", "profile-2"] {
             assert_eq!(
-                documents["oauth-authorization-server"]["issuer"],
+                config.authorization_servers[profile]["issuer"],
                 format!("https://app.betty.app/{profile}")
             );
         }
     }
 
     #[test]
-    fn test_parse_config_empty_profiles() {
-        let config = parse_config(r#"{"well-known": {"profiles": {}}}"#).unwrap();
-        assert!(config.profiles.is_empty());
+    fn test_parse_config_documents_default_to_empty() {
+        let config = parse_config(r#"{"well-known": {}}"#).unwrap();
+        assert!(config.protected_resources.is_empty());
+        assert!(config.authorization_servers.is_empty());
     }
 
     #[test]
@@ -104,12 +107,6 @@ mod tests {
     #[test]
     fn test_parse_config_missing_well_known_key() {
         let result = parse_config(r#"{"mcp-servers": []}"#);
-        assert!(result.unwrap_err().contains("Failed to parse"));
-    }
-
-    #[test]
-    fn test_parse_config_missing_profiles_key() {
-        let result = parse_config(r#"{"well-known": {"other": {}}}"#);
         assert!(result.unwrap_err().contains("Failed to parse"));
     }
 }
