@@ -98,7 +98,8 @@ fn find_document<'a>(
 /// - `/.well-known/oauth-authorization-server/api/runtime/{app_uuid}/authentication_profile/{profile_id}`
 ///
 /// Anything else, including an app or profile id with characters outside `[A-Za-z0-9_-]`, is no
-/// route.
+/// route. The mcp id is not validated: it is the path of the folder of the mcp server and is only
+/// looked up in the config of the app.
 fn parse_route(path: &str) -> Option<Route> {
     let mut router = matchit::Router::new();
     router
@@ -255,6 +256,16 @@ mod tests {
                 "/.well-known/oauth-authorization-server/api/runtime/app/authentication_profile/{id}"
             );
             assert_eq!(parse_route(&path), None, "profile id {id}");
+        }
+    }
+
+    #[test]
+    fn test_parse_route_does_not_validate_the_mcp_id() {
+        // the name of an mcp server folder can be long and is not limited to an id alphabet
+        let long = "participant-context-lookup-and-portfolio-overview-".repeat(8);
+        for id in ["a.b", "a b", "a:b", long.as_str()] {
+            let path = format!("/.well-known/oauth-protected-resource/api/mcp/{id}");
+            assert_eq!(parse_route(&path), Some(protected_resource(id)), "{id}");
         }
     }
 
