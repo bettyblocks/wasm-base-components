@@ -148,7 +148,7 @@ interface types {
         %as: json-string
     }
 
-    record betty-api {
+    record betty-software-api {
         software-name: string,
         api-name: string,
         base-url: string,
