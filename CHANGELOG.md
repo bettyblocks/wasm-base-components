@@ -1,3 +1,16 @@
+# [1.38.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.37.0...v1.38.0) (2026-10-30)
+
+
+### Bug Fixes
+
+* fetch wit deps with an isolated DOCKER_CONFIG ([df439e4](https://github.com/bettyblocks/wasm-base-components/commit/df439e4c2d45c75ce0665c03da0249f91a58fe2c))
+
+
+### Features
+
+* add http-well-known component serving the oauth discovery documents ([f89fff6](https://github.com/bettyblocks/wasm-base-components/commit/f89fff6008dc94c69335d18ea430705588202a49))
+* serve the protected resource metadata per mcp server ([30eaac7](https://github.com/bettyblocks/wasm-base-components/commit/30eaac716ec4aa25594bc2c7a2473f30b47533ea))
+
 # [1.37.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.4...v1.37.0) (2026-10-28)
 
 
