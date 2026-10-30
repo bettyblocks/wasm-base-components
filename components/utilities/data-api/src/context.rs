@@ -175,13 +175,20 @@ impl GuestDataApi for DataAPIContext {
     }
 
     fn request(&self, query: String, variables: JsonString) -> Result<JsonString, String> {
-        if let Ok(mut capture_data) = self.capture_data.lock()
-            && !capture_data.capture_stack.is_empty()
-        {
-            process_request::extract_mutation_data(self, &mut capture_data, query, variables)
-        } else {
-            RequestRaw::request_raw(self, query, variables)
+        let mut capture_data = self
+            .capture_data
+            .lock()
+            .map_err(|_| String::from("capture stack lock poisoned"))?;
+
+        if capture_data.capture_stack.is_empty() {
+            let variables = replace_ids::replace_negative_ids_in_variables(
+                &capture_data.reserved_ids,
+                variables,
+            )?;
+            return RequestRaw::request_raw(self, query, variables);
         }
+
+        process_request::extract_mutation_data(self, &mut capture_data, query, variables)
     }
 
     fn request_raw(&self, query: String, variables: JsonString) -> Result<JsonString, String> {

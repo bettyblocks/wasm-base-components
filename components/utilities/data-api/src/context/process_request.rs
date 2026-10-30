@@ -1,7 +1,7 @@
 use crate::{
     context::{
         CaptureData, InternalId, MassMutateEntries, MassMutateEntry, ModelName, RequestRaw,
-        data_structs::*,
+        data_structs::*, replace_ids::replace_negative_ids_in_variables,
     },
     exports::betty_blocks_types::data_api::data_api::JsonString,
 };
@@ -31,6 +31,7 @@ pub fn extract_mutation_data(
         model_name,
     }) = read_captured_mutation(&query)?
     else {
+        let variables = replace_negative_ids_in_variables(&capture_data.reserved_ids, variables)?;
         return request_sender.request_raw(query, variables);
     };
 
