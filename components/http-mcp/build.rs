@@ -67,8 +67,10 @@ fn main() {
 
     println!("cargo:warning=Fetching WIT deps for data-api-component...");
     generate_wkg_toml(&data_api_dir, &manifest_dir);
+
     let status = Command::new("wkg")
         .args(["wit", "fetch"])
+        .env("DOCKER_CONFIG", std::env::temp_dir())
         .current_dir(&data_api_dir)
         .status()
         .expect("Failed to run wkg wit fetch for data-api-component");
