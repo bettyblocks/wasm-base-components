@@ -66,3 +66,20 @@ just build-all
 
 `check-version-bumps.sh` diffs `<base>...HEAD`, so it only sees **committed** state —
 uncommitted edits are invisible to it and it will report nothing.
+
+## Writing style
+
+Write all documentation in **ASD-STE100 Simplified Technical English (STE)**. This applies to
+`README.md`, `docs/`, ADRs, `poc/` READMEs and comments in WIT files. It does not apply to code.
+
+- Use only one meaning for each word. Use the same word for the same thing every time.
+- Write short sentences: 20 words or less for instructions, 25 words or less for descriptions.
+- Write one instruction in each sentence. Use the imperative for instructions ("Bump the version").
+- Use the active voice. Use the simple tenses (present, past, future).
+- Write paragraphs of 6 sentences or less, with one topic in each paragraph.
+- Do not use more than 3 nouns in a noun cluster. Use articles ("the", "a") where possible.
+- Do not use "-ing" forms as nouns or adjectives. Do not use phrasal verbs.
+- Use approved STE words where possible ("make sure", not "ensure"; "necessary", not "need").
+  Technical names (WIT package and interface names, tool names) and technical verbs (compile,
+  link, publish) are permitted.
+- Code blocks, WIT, commands and error output stay as they are.
