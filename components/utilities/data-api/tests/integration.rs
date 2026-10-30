@@ -1009,3 +1009,133 @@ fn update_by_real_id_before_upsert_test() {
 
     call_data_api_resource!(resource.call_apply_capture()).unwrap();
 }
+
+/// A record created in one mass mutate is referenced by its negative ID in a later mass mutate
+/// and in a request outside of any mass mutate.
+#[test]
+fn sequential_capture_test() {
+    let mut component = instantiate_component([
+        (
+            (
+                "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
+                r#"{"model":"User","amount":1}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"reserveRecords": {"ids": [501]}})),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"id":501,"name":"John"}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "mutation ($model: String!, $amount: Int!) { reserveRecords(model: $model, amount: $amount) { ids } }",
+                r#"{"model":"User","amount":1}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"reserveRecords": {"ids": [502]}})),
+            },
+        ),
+        (
+            (
+                "mutation { upsertManyUser(input: $input, validationSets: $validationSets) { id } }",
+                r#"{"input":[{"id":502,"name":"Joe","subordinates":{"_replace":[{"id":"501"}]}},{"id":501,"name":"Johnny"}],"validationSets":["default"]}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: String::new(),
+            },
+        ),
+        (
+            (
+                "query($where: UserFilterInput) { oneUser(where: $where) { id } }",
+                r#"{"where":{"id":{"eq":"501"}}}"#,
+            ),
+            DataApiResult {
+                status: Status::Ok as i32,
+                result: format_result_json(serde_json::json!({"oneUser": {"id": 501}})),
+            },
+        ),
+    ]);
+
+    let create_mutation = "mutation ($input: UserInput, $validationSets: [String]) { createUser(input: $input, validationSets: $validationSets) { id } }";
+    let update_mutation = "mutation ($id: Int!, $input: UserInput, $validationSets: [String]) { updateUser(id: $id, input: $input, validationSets: $validationSets) { id } }";
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            create_mutation,
+            &String::from(r#"{"input": {"name": "John"}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"createUser":{"id":"-1"}}}"#
+    );
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            update_mutation,
+            &String::from(r#"{"id": "-1", "input": {"name": "Johnny"}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"updateUser":{"id":"-1"}}}"#
+    );
+
+    // The negative IDs keep counting down, so the new record does not take over -1.
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            create_mutation,
+            &String::from(
+                r#"{"input": {"name": "Joe", "subordinates": {"_replace": [{"id": "-1"}]}}}"#
+            )
+        ))
+        .unwrap(),
+        r#"{"data":{"createUser":{"id":"-2"}}}"#
+    );
+
+    call_data_api_resource!(resource.call_apply_capture()).unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_request(
+            "query($where: UserFilterInput) { oneUser(where: $where) { id } }",
+            &String::from(r#"{"where": {"id": {"eq": "-1"}}}"#)
+        ))
+        .unwrap(),
+        r#"{"data":{"oneUser":{"id":501}}}"#
+    );
+}
+
+#[test]
+fn unknown_negative_id_test() {
+    let mut component = instantiate_component([]);
+
+    let mut resource = DataApiResource::new(&mut component);
+
+    call_data_api_resource!(resource.call_start_capture()).unwrap();
+
+    call_data_api_resource!(resource.call_request(
+        "mutation ($id: Int!) { deleteUser(id: $id) { id } }",
+        &String::from(r#"{"id": -9}"#)
+    ))
+    .unwrap();
+
+    assert_eq!(
+        call_data_api_resource!(resource.call_apply_capture()).unwrap_err(),
+        "unknown temporary id -9"
+    );
+}
