@@ -1,4 +1,11 @@
 use crate::context::{RealId, data_structs::*};
+use crate::exports::betty_blocks_types::data_api::data_api::JsonString;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnknownId {
+    Error,
+    Keep,
+}
 
 pub fn replace_negative_ids_in_mutation_input(
     reserved_ids: &[RealId],
@@ -9,18 +16,36 @@ pub fn replace_negative_ids_in_mutation_input(
 ) -> Result<(), String> {
     replace_id(reserved_ids, id)?;
 
-    replace_negative_ids_in_object(reserved_ids, other_inputs)?;
+    replace_negative_ids_in_object(reserved_ids, other_inputs, UnknownId::Error)?;
 
     Ok(())
 }
 
+pub fn replace_negative_ids_in_variables(
+    reserved_ids: &[RealId],
+    variables: JsonString,
+) -> Result<JsonString, String> {
+    if reserved_ids.is_empty() {
+        return Ok(variables);
+    }
+
+    // Leave variables that are not a JSON object as they are, the data API reports the error.
+    let Ok(serde_json::Value::Object(mut object)) = serde_json::from_str(&variables) else {
+        return Ok(variables);
+    };
+
+    // An unknown negative ID can belong to a capture that is not applied yet, so keep it.
+    replace_negative_ids_in_object(reserved_ids, &mut object, UnknownId::Keep)?;
+
+    serde_json::to_string(&object).map_err(|_| String::from("could not format variables"))
+}
+
 pub fn replace_id(reserved_ids: &[RealId], id: &mut isize) -> Result<(), String> {
     if id.is_negative() {
-        let index: usize = (-1 - *id)
-            .try_into()
-            .map_err(|error| format!("could not convert number to usize: {error}"))?;
+        let reserved_id = lookup_reserved_id(reserved_ids, *id as i64)
+            .ok_or_else(|| format!("unknown temporary id {id}"))?;
 
-        *id = reserved_ids[index]
+        *id = reserved_id
             .try_into()
             .map_err(|error| format!("could not convert number to isize: {error}"))?;
     }
@@ -28,64 +53,92 @@ pub fn replace_id(reserved_ids: &[RealId], id: &mut isize) -> Result<(), String>
     Ok(())
 }
 
-/// Loops through the entries of a serde_json::Map and replaces all the negative IDs with their
-/// reserved counterparts.
+fn lookup_reserved_id(reserved_ids: &[RealId], negative_id: i64) -> Option<RealId> {
+    let index: usize = (-1 - negative_id).try_into().ok()?;
+
+    reserved_ids.get(index).copied()
+}
+
 fn replace_negative_ids_in_object(
     reserved_ids: &[RealId],
     variables: &mut serde_json::Map<String, serde_json::Value>,
+    unknown_id: UnknownId,
 ) -> Result<(), String> {
     for (key, value) in variables.iter_mut() {
         if key == "id" {
-            handle_id_key(reserved_ids, value)?;
+            handle_id_value(reserved_ids, value, unknown_id)?;
         } else if let serde_json::Value::Object(object) = value {
-            replace_negative_ids_in_object(reserved_ids, object)?;
+            replace_negative_ids_in_object(reserved_ids, object, unknown_id)?;
         } else if let serde_json::Value::Array(array_of_values) = value {
-            handle_array_of_values(reserved_ids, array_of_values)?;
+            handle_array_of_values(reserved_ids, array_of_values, unknown_id)?;
         }
     }
 
     Ok(())
 }
 
-/// Replaces the negative ID or IDs with their reserved counterpart.
-fn handle_id_key(reserved_ids: &[RealId], value: &mut serde_json::Value) -> Result<(), String> {
-    if let Some(id) = value.as_i64()
-        && id.is_negative()
-    {
-        *value = get_reserved_id_as_value_for_negative_id(reserved_ids, id)?;
+fn handle_id_value(
+    reserved_ids: &[RealId],
+    value: &mut serde_json::Value,
+    unknown_id: UnknownId,
+) -> Result<(), String> {
+    match value {
+        serde_json::Value::Number(number) => {
+            if let Some(id) = number.as_i64()
+                && let Some(reserved_id) = resolve_negative_id(reserved_ids, id, unknown_id)?
+            {
+                *value = serde_json::Value::from(reserved_id);
+            }
+        }
+        serde_json::Value::String(string) => {
+            if let Ok(id) = string.parse::<i64>()
+                && let Some(reserved_id) = resolve_negative_id(reserved_ids, id, unknown_id)?
+            {
+                *value = serde_json::Value::String(reserved_id.to_string());
+            }
+        }
+        serde_json::Value::Array(ids) => {
+            for id in ids.iter_mut() {
+                handle_id_value(reserved_ids, id, unknown_id)?;
+            }
+        }
+        serde_json::Value::Object(filter) => {
+            for id in filter.values_mut() {
+                handle_id_value(reserved_ids, id, unknown_id)?;
+            }
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) => {}
     }
 
     Ok(())
 }
 
-/// Uses the negative_id to index for its reserved id and put it into a serde_json::Value.
-fn get_reserved_id_as_value_for_negative_id(
+fn resolve_negative_id(
     reserved_ids: &[RealId],
-    negative_id: i64,
-) -> Result<serde_json::Value, String> {
-    // If `negative_id` is -1 which is the first possible negative ID, then `-1 - -1 = 0`.
-    // Which is the first possible item in the reserved ID list.
-    let index: usize = (-1 - negative_id)
-        .try_into()
-        .map_err(|error| format!("could not convert number to usize: {error}"))?;
+    id: i64,
+    unknown_id: UnknownId,
+) -> Result<Option<RealId>, String> {
+    if !id.is_negative() {
+        return Ok(None);
+    }
 
-    Ok(serde_json::Value::Number(serde_json::Number::from(
-        reserved_ids[index],
-    )))
+    match (lookup_reserved_id(reserved_ids, id), unknown_id) {
+        (Some(reserved_id), _) => Ok(Some(reserved_id)),
+        (None, UnknownId::Keep) => Ok(None),
+        (None, UnknownId::Error) => Err(format!("unknown temporary id {id}")),
+    }
 }
 
-/// Looks at the items in an array and if they're an object tries to replace negative IDs in that
-/// object, and if they are an array it searches for objects or arrays within that object which
-/// might have negative IDs to replace.
 fn handle_array_of_values(
     reserved_ids: &[RealId],
     array_of_values: &mut [serde_json::Value],
+    unknown_id: UnknownId,
 ) -> Result<(), String> {
     for item in array_of_values.iter_mut() {
         if let serde_json::Value::Object(object) = item {
-            replace_negative_ids_in_object(reserved_ids, object)?;
+            replace_negative_ids_in_object(reserved_ids, object, unknown_id)?;
         } else if let serde_json::Value::Array(array) = item {
-            handle_array_of_values(reserved_ids, array)?;
+            handle_array_of_values(reserved_ids, array, unknown_id)?;
         }
     }
 
@@ -147,5 +200,63 @@ mod tests {
         assert_eq!(id3.remove("id").unwrap(), 3);
         assert!(id3.is_empty());
         assert!(relation2.is_empty());
+    }
+
+    #[test]
+    fn string_and_list_id_replacement_test() {
+        let mut mutation_input: MutationInput =
+            serde_json::from_str(r#"{"input": {"id": "-1", "tags": {"id": ["-2", "7", -1]}}}"#)
+                .unwrap();
+
+        replace_negative_ids_in_mutation_input(&[5, 6], &mut mutation_input.input).unwrap();
+
+        assert_eq!(*mutation_input.input.id, 5);
+        assert_eq!(
+            serde_json::Value::Object(mutation_input.input.other_inputs),
+            serde_json::json!({"tags": {"id": ["6", "7", 5]}})
+        );
+    }
+
+    #[test]
+    fn unknown_negative_id_test() {
+        let mut id = -3;
+        assert_eq!(
+            replace_id(&[5, 6], &mut id).unwrap_err(),
+            "unknown temporary id -3"
+        );
+
+        let mut mutation_input: MutationInput =
+            serde_json::from_str(r#"{"input": {"relation": {"_add": [{"id": -3}]}}}"#).unwrap();
+        assert_eq!(
+            replace_negative_ids_in_mutation_input(&[5, 6], &mut mutation_input.input).unwrap_err(),
+            "unknown temporary id -3"
+        );
+    }
+
+    #[test]
+    fn variables_id_replacement_test() {
+        assert_eq!(
+            replace_negative_ids_in_variables(
+                &[5],
+                String::from(r#"{"id": "-1", "input": {"name": "Joe", "age": -1}}"#)
+            )
+            .unwrap(),
+            r#"{"id":"5","input":{"age":-1,"name":"Joe"}}"#
+        );
+
+        assert_eq!(
+            replace_negative_ids_in_variables(
+                &[5],
+                String::from(r#"{"where": {"id": {"eq": "-1", "in": [-1, -2]}}}"#)
+            )
+            .unwrap(),
+            r#"{"where":{"id":{"eq":"5","in":[5,-2]}}}"#
+        );
+
+        let untouched = String::from(r#"{"id": "-1"}"#);
+        assert_eq!(
+            replace_negative_ids_in_variables(&[], untouched.clone()).unwrap(),
+            untouched
+        );
     }
 }

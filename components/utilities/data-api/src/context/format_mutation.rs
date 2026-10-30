@@ -99,17 +99,18 @@ impl CaptureData {
             self.reserved_ids.push(real_id);
         }
 
+        let real_id_per_placeholder = self.reserved_ids.clone();
         let outermost_capture_is_applied = self.capture_stack.is_empty();
 
         if outermost_capture_is_applied {
             self.upsert_ids_by_unique_value.clear();
             Ok(ResolvedIds {
-                real_id_per_placeholder: std::mem::take(&mut self.reserved_ids),
+                real_id_per_placeholder,
                 existing_record_ids: std::mem::take(&mut self.existing_record_ids),
             })
         } else {
             Ok(ResolvedIds {
-                real_id_per_placeholder: self.reserved_ids.clone(),
+                real_id_per_placeholder,
                 existing_record_ids: self.existing_record_ids.clone(),
             })
         }
@@ -668,7 +669,7 @@ mod tests {
 
         assert_eq!(real_ids.as_slice(), [3, 1, 2, 4]);
         assert!(capture_data.reserve_id_count_per_model.is_empty());
-        assert!(capture_data.reserved_ids.is_empty());
+        assert_eq!(capture_data.reserved_ids.as_slice(), [3, 1, 2, 4]);
         assert!(capture_data.model_names_of_local_ids.is_empty());
     }
 
@@ -749,7 +750,7 @@ mod tests {
         let real_ids = reserve_and_resolve(&mut capture_data, &request_raw_mock);
 
         assert_eq!(real_ids.as_slice(), [1, 2, 3, 4]);
-        assert!(capture_data.reserved_ids.is_empty());
+        assert_eq!(capture_data.reserved_ids.as_slice(), [1, 2, 3, 4]);
         assert!(capture_data.reserve_id_count_per_model.is_empty());
         assert!(capture_data.model_names_of_local_ids.is_empty());
     }
