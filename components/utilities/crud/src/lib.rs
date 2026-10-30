@@ -193,14 +193,25 @@ fn parse_to_gql_fragment(model_name: &str, property_map: BettyPropertyMapping) -
 
 fn get_assigned_value(kind: &PropertyKind, value: serde_json::Value) -> serde_json::Value {
     match kind {
+        // Sent as `{"id": ...}`, the canonical shape of the data API. Inside a mass mutate the
+        // data-api component only replaces a placeholder ID under an `id` key.
         PropertyKind::BelongsTo => {
-            if is_record(&value) {
-                return value
+            let id = if is_record(&value) {
+                value
                     .get("id")
                     .expect("always contains id, checked in is_record")
-                    .to_owned();
+                    .to_owned()
+            } else {
+                value
+            };
+
+            match &id {
+                serde_json::Value::Number(_) => serde_json::json!({ "id": id }),
+                serde_json::Value::String(text) if !text.is_empty() => {
+                    serde_json::json!({ "id": id })
+                }
+                _ => id,
             }
-            value
         }
         PropertyKind::HasMany | PropertyKind::HasAndBelongsToMany => {
             if let serde_json::Value::Array(items) = &value {
@@ -1258,6 +1269,36 @@ fragment taskFields on Task {
             let assigned_properties = parse_assigned_properties(property_map);
             let expected_result: serde_json::Value =
                 json!({ "title": "Assign empty collection", "tags": {"id": []} });
+            assert_eq!(assigned_properties, expected_result);
+        }
+
+        fn belongs_to(name: &str, value: Option<serde_json::Value>) -> BettyPropertyMap {
+            BettyPropertyMap {
+                key: vec![BettyPropertyPath {
+                    kind: "BELONGS_TO".to_string(),
+                    name: name.to_string(),
+                    object_fields: None,
+                }],
+                value: value.map(|value| value.to_string()),
+            }
+        }
+
+        #[test]
+        fn belongs_to_should_wrap_in_id_object() {
+            let property_map = vec![
+                belongs_to("customer", Some(json!({ "id": 7, "name": "Ann" }))),
+                belongs_to("product", Some(json!({ "id": "-1" }))),
+                belongs_to("store", Some(json!(3))),
+                belongs_to("employee", None),
+            ];
+
+            let assigned_properties = parse_assigned_properties(property_map);
+            let expected_result: serde_json::Value = json!({
+                "customer": {"id": 7},
+                "product": {"id": "-1"},
+                "store": {"id": 3},
+                "employee": null
+            });
             assert_eq!(assigned_properties, expected_result);
         }
     }
