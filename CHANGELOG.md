@@ -1,3 +1,16 @@
+# [1.40.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.39.0...v1.40.0) (2026-11-02)
+
+
+### Bug Fixes
+
+* **crud:** send a belongs-to relation as an id object ([f4e69fa](https://github.com/bettyblocks/wasm-base-components/commit/f4e69faf095d43e46ad2656ae5ec5a6e9096d873))
+* **data-api:** keep resolving temporary IDs after a mass mutate ([3994a4c](https://github.com/bettyblocks/wasm-base-components/commit/3994a4c04bdd6d1eb78b51e3593ff2772a6b88ec))
+
+
+### Features
+
+* **data-api:** support upsert in mass mutate ([3bbf3ef](https://github.com/bettyblocks/wasm-base-components/commit/3bbf3ef94cf9c807f7c334316eaa69050c1a749b))
+
 # [1.39.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.38.0...v1.39.0) (2026-11-02)
 
 
