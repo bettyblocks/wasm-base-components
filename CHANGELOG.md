@@ -1,3 +1,12 @@
+# [1.39.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.38.0...v1.39.0) (2026-11-02)
+
+
+### Features
+
+* add betty-api type to types 3.3.0 ([8fcfa9a](https://github.com/bettyblocks/wasm-base-components/commit/8fcfa9af317ed91e3a04a82c7c333839faa04b3f))
+* drop authentication from betty-api for now ([a75a4e0](https://github.com/bettyblocks/wasm-base-components/commit/a75a4e0dab4e2ec33cc5019c08b86c0f9c059e1b))
+* give betty-api the data needed to call the api ([b056d52](https://github.com/bettyblocks/wasm-base-components/commit/b056d522a18fd28c58e86570cc979a06fb93db2e))
+
 # [1.38.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.37.0...v1.38.0) (2026-10-30)
 
 
