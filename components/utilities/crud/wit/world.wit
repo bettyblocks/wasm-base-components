@@ -1,4 +1,4 @@
-package betty-blocks-utilities:crud@4.0.0;
+package betty-blocks-utilities:crud@4.0.1;
 
 world component {
     import wasi:logging/logging@0.1.0-draft;
