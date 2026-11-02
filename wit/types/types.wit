@@ -1,4 +1,4 @@
-package betty-blocks-types:types@3.2.0;
+package betty-blocks-types:types@3.3.0;
 
 interface types {
     type json-string = string;
@@ -146,5 +146,13 @@ interface types {
     record betty-http-response {
         response-code: u16,
         %as: json-string
+    }
+
+    record betty-api {
+        software-name: string,
+        api-name: string,
+        base-url: string,
+        path: string,
+        method: betty-http-method
     }
 }
