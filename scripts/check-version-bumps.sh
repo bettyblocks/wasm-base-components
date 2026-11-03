@@ -6,7 +6,7 @@
 # For each package we compare the version in its `package <ns>:<name>@X.Y.Z;`
 # declaration against the same file on the base branch. A package is considered
 # "changed" when any of these (tracked) files differ from the base:
-#   - components/<component>/    : src/**, build.rs, Cargo.toml, wit/** (excl. wit/deps/**)
+#   - components/<component>/    : src/**, build.rs, Cargo.toml, Cargo.lock, wit/** (excl. wit/deps/**)
 #   - wit/<shared-pkg>/          : the shared WIT package files (types, actions, ...)
 #
 # Generated/tooling files never trigger the requirement: wit/deps/ (gitignored),
@@ -47,7 +47,7 @@ main() {
     [ -z "$world" ] && continue
     dir="$(dirname "$(dirname "$world")")"
     require_bump "$dir" "$world" \
-      "^${dir}/(src/|build\.rs$|Cargo\.toml$|wit/)" \
+      "^${dir}/(src/|build\.rs$|Cargo\.(toml|lock)$|wit/)" \
       "^${dir}/wit/deps/"
   done < <(find components -name world.wit -not -path '*/wit/deps/*' | sort)
 

@@ -209,12 +209,9 @@ jobs:
             echo "**WIT:** \`${{ steps.dest.outputs.wit_registry || 'skipped' }}\`"
             echo
             echo "Tags come from each package's own WIT version, not from a git tag."
-            echo "\`X.Y.Z\` (and \`latest\`) move with every build; \`X.Y.Z-${SHORT_SHA}\` names these"
-            echo "exact bytes and is never rewritten — pin that one."
+            echo "A version whose \`X.Y.Z\` already exists is skipped."
             echo
           } >> "$GITHUB_STEP_SUMMARY"
-        env:
-          SHORT_SHA: ${{ steps.build.outputs.short_sha }}
 
       - name: Push the WIT packages
         if: steps.dest.outputs.wit_registry != ''
