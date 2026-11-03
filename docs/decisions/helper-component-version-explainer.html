@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helper component versions: options</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #fff; --ink: #1d1f24; --muted: #5d6370; --line: #e2e3e0;
+    --blue: #2f5bd3; --blue-bg: #e8eefc;
+    --good: #1f7a3d; --good-bg: #d9f2e1; --warn: #8a6100; --warn-bg: #fdf0c8;
+    --bad: #a3262a; --bad-bg: #fbdcdc; --grey-bg: #ececec;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 21px; margin: 48px 0 12px; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  p { margin: 0 0 10px; }
+  .lead { color: var(--muted); font-size: 17px; margin-bottom: 28px; }
+  code { font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace; background: #eef0f3;
+         padding: 1px 5px; border-radius: 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  /* flow diagrams */
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+  .box { border: 1.5px solid #c9ccd3; border-radius: 8px; padding: 6px 10px; background: #fafbfc;
+         font-size: 13px; white-space: nowrap; }
+  .box.step { border-color: #8aa4ea; background: var(--blue-bg); }
+  .box.helper { border-color: #9ccfae; background: var(--good-bg); }
+  .box.old { border-color: #e2a3a5; background: var(--bad-bg); }
+  .box.reg { border-color: #d4c07a; background: var(--warn-bg); }
+  .arrow { color: var(--muted); font-size: 13px; }
+  .note { color: var(--muted); font-size: 13px; }
+
+  .two-numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .num { border-radius: 10px; padding: 12px 14px; }
+  .num b { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  .num.iface { background: var(--blue-bg); }
+  .num.build { background: var(--good-bg); }
+
+  .opt .tag { display: inline-block; font-weight: 700; color: #fff; background: var(--blue);
+              border-radius: 6px; padding: 0 8px; margin-right: 6px; }
+  .opt.pick { border: 2px solid var(--blue); box-shadow: 0 4px 18px rgba(47, 91, 211, .12); }
+  .opt ul { margin: 8px 0 0; padding-left: 18px; }
+  .opt li { margin: 3px 0; }
+
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card);
+          border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 14px; }
+  th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  thead th { background: #f0f2f6; font-size: 13px; }
+  tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+  tbody th { font-weight: 600; width: 22%; }
+  .chip { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 700; }
+  .g { background: var(--good-bg); color: var(--good); }
+  .y { background: var(--warn-bg); color: var(--warn); }
+  .r { background: var(--bad-bg); color: var(--bad); }
+  td small { display: block; color: var(--muted); margin-top: 3px; }
+  th.pickcol, td.pickcol { background: #f4f7ff; }
+
+  .rejected { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 860px) { .rejected { grid-template-columns: 1fr; } }
+  .rej { background: var(--grey-bg); border-radius: 10px; padding: 12px 14px; font-size: 14px; color: #444; }
+  .rej b { color: var(--ink); }
+
+  .reco { background: linear-gradient(135deg, #2f5bd3, #4b74e6); color: #fff; border-radius: 14px; padding: 24px 26px; }
+  .reco h2 { margin-top: 0; color: #fff; }
+  .reco code { background: rgba(255, 255, 255, .18); color: #fff; }
+  .reco ol { margin: 8px 0 0; padding-left: 20px; }
+  .reco li { margin: 6px 0; }
+  .reco .small { opacity: .85; font-size: 14px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Which crud build must an app run?</h1>
+<p class="lead">This page explains the problem with helper component versions in actions-compiler, the options that
+are still open, and the decision. <a href="004-select-helper-component-by-exported-interface.md">ADR 004</a> records the decision. The decision matrix
+(<a href="helper-component-version-decision-matrix.xlsx"><code>helper-component-version-decision-matrix.xlsx</code></a>) gives the full facts and the sources.</p>
+
+<h2>1. The problem</h2>
+<div class="card">
+  <p>A native step, for example <b>create</b>, imports the crud <i>interface</i>. Today, actions-compiler uses
+  that interface version as the image tag of the crud <i>component</i>.</p>
+  <div class="flow">
+    <span class="box step">create imports <code>crud@4.0.0</code></span><span class="arrow">→</span>
+    <span class="box">compiler</span><span class="arrow">→</span>
+    <span class="box old">deploys <code>crud:4.0.0</code></span>
+    <span class="note">&nbsp;crud <code>4.0.1</code> with the bug fix never runs</span>
+  </div>
+  <p style="margin-top:12px">Today, one number has two functions. These two numbers must be separate:</p>
+  <div class="two-numbers">
+    <div class="num iface"><b>Interface version (types)</b>What the step can call. Only a WIT change increases it.
+      Example: <code>betty-blocks-types:crud@4.0.0</code>.</div>
+    <div class="num build"><b>Build version (component)</b>Which code runs. Each fix increases it.
+      Example: <code>betty-blocks-utilities:crud@4.0.1</code>.</div>
+  </div>
+  <p class="note" style="margin-top:12px">Scope: a WIT change always makes a step release necessary, in each option.
+  The options below are about a helper release <b>without</b> a WIT change.</p>
+</div>
+
+<h2>2. The open options</h2>
+<p>All the options keep the step as it is. The step imports the interface version. The options differ in
+<b>who decides which build serves that interface</b>, and <b>when an app receives a new build</b>.</p>
+
+<div class="grid2">
+  <div class="card opt pick">
+    <h3><span class="tag">A</span>Registry search with an annotation</h3>
+    <p>Each publish writes “I implement <code>crud@4.0.0</code>” on the image. The compiler searches the
+    registry and selects the newest build that implements the imported interface.</p>
+    <div class="flow">
+      <span class="box step">imports crud@4.0.0</span><span class="arrow">→</span>
+      <span class="box reg">search: 4.0.0, 4.0.1</span><span class="arrow">→</span>
+      <span class="box helper">deploy 4.0.1 by digest</span>
+    </div>
+    <ul><li>A fix goes to all apps at their next compile, also to old steps.</li></ul>
+  </div>
+
+  <div class="card opt">
+    <h3><span class="tag">B</span>Release manifest</h3>
+    <p>base-components publishes one list for each zone: interface version → build digest. The compiler reads
+    the list.</p>
+    <div class="flow">
+      <span class="box step">imports crud@4.0.0</span><span class="arrow">→</span>
+      <span class="box reg">manifest: crud@4.0.0 → sha256:ab12</span><span class="arrow">→</span>
+      <span class="box helper">deploy</span>
+    </div>
+    <ul><li>A person or CI changes the list. Rollback: set the list back.</li>
+        <li>After a change, all old steps in the zone receive the new build.</li></ul>
+  </div>
+
+  <div class="card opt">
+    <h3><span class="tag">C</span>A tag that moves</h3>
+    <p>Each publish also puts the label <code>types-4.0.0</code> on the newest build of that interface. The
+    compiler asks for that label and resolves it to a digest.</p>
+    <div class="flow">
+      <span class="box step">imports crud@4.0.0</span><span class="arrow">→</span>
+      <span class="box reg">crud:types-4.0.0 → 4.0.1</span><span class="arrow">→</span>
+      <span class="box helper">deploy by digest</span>
+    </div>
+    <ul><li>The smallest change of all options.</li><li>The same result as A: all old steps receive the build at the next compile.</li></ul>
+  </div>
+
+  <div class="card opt">
+    <h3><span class="tag">D</span>The step declares its helper</h3>
+    <p>The step release records “use crud 4.0.1”. The compiler deploys that build.</p>
+    <div class="flow">
+      <span class="box step">create: use crud 4.0.1</span><span class="arrow">→</span>
+      <span class="box helper">deploy 4.0.1</span>
+    </div>
+    <ul><li>Each step selects its build. A fix goes to a step only after a new step release.</li>
+        <li>If steps select different builds, the workload deploys one crud for each build.</li></ul>
+  </div>
+
+  <div class="card opt" style="grid-column: 1 / -1">
+    <h3><span class="tag">H</span>A lock for each app</h3>
+    <p>The compiler selects the newest build as in A or C, but only one time. It writes the digest into a lock for
+    the app. Later compiles of the app use the lock. A person or a job updates the lock: for one app, for some
+    apps as a canary, or for all apps.</p>
+    <div class="flow">
+      <span class="box step">imports crud@4.0.0</span><span class="arrow">→</span>
+      <span class="box">lock of app 17: crud@4.0.0 → sha256:9f01</span><span class="arrow">→</span>
+      <span class="box old">deploy 4.0.0</span>
+      <span class="note">&nbsp;until the lock update →</span>
+      <span class="box helper">deploy 4.0.1</span>
+    </div>
+    <ul><li>A save of an action does not change the helper. Old steps keep the build that operated before.</li>
+        <li>A fix still goes to all apps without a step release, when you decide.</li></ul>
+  </div>
+</div>
+
+<h2>3. Side by side</h2>
+<table>
+  <thead>
+    <tr><th>Criterion</th><th class="pickcol">A. Registry search (selected)</th><th>B. Manifest</th><th>C. Tag that moves</th>
+        <th>D. Step declares</th><th>H. Lock for each app</th></tr>
+  </thead>
+  <tbody>
+    <tr><th>A helper fix goes to the apps</th>
+      <td class="pickcol"><span class="chip g">next compile</span><small>All steps of that interface</small></td>
+      <td><span class="chip g">manifest change</span><small>All steps in the zone</small></td>
+      <td><span class="chip g">next compile</span><small>All steps of that interface</small></td>
+      <td><span class="chip y">step release</span><small>Only the released steps</small></td>
+      <td><span class="chip y">lock update</span><small>The apps that you select</small></td></tr>
+    <tr><th>Easy deployment</th>
+      <td class="pickcol"><span class="chip g">1 repo</span></td>
+      <td><span class="chip g">1 repo</span><small>+ manifest change</small></td>
+      <td><span class="chip g">1 repo</span></td>
+      <td><span class="chip y">2 repos</span><small>+ each step</small></td>
+      <td><span class="chip y">1 repo</span><small>+ lock update job</small></td></tr>
+    <tr><th>Fault tolerance</th>
+      <td class="pickcol"><span class="chip r">low</span><small>Old, untested steps receive the build</small></td>
+      <td><span class="chip g">gate per zone</span><small>Old steps still receive it after the gate</small></td>
+      <td><span class="chip r">low, as A</span><small>Rollback: move the tag back</small></td>
+      <td><span class="chip g">high</span><small>Only the steps that select the build</small></td>
+      <td><span class="chip g">high</span><small>Canary, rollback to the previous lock</small></td></tr>
+    <tr><th>Reproducible deployments</th>
+      <td class="pickcol"><span class="chip g">digest</span></td>
+      <td><span class="chip g">digest</span></td>
+      <td><span class="chip r">tag moves</span><small>Green if the compiler resolves the digest</small></td>
+      <td><span class="chip g">digest</span></td>
+      <td><span class="chip g">digest in lock</span></td></tr>
+    <tr><th>Maintainability</th>
+      <td class="pickcol"><span class="chip g">one rule</span></td>
+      <td><span class="chip y">one more artifact</span></td>
+      <td><span class="chip g">one more tag</span></td>
+      <td><span class="chip y">many places</span></td>
+      <td><span class="chip y">lock storage</span><small>Locks that nobody updates become old</small></td></tr>
+    <tr><th>Work for the change</th>
+      <td class="pickcol"><span class="chip y">medium</span></td>
+      <td><span class="chip y">medium</span></td>
+      <td><span class="chip g">small</span></td>
+      <td><span class="chip y">medium</span></td>
+      <td><span class="chip r">large</span><small>Selection + lock + update job</small></td></tr>
+  </tbody>
+</table>
+
+<h2>4. Rejected options</h2>
+<div class="rejected">
+  <div class="rej"><b>E. Compose crud into the step.</b> Each step then has its own copy of crud. We want one
+  shared crud.</div>
+  <div class="rej"><b>F. Shared helper for each zone.</b> The platform must keep each old crud version live.
+  One bad upgrade causes a failure in all apps. The data-api resource probably cannot go across workloads.</div>
+  <div class="rej"><b>G. A bot opens the pin MR.</b> More work: a person still merges and releases, and the
+  team must maintain a bot across GitHub and GitLab.</div>
+</div>
+<p class="note" style="margin-top:10px">Today's two approaches also stay in the matrix for comparison. The types bump
+causes a failure of the data-api resource, and makes a migration necessary. The pin makes a list in actions-compiler that only increases.</p>
+
+<h2 style="margin-top:56px">5. Decision</h2>
+<div class="reco">
+  <h2>We selected option A: registry search with an annotation</h2>
+  <p>Decision date: 2026-11-03. Reasons:</p>
+  <ol>
+    <li><b>Simple.</b> The design is easy to understand, and the implementation is direct.</li>
+    <li><b>Automatic.</b> A helper release, for example a security fix, goes to the apps at their next compile.
+        A step release is not necessary.</li>
+    <li><b>Easy rollback.</b> Publish a new release with the correct code and a higher version. The compiler then selects that release.</li>
+  </ol>
+  <p class="small">Accepted risk: old steps also receive a new helper build, and nobody tested them with it. Edge
+  receives each release before prod. Apps that are deployed keep the old build until their next compile. For a
+  fast fix in all apps, a recompile job is necessary. The earlier recommendation was option H (a lock for each
+  app). The team did not select H, because H is more work, and a person must update the locks.</p>
+</div>
+
+</main>
+</body>
+</html>
