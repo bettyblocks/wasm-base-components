@@ -13,31 +13,59 @@ env:
   CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
+  # A PR builds only the components and WIT packages that it changes (scripts/ci-targets.sh).
+  # A push to main builds all: a check that the merge broke nothing. It also keeps the caches seeded.
   list-components:
     runs-on: ubuntu-24.04
     outputs:
       components: ${{ steps.list.outputs.components }}
+      wit_packages: ${{ steps.list.outputs.wit_packages }}
+    steps:
+      # HEAD^1 (the base branch) needs depth 2.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: List what to build
+        id: list
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
+        run: ./scripts/ci-targets.sh $BASE >> "$GITHUB_OUTPUT"
+
+  wit-packages:
+    needs: list-components
+    if: needs.list-components.outputs.wit_packages != '[]'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: List components
-        id: list
+      - uses: ./.github/actions/install-wkg
+
+      # Each component build reads only the WIT versions that it pins. A WIT version that no
+      # component uses yet is checked only here.
+      - name: Check that each changed WIT package is valid WIT
+        env:
+          PACKAGES: ${{ needs.list-components.outputs.wit_packages }}
         run: |
-          components=$(
-            find components -mindepth 2 -name Justfile -not -path '*/target/*' -printf '%h\n' \
-              | sort \
-              | jq -Rsc 'split("\n") | map(select(. != "")) | map({
-                  dir: .,
-                  name: sub("^components/"; ""),
-                  key: (sub("^components/"; "") | gsub("/"; "-"))
-                })'
-          )
-          echo "$components" | jq .
-          echo "components=$components" >> "$GITHUB_OUTPUT"
+          export WKG_CONFIG_FILE="$PWD/wkg-config.toml"
+          result_code=0
+          for dir in $(jq -r '.[]' <<<"$PACKAGES"); do
+            echo "--- $dir"
+            (
+              cd "$dir" &&
+                ../../scripts/generate-wkg-toml.sh &&
+                DOCKER_CONFIG="$(mktemp -d)" wkg wit build --wit-dir . -o "$RUNNER_TEMP/package.wasm"
+            ) || {
+              echo "::error::$dir: wkg wit build failed"
+              result_code=1
+            }
+          done
+          exit $result_code
 
   component:
     name: component (${{ matrix.component.name }})
     needs: list-components
+    if: needs.list-components.outputs.components != '[]'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -117,16 +145,30 @@ jobs:
         run: just integration-test
 
   # Required status check: keeps a single stable name over the per-component jobs.
+  # A job that the PR does not need is "skipped", and that passes. list-components must succeed:
+  # when it fails, the jobs after it are also "skipped".
   run_ci:
-    needs: component
+    needs: [list-components, wit-packages, component]
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: Check component results
+      - name: Check job results
         env:
-          RESULT: ${{ needs.component.result }}
+          LIST: ${{ needs.list-components.result }}
+          WIT: ${{ needs.wit-packages.result }}
+          COMPONENT: ${{ needs.component.result }}
         run: |
-          if [ "$RESULT" != "success" ]; then
-            echo "::error::One or more component jobs did not succeed: $RESULT"
+          echo "list-components: $LIST, wit-packages: $WIT, component: $COMPONENT"
+          if [ "$LIST" != success ]; then
+            echo "::error::list-components did not succeed: $LIST"
             exit 1
           fi
+          for result in "$WIT" "$COMPONENT"; do
+            case "$result" in
+            success | skipped) ;;
+            *)
+              echo "::error::One or more jobs did not succeed: $result"
+              exit 1
+              ;;
+            esac
+          done

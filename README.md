@@ -49,7 +49,7 @@ There is one branch: `main`. All PRs go into `main`.
 | **Publish WASM Components (after build)** (`publish.yaml`) | that build finishing, or manual dispatch | selects the build to publish. Publishes the components to ghcr and the dev registry. Publishes the WIT packages to the dev registry and the production registry |
 | **Publish WASM Components (production)** (`publish-prod.yaml`) | manual dispatch only | takes a build run id. If the run id is empty, uses the latest release on `main`. Makes sure that the commit of the build is on `main`. Publishes the components of the build to production |
 | **Publish components** (`publish-components.yaml`) | called by the two above | all the actual publishing logic, once, identically per destination |
-| **CI** / **Version Check** / **Commit Lint** | pull requests | build, test, and lint checks |
+| **CI** / **Version Check** / **Commit Lint** | pull requests | build, test, and lint checks. On a PR, CI builds only the components and WIT packages that the PR changes. A change to a shared file, for example `rust-toolchain.toml`, builds all (`scripts/ci-targets.sh`) |
 
 Publishing always takes a **build run id** as its input, never a commit or a branch. One run id
 resolves to exactly one artifact; a commit can have several build runs, so the run id is the only
