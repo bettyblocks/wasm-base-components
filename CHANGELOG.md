@@ -1,3 +1,85 @@
+## [1.40.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.40.0...v1.40.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **crud:** bump the crud package to 4.0.1 ([aa6ca30](https://github.com/bettyblocks/wasm-base-components/commit/aa6ca30852cd2166f7f1ce02bab02646ea11ae7f))
+
+# [1.40.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.39.0...v1.40.0) (2026-11-02)
+
+
+### Bug Fixes
+
+* **crud:** send a belongs-to relation as an id object ([f4e69fa](https://github.com/bettyblocks/wasm-base-components/commit/f4e69faf095d43e46ad2656ae5ec5a6e9096d873))
+* **data-api:** keep resolving temporary IDs after a mass mutate ([3994a4c](https://github.com/bettyblocks/wasm-base-components/commit/3994a4c04bdd6d1eb78b51e3593ff2772a6b88ec))
+
+
+### Features
+
+* **data-api:** support upsert in mass mutate ([3bbf3ef](https://github.com/bettyblocks/wasm-base-components/commit/3bbf3ef94cf9c807f7c334316eaa69050c1a749b))
+
+# [1.39.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.38.0...v1.39.0) (2026-11-02)
+
+
+### Features
+
+* add betty-api type to types 3.3.0 ([8fcfa9a](https://github.com/bettyblocks/wasm-base-components/commit/8fcfa9af317ed91e3a04a82c7c333839faa04b3f))
+* drop authentication from betty-api for now ([a75a4e0](https://github.com/bettyblocks/wasm-base-components/commit/a75a4e0dab4e2ec33cc5019c08b86c0f9c059e1b))
+* give betty-api the data needed to call the api ([b056d52](https://github.com/bettyblocks/wasm-base-components/commit/b056d522a18fd28c58e86570cc979a06fb93db2e))
+
+# [1.38.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.37.0...v1.38.0) (2026-10-30)
+
+
+### Bug Fixes
+
+* fetch wit deps with an isolated DOCKER_CONFIG ([df439e4](https://github.com/bettyblocks/wasm-base-components/commit/df439e4c2d45c75ce0665c03da0249f91a58fe2c))
+
+
+### Features
+
+* add http-well-known component serving the oauth discovery documents ([f89fff6](https://github.com/bettyblocks/wasm-base-components/commit/f89fff6008dc94c69335d18ea430705588202a49))
+* serve the protected resource metadata per mcp server ([30eaac7](https://github.com/bettyblocks/wasm-base-components/commit/30eaac716ec4aa25594bc2c7a2473f30b47533ea))
+
+# [1.37.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.4...v1.37.0) (2026-10-28)
+
+
+### Bug Fixes
+
+* generate the wkg.toml of the fixture components in the http-mcp build ([0595d56](https://github.com/bettyblocks/wasm-base-components/commit/0595d564b7c49dd38a199185040d28cc318cee3b))
+* remove the compiler warnings of the mcp auth config ([5adaa00](https://github.com/bettyblocks/wasm-base-components/commit/5adaa00504e630a9977d03e82173b635f2abe3c1))
+
+
+### Features
+
+* validate end user jwts of mcp servers via the data-api ([1889cc4](https://github.com/bettyblocks/wasm-base-components/commit/1889cc4dfaa7a22e4ae25f7390680236755cec09))
+
+## [1.36.4](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.3...v1.36.4) (2026-10-27)
+
+
+### Bug Fixes
+
+* **data-api:** bump component to 3.1.1 for grpc-client pin ([20cf401](https://github.com/bettyblocks/wasm-base-components/commit/20cf4015511c9ae18a8e4bdc5aa7383cff7f7b04))
+
+
+### Reverts
+
+* roll back data-api chain bump to types 3.2.0 ([85bf46b](https://github.com/bettyblocks/wasm-base-components/commit/85bf46bf0d41035db8c8a60d183b6c56cc3e75ff)), closes [#130](https://github.com/bettyblocks/wasm-base-components/issues/130) [#146](https://github.com/bettyblocks/wasm-base-components/issues/146) [#155](https://github.com/bettyblocks/wasm-base-components/issues/155)
+
+## [1.36.3](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.2...v1.36.3) (2026-10-14)
+
+
+### Bug Fixes
+
+* **data-api:** pin wasmcloud-grpc-client to bettyblocks master ([91f6e5d](https://github.com/bettyblocks/wasm-base-components/commit/91f6e5d4122e1502868503c21441d38fb16c22c1)), closes [bettyblocks/wasmcloud-grpc-client#1](https://github.com/bettyblocks/wasmcloud-grpc-client/issues/1)
+
+## [1.36.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.1...v1.36.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* point data-api chain at types 3.2.0 ([07a7c70](https://github.com/bettyblocks/wasm-base-components/commit/07a7c70f08a0a9a230de7a88b756db2c5af8390c))
+* trigger pipelines ([1e36aaa](https://github.com/bettyblocks/wasm-base-components/commit/1e36aaac4e9d05361034dcff4066adddd66f70f4))
+
 ## [1.36.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.36.0...v1.36.1) (2026-10-14)
 
 

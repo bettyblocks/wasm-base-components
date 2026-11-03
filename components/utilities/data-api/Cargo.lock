@@ -2119,7 +2119,7 @@ dependencies = [
 [[package]]
 name = "wasmcloud-grpc-client"
 version = "0.1.1"
-source = "git+https://github.com/bettyblocks/wasmcloud-grpc-client.git?rev=e007e322d725b5f684dae8098838f6900555ee68#e007e322d725b5f684dae8098838f6900555ee68"
+source = "git+https://github.com/bettyblocks/wasmcloud-grpc-client.git?rev=acdf64c9d017a3a4f549a599aff089b4071adfa3#acdf64c9d017a3a4f549a599aff089b4071adfa3"
 dependencies = [
  "anyhow",
  "bytes",

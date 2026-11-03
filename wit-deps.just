@@ -15,4 +15,4 @@ fetch-wit-deps: wkg-fetch
 [private]
 wkg-fetch:
     {{ repo_root }}/scripts/generate-wkg-toml.sh
-    wkg wit fetch
+    DOCKER_CONFIG="$(mktemp -d)" wkg wit fetch

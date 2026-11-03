@@ -16,6 +16,21 @@ inside a record. A breaking change shipped as a minor or patch is therefore sile
 onto older consumers — breaking changes need a new major. Background:
 [ADR 001](docs/decisions/001-major-only-wit-version-bumps.md) (superseded).
 
+### Packages that export a resource cannot be bumped in isolation
+
+A resource is identified by the exact package version that declares it. `data-api@3.0.0` and
+`data-api@3.1.0` therefore define two *different* `data-api` resource types, even when the
+interface text is identical. A component that reaches both — one via its own import, the other
+through a dependency such as `crud` — ends up with handles of two unrelated types and fails to
+link. This broke `upsert` on edge in `native-wasm-components` (#146, reverted in #155) and is
+why the data-api chain bump from PR #130 was rolled back on `dev`.
+
+So for `data-api` (and any other package that exports a resource): a new version is a
+whole-chain change. In the **same release** you must move every package that depends on it
+(`crud`, `upload-file`, `pdf-generator`, their components) **and** every consumer in
+`native-wasm-components` on every live branch (`edge`, `acceptance`, `main`). If that cannot be
+done in one go, do not bump it.
+
 Applies to the hand-written `package …@X.Y.Z;` line in:
 
 - `wit/<pkg>/*.wit` — namespace `betty-blocks-types`
@@ -50,6 +65,15 @@ A version is never allowed to go down, on any base.
 decides where each dependency comes from: the local checkout when `wit/<pkg>` declares exactly
 the version asked for, the registry otherwise.
 
+## Conventions
+
+- **Component folders:** a component that is started by an HTTP request has the `http-` prefix on
+  its folder name (`http-mcp`, `http-wrapper`, `http-well-known`).
+- **Rust file layout:** put structs and enums at the top of the file, below the `use`s, `mod`s and
+  constants, and put their `impl` blocks and trait impls directly under the type. Functions come
+  after. No clippy lint enforces this (`clippy::arbitrary_source_item_ordering` is opt-in and
+  would need a config), so it is a review convention.
+
 ## Files not to hand-edit
 
 - `wkg.toml` — generated on every build and gitignored. Never commit or edit it.
@@ -66,3 +90,20 @@ just build-all
 
 `check-version-bumps.sh` diffs `<base>...HEAD`, so it only sees **committed** state —
 uncommitted edits are invisible to it and it will report nothing.
+
+## Writing style
+
+Write all documentation in **ASD-STE100 Simplified Technical English (STE)**. This applies to
+`README.md`, `docs/`, ADRs, `poc/` READMEs and comments in WIT files. It does not apply to code.
+
+- Use only one meaning for each word. Use the same word for the same thing every time.
+- Write short sentences: 20 words or less for instructions, 25 words or less for descriptions.
+- Write one instruction in each sentence. Use the imperative for instructions ("Bump the version").
+- Use the active voice. Use the simple tenses (present, past, future).
+- Write paragraphs of 6 sentences or less, with one topic in each paragraph.
+- Do not use more than 3 nouns in a noun cluster. Use articles ("the", "a") where possible.
+- Do not use "-ing" forms as nouns or adjectives. Do not use phrasal verbs.
+- Use approved STE words where possible ("make sure", not "ensure"; "necessary", not "need").
+  Technical names (WIT package and interface names, tool names) and technical verbs (compile,
+  link, publish) are permitted.
+- Code blocks, WIT, commands and error output stay as they are.

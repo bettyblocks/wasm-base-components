@@ -1,0 +1,20 @@
+set allow-duplicate-recipes := true
+import '../../wit-deps.just'
+
+build: fetch-wit-deps
+    wash build --skip-fetch
+
+test:
+    cargo test --lib
+
+integration-test:
+    @echo "no integration tests for well-known"
+
+lint: fetch-wit-deps
+    cargo check
+
+formatting *args:
+    cargo fmt --all {{args}}
+
+clippy:
+    cargo clippy --all-targets --all-features -- -D warnings

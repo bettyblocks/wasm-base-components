@@ -1,5 +1,6 @@
+use crate::mcp::{FailureKind, RpcFailure};
 use serde_json::json;
-use wstd::http::{Body, HeaderMap, Method, Request, Response, StatusCode};
+use wstd::http::{Body, HeaderMap, HeaderValue, Method, Request, Response, StatusCode};
 
 wit_bindgen::generate!({
     world: "mcp",
@@ -95,8 +96,34 @@ async fn handle_mcp_request(request: Request<Body>, path: &str) -> Response<Body
             .status(StatusCode::NO_CONTENT)
             .body(Body::from(String::new()))
             .unwrap_or_else(|_| Response::new(Body::from("Internal Server Error"))),
-        Err(error_response) => serialize_to_json_response(&error_response),
+        Err(failure) => failure_response(failure),
     }
+}
+
+fn failure_response(failure: RpcFailure) -> Response<Body> {
+    let status = match failure.kind {
+        FailureKind::Rpc => StatusCode::OK,
+        FailureKind::Unauthenticated => StatusCode::UNAUTHORIZED,
+        FailureKind::Forbidden => StatusCode::FORBIDDEN,
+        FailureKind::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    let mut response = match serde_json::to_string(&failure.response) {
+        Ok(body) => json_response(status, body),
+        Err(_) => json_rpc_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            -32603,
+            "Internal server error",
+        ),
+    };
+    if let Some(www_authenticate) = failure
+        .www_authenticate
+        .and_then(|value| HeaderValue::from_str(&value).ok())
+    {
+        response
+            .headers_mut()
+            .insert("www-authenticate", www_authenticate);
+    }
+    response
 }
 
 fn validate_content_type(headers: &HeaderMap) -> Result<(), String> {

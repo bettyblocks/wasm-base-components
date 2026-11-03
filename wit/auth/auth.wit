@@ -1,14 +1,33 @@
-package betty-blocks-types:auth@3.0.0;
+package betty-blocks-types:auth@4.0.0;
 
 interface jwt {
     variant auth-error {
+        /// no bearer token, or one that is not a jwt
         malformed-token,
         missing-config(string),
+        /// the token is not valid (bad signature, expired, unknown auth profile, ...)
         validation-failed(string),
+        /// the token is valid, but its auth profile may not access the resource
+        forbidden(string),
+        /// the token could not be validated right now, the caller may retry
+        unavailable(string),
     }
 
     type request-headers = list<tuple<string, list<u8>>>;
 
-    allowed-to-call: func(headers: request-headers, action-id: string) -> result<_, auth-error>;
-    allowed-to-list: func(headers: request-headers, mcp-id: string) -> result<_, auth-error>;
+    allowed-to-call: func(headers: request-headers, application-id: string, action-id: string) -> result<_, auth-error>;
+    allowed-to-list: func(headers: request-headers, application-id: string, mcp-id: string) -> result<_, auth-error>;
+}
+
+/// Validates the jwt of an end user, implemented by the data-api.
+interface validator {
+    variant validate-error {
+        /// the data-api rejected the token
+        invalid(string),
+        /// the data-api could not be reached or failed to answer
+        unavailable(string),
+    }
+
+    /// Returns the claims of the jwt as a json object.
+    validate-jwt: func(application-id: string, jwt: string) -> result<string, validate-error>;
 }

@@ -193,37 +193,41 @@ fn parse_to_gql_fragment(model_name: &str, property_map: BettyPropertyMapping) -
 
 fn get_assigned_value(kind: &PropertyKind, value: serde_json::Value) -> serde_json::Value {
     match kind {
-        PropertyKind::BelongsTo => {
-            if is_record(&value) {
-                return value
-                    .get("id")
-                    .expect("always contains id, checked in is_record")
-                    .to_owned();
-            }
-            value
-        }
+        PropertyKind::BelongsTo => as_id_reference(record_id_or_value(value)),
         PropertyKind::HasMany | PropertyKind::HasAndBelongsToMany => {
-            if let serde_json::Value::Array(items) = &value {
-                let record_ids: Vec<serde_json::Value> = items
-                    .iter()
-                    .map(|val| {
-                        if is_record(val) {
-                            return val
-                                .get("id")
-                                .expect("always contains id, checked in is_record")
-                                .to_owned();
-                        }
-                        val.to_owned()
-                    })
-                    .collect();
-
-                return serde_json::json!({
-                  "id": record_ids
-                });
+            if let serde_json::Value::Array(items) = value {
+                let record_ids: Vec<_> = items.into_iter().map(record_id_or_value).collect();
+                return serde_json::json!({ "id": record_ids });
             }
             value
         }
         _ => value,
+    }
+}
+
+fn record_id_or_value(value: serde_json::Value) -> serde_json::Value {
+    if is_record(&value) {
+        return value
+            .get("id")
+            .expect("always contains id, checked in is_record")
+            .to_owned();
+    }
+    value
+}
+
+fn as_id_reference(value: serde_json::Value) -> serde_json::Value {
+    if is_id(&value) {
+        serde_json::json!({ "id": value })
+    } else {
+        value
+    }
+}
+
+fn is_id(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Number(_) => true,
+        serde_json::Value::String(text) => !text.is_empty(),
+        _ => false,
     }
 }
 
@@ -1258,6 +1262,36 @@ fragment taskFields on Task {
             let assigned_properties = parse_assigned_properties(property_map);
             let expected_result: serde_json::Value =
                 json!({ "title": "Assign empty collection", "tags": {"id": []} });
+            assert_eq!(assigned_properties, expected_result);
+        }
+
+        fn belongs_to(name: &str, value: Option<serde_json::Value>) -> BettyPropertyMap {
+            BettyPropertyMap {
+                key: vec![BettyPropertyPath {
+                    kind: "BELONGS_TO".to_string(),
+                    name: name.to_string(),
+                    object_fields: None,
+                }],
+                value: value.map(|value| value.to_string()),
+            }
+        }
+
+        #[test]
+        fn belongs_to_is_sent_as_id_object_so_data_api_can_replace_placeholder_ids() {
+            let property_map = vec![
+                belongs_to("customer", Some(json!({ "id": 7, "name": "Ann" }))),
+                belongs_to("product", Some(json!({ "id": "-1" }))),
+                belongs_to("store", Some(json!(3))),
+                belongs_to("employee", None),
+            ];
+
+            let assigned_properties = parse_assigned_properties(property_map);
+            let expected_result: serde_json::Value = json!({
+                "customer": {"id": 7},
+                "product": {"id": "-1"},
+                "store": {"id": 3},
+                "employee": null
+            });
             assert_eq!(assigned_properties, expected_result);
         }
     }
