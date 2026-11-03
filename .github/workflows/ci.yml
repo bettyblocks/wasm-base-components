@@ -2,10 +2,10 @@ name: CI
 
 on:
   pull_request:
-  # Runs on dev only to seed the rust caches: a PR can restore caches from its base branch,
+  # Runs on main only to seed the rust caches: a PR can restore caches from its base branch,
   # but never from another PR.
   push:
-    branches: [dev]
+    branches: [main]
 
 env:
   # No debug info: CI never needs it, and it is a large share of compile, link and cache size.
@@ -13,19 +13,6 @@ env:
   CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
-  validate-source-branch:
-    runs-on: ubuntu-24.04
-    if: github.base_ref == 'main'
-    steps:
-      - name: Verify PR source is dev branch
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [ "$HEAD_REF" != "dev" ]; then
-            echo "::error::PRs to main must come from the dev branch. Got: $HEAD_REF"
-            exit 1
-          fi
-
   list-components:
     runs-on: ubuntu-24.04
     outputs:
@@ -91,8 +78,8 @@ jobs:
           key: ${{ matrix.component.key }}
           workspaces: ${{ steps.cache-workspaces.outputs.workspaces }}
           cache-all-crates: "true"
-          # PRs only restore. Saving from every PR would evict the dev caches they rely on.
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' }}
+          # PRs only restore. Saving from every PR would evict the main caches they rely on.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Install Protoc
         uses: arduino/setup-protoc@v3

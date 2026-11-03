@@ -19,11 +19,6 @@ set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
 
-# dev is an integration branch, not a production environment, so overwriting a version that is
-# still in development is safe: a changed package may keep the major it already took there. The
-# promotion PR compares against main, which still has to show a version bump.
-REUSE_ALLOWED_ON="dev"
-
 main() {
   # Make the base ref available (no-op if already fetched, e.g. local dev).
   git fetch -q origin "$BASE_REF" 2>/dev/null || true
@@ -38,13 +33,6 @@ main() {
   fi
 
   echo "Comparing against base: ${BASE}"
-
-  if [ "$BASE_REF" = "$REUSE_ALLOWED_ON" ]; then
-    allow_reuse=true
-    echo "Base is ${REUSE_ALLOWED_ON}: a changed package may reuse the version it already has there."
-  else
-    allow_reuse=false
-  fi
 
   changed="$(git diff --name-only "${BASE}...HEAD")"
   if [ -z "$changed" ]; then
@@ -107,10 +95,6 @@ require_bump() {
     return 0
   fi
   if [ "$cur" = "$base" ]; then
-    if [ "$allow_reuse" = true ]; then
-      echo "♻️  ${label}: changed, version reused @${cur} — allowed on ${BASE_REF}"
-      return 0
-    fi
     errors+=("${label} — changed but version NOT bumped (still @${cur}); bump the version in ${vfile}")
     echo "❌ ${label}: changed, version still @${cur}"
     return 0

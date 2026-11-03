@@ -1,8 +1,8 @@
 name: Publish components
 
-# The whole publish operation, for every destination. Callers (publish.yaml for dev,
-# publish-prod.yaml for production) only pick *which build* to hand over; all publishing logic
-# lives here.
+# The whole publish operation, for every destination. Callers (publish.yaml after every build on
+# main, publish-prod.yaml for the manual component release to production) only pick *which build*
+# to hand over and what to push; all publishing logic lives here.
 #
 # Each environment provides:
 #   secret  AZURE_REGISTRY   registry host, e.g. myregistry.azurecr.io. Not needed when the
@@ -37,6 +37,11 @@ on:
         required: false
         default: ""
         type: string
+      publish_components:
+        description: "Push the component images. False publishes only the WIT packages"
+        required: false
+        default: true
+        type: boolean
       name_column:
         description: "Which image name this registry uses: ghcr_name or azure_name"
         required: true
@@ -155,6 +160,7 @@ jobs:
           echo "WIT        -> ${wit_registry:-(skipped)}"
 
       - name: Download the build's .wasm files
+        if: inputs.publish_components
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ inputs.build_run_id }}
@@ -163,6 +169,7 @@ jobs:
           path: ./artifacts
 
       - name: Put the .wasm files where the table expects them
+        if: inputs.publish_components
         run: |
           if [ ! -d artifacts/components ]; then
             echo "::error::the build bundle has no components/ directory"
@@ -174,6 +181,7 @@ jobs:
       # The tag comes from each world.wit's version, so prove the .wasm was built from that same
       # file before anything is pushed.
       - name: Check every .wasm against the world in this checkout
+        if: inputs.publish_components
         env:
           REGISTRY: ${{ steps.dest.outputs.component_registry }}
           NAME_COLUMN: ${{ inputs.name_column }}
@@ -193,7 +201,12 @@ jobs:
             echo "## Published to \`${{ inputs.environment }}\`"
             echo
             echo "**Build run:** \`${{ inputs.build_run_id }}\`, built from \`${{ steps.build.outputs.head_sha }}\`"
-            echo "**Components:** \`${{ steps.dest.outputs.component_registry }}\`"
+            if [ "${{ inputs.publish_components }}" = "true" ]; then
+              echo "**Components:** \`${{ steps.dest.outputs.component_registry }}\`"
+            else
+              echo "**Components:** skipped, this publish pushes only the WIT packages"
+            fi
+            echo "**WIT:** \`${{ steps.dest.outputs.wit_registry || 'skipped' }}\`"
             echo
             echo "Tags come from each package's own WIT version, not from a git tag."
             echo "\`X.Y.Z\` (and \`latest\`) move with every build; \`X.Y.Z-${SHORT_SHA}\` names these"
@@ -210,6 +223,7 @@ jobs:
         run: ./scripts/publish-wit-packages.sh
 
       - name: Push the component images
+        if: inputs.publish_components
         env:
           REGISTRY: ${{ steps.dest.outputs.component_registry }}
           NAME_COLUMN: ${{ inputs.name_column }}
