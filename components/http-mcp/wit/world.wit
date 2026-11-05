@@ -1,4 +1,4 @@
-package betty-blocks-utilities:mcp@4.0.0;
+package betty-blocks-utilities:mcp@4.1.0;
 
 world mcp {
     import betty-blocks-types:auth/jwt@4.0.0;
