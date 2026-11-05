@@ -255,6 +255,7 @@ async fn handle_call_tool(
         &configurations,
         wasmcloud_host,
         application_id,
+        &actions::extract_bearer_token(headers),
     )
     .await?;
 
