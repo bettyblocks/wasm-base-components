@@ -43,6 +43,39 @@ pub fn load_server_config(server_id: &str) -> Result<McpServerConfig, String> {
     parse_server_config(&raw, server_id)
 }
 
+/// An action is public when it has no authentication profile.
+/// The `actions` map sits inside the `mcp_servers` config, next to `mcps`.
+pub fn is_public_action(action_id: &str) -> Result<bool, String> {
+    let raw = get(WASI_CONFIG_KEY)
+        .map_err(|e| format!("Failed to get wasi config: {e:?}"))?
+        .ok_or_else(|| "mcp_servers key not found in runtime configuration".to_string())?;
+
+    is_public_action_in(&raw, action_id)
+}
+
+fn is_public_action_in(raw: &str, action_id: &str) -> Result<bool, String> {
+    #[derive(serde::Deserialize)]
+    struct ActionAuth {
+        #[serde(rename = "authentication-profile-id")]
+        authentication_profile_id: Option<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ActionsConfig {
+        #[serde(default)]
+        actions: HashMap<String, ActionAuth>,
+    }
+
+    let mut config: ActionsConfig =
+        serde_json::from_str(raw).map_err(|e| format!("Failed to parse actions config: {e}"))?;
+    let action = config
+        .actions
+        .remove(action_id)
+        .ok_or_else(|| format!("Action '{action_id}' not found in actions config"))?;
+
+    Ok(action.authentication_profile_id.is_none())
+}
+
 pub fn load_betty_config() -> Result<String, String> {
     let betty_config_string = get(BETTY_CONFIG_KEY)
         .map_err(|e| format!("Failed to get betty config: {e:?}"))?
@@ -95,6 +128,28 @@ fn parse_server_config(raw: &str, server_id: &str) -> Result<McpServerConfig, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TEST_ACTIONS_CONFIG: &str = r#"{
+        "actions": {
+            "pub": {"authentication-profile-id": null},
+            "pub-no-field": {},
+            "priv": {"authentication-profile-id": "profile-abc"}
+        },
+        "app": "x",
+        "mcp-servers": [],
+        "mcps": {}
+    }"#;
+
+    #[test]
+    fn test_is_public_action() {
+        assert_eq!(is_public_action_in(TEST_ACTIONS_CONFIG, "pub"), Ok(true));
+        assert_eq!(
+            is_public_action_in(TEST_ACTIONS_CONFIG, "pub-no-field"),
+            Ok(true)
+        );
+        assert_eq!(is_public_action_in(TEST_ACTIONS_CONFIG, "priv"), Ok(false));
+        assert!(is_public_action_in(TEST_ACTIONS_CONFIG, "nope").is_err());
+    }
     use crate::types::McpAuthConfig;
 
     const TEST_MCP_CONFIG: &str = r#"{

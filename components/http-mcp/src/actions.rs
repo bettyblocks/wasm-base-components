@@ -47,7 +47,6 @@ pub async fn execute_mapped_action(
     Ok((false, parse_action_output(&output_value)))
 }
 
-/// Extract the bearer token from the request headers.
 /// Returns an empty string when the header is absent or not a bearer token.
 pub fn extract_bearer_token(headers: &[(String, Vec<u8>)]) -> String {
     headers
