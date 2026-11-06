@@ -1,3 +1,16 @@
+# [1.42.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.41.0...v1.42.0) (2026-11-06)
+
+
+### Bug Fixes
+
+* bump version http-mcp ([f2d426a](https://github.com/bettyblocks/wasm-base-components/commit/f2d426a486f1dea5d5168e59352446b6a71a6828))
+
+
+### Features
+
+* **http-mcp:** pass caller JWT through to action calls ([9219e10](https://github.com/bettyblocks/wasm-base-components/commit/9219e10841abce544c083364d0b876a32ae4aa52))
+* **http-mcp:** send an empty JWT to public actions ([eafff7b](https://github.com/bettyblocks/wasm-base-components/commit/eafff7b0ffec85924a8c3c343892562c07de77ce))
+
 # [1.41.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.40.1...v1.41.0) (2026-11-06)
 
 
