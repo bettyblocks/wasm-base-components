@@ -60,6 +60,7 @@ struct CapturedRequest {
 #[derive(Clone, Default)]
 struct CaptureState {
     requests: Arc<Mutex<Vec<CapturedRequest>>>,
+    response_delay: Duration,
 }
 
 async fn capture_request(
@@ -69,19 +70,23 @@ async fn capture_request(
     body: Bytes,
 ) -> StatusCode {
     let body = String::from_utf8(body.to_vec()).unwrap_or_default();
-    let mut requests = state.requests.lock().unwrap();
-    requests.push(CapturedRequest {
+    state.requests.lock().unwrap().push(CapturedRequest {
         path: uri.path().to_string(),
         headers,
         body,
     });
+    sleep(state.response_delay).await;
 
     StatusCode::CREATED
 }
 
-async fn start_mock_logging_server()
--> anyhow::Result<(SocketAddr, CaptureState, task::JoinHandle<()>)> {
-    let state = CaptureState::default();
+async fn start_mock_logging_server(
+    response_delay: Duration,
+) -> anyhow::Result<(SocketAddr, CaptureState, task::JoinHandle<()>)> {
+    let state = CaptureState {
+        response_delay,
+        ..Default::default()
+    };
     let app = Router::new()
         .route("/internal/bulk_logs", post(capture_request))
         .route("/internal/bulk_variables", post(capture_request))
@@ -239,7 +244,8 @@ async fn wait_for_requests(
 async fn logs_writer_sends_logs_and_variables_to_server() -> anyhow::Result<()> {
     init_tracing_for_test();
 
-    let (logs_addr, capture_state, server_handle) = start_mock_logging_server().await?;
+    let (logs_addr, capture_state, server_handle) =
+        start_mock_logging_server(Duration::ZERO).await?;
     let test_config = setup_wasmcloud_host().await?;
     let _ = start_workload(&test_config, logs_addr).await?;
 
@@ -281,12 +287,53 @@ async fn logs_writer_sends_logs_and_variables_to_server() -> anyhow::Result<()> 
         "missing variable payload"
     );
 
-    for request in &captured {
-        assert!(
-            request.headers.get("authorization").is_some(),
-            "missing authorization header"
-        );
-    }
+    let tokens: Vec<_> = captured
+        .iter()
+        .map(|request| {
+            request
+                .headers
+                .get("authorization")
+                .expect("missing authorization header")
+                .clone()
+        })
+        .collect();
+    assert_ne!(
+        tokens[0], tokens[1],
+        "each request should get its own token"
+    );
+
+    server_handle.abort();
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn logs_writer_gives_up_on_a_server_that_does_not_respond() -> anyhow::Result<()> {
+    init_tracing_for_test();
+
+    let (logs_addr, capture_state, server_handle) =
+        start_mock_logging_server(Duration::from_secs(300)).await?;
+    let test_config = setup_wasmcloud_host().await?;
+    let _ = start_workload(&test_config, logs_addr).await?;
+
+    let started = Instant::now();
+    let response = tokio::time::timeout(
+        Duration::from_secs(60),
+        Client::new()
+            .get(format!("http://{}/ping", test_config.http_addr))
+            .header("HOST", HTTP_HOST_HEADER)
+            .send(),
+    )
+    .await
+    .context("the caller still waits for the logs-writer after 60 s")??;
+    let elapsed = started.elapsed();
+
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(capture_state.requests.lock().unwrap().len(), 2);
+    assert!(
+        elapsed >= Duration::from_secs(9) && elapsed < Duration::from_secs(18),
+        "expected one 10 s timeout for both requests, took {elapsed:?}"
+    );
 
     server_handle.abort();
 

@@ -7,13 +7,14 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
+futures-lite = "2"
 jaws-rs = { git = "https://github.com/bettyblocks/jaws-rs.git", version = "0.1.0" }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
+serde_json = { version = "1.0.145", features = ["raw_value"] }
 tracing = "0.1.44"
 uuid = { version = "1.8.0", features = ["v4"] }
-waki = "0.5.1"
 wit-bindgen = "0.52.0"
+wstd = "0.6.8"
 
 [dev-dependencies]
 anyhow = "1.0.100"
