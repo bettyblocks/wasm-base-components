@@ -1,23 +1,25 @@
 name: Publish WASM Components (production)
-run-name: Publish to production ${{ github.event_name == 'workflow_dispatch' && '(manual)' || '(auto)' }}
+run-name: Publish build ${{ inputs.build_run_id || '(latest release)' }} components to production
 
-# main has no build of its own (release.yaml only runs on dev), so production republishes what
-# dev built and tested — rebuilding is not bit-reproducible, so it would ship untested bytes.
+# The manual release of components to production. It does not rebuild: it publishes the same
+# build that already went to edge, because a rebuild is not bit-reproducible and would ship
+# untested bytes.
+#
+# Only components go out here. The WIT packages of each build already reached production
+# automatically (publish.yaml). A WIT version has no effect in production until a step or a
+# service imports that version.
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: "Build run to publish (leave empty to use the one recorded in .build-run-id)"
+        description: "Build run to publish (leave empty to use the latest release on main, from .build-run-id)"
         required: false
         type: string
 
 jobs:
-  # The build id travels with the source: semantic-release writes .build-run-id into the release
-  # commit, so merging dev brings it along.
+  # semantic-release writes the build's run id into .build-run-id in the release commit on main,
+  # so an empty input means the latest release.
   which-build:
     runs-on: ubuntu-latest
     permissions:
@@ -26,9 +28,10 @@ jobs:
       build_run_id: ${{ steps.pick.outputs.build_run_id }}
 
     steps:
-      # Full history: the check below diffs main's tree against the build's dev commit.
+      # Full history: the check below looks for the build's commit in main's history.
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Decide which build to publish
@@ -43,8 +46,8 @@ jobs:
             build_run_id=$(tr -d '[:space:]' < .build-run-id)
             echo "Using the build run recorded in .build-run-id: $build_run_id"
           else
-            echo "::error::no .build-run-id in this checkout, and no build_run_id was given."
-            echo "::error::.build-run-id is written by semantic-release on dev and reaches main with the release commit."
+            echo "::error::no .build-run-id on main, and no build_run_id was given."
+            echo "::error::.build-run-id is written by semantic-release in the release commit on main."
             exit 1
           fi
 
@@ -57,11 +60,8 @@ jobs:
 
           echo "build_run_id=$build_run_id" >> "$GITHUB_OUTPUT"
 
-      # Prod publishes a build made on dev, so refuse one whose commit is missing component or WIT
-      # changes that landed on main since. Skipped on dispatch: a rollback deliberately picks an
-      # older build.
-      - name: Check main has nothing the build is missing
-        if: github.event_name == 'push'
+      # Production only takes builds that went through main, and so through review and edge.
+      - name: Check the build was made from main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -73,22 +73,13 @@ jobs:
             exit 1
           fi
 
-          if ! git cat-file -e "${head_sha}^{commit}" 2>/dev/null; then
+          if ! git merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null; then
             echo "::error::build $BUILD_RUN_ID was made from $head_sha, which is not in main's history."
             echo "::error::Production can only publish a build whose commit reached main."
             exit 1
           fi
 
-          changed=$(git diff --name-only "$head_sha" HEAD -- components wit)
-          if [ -n "$changed" ]; then
-            echo "::error::main has component or WIT changes that build $BUILD_RUN_ID ($head_sha) does not contain:"
-            echo "$changed" | sed 's/^/    /'
-            echo "::error::Production republishes what dev built, so these have to go through dev to be released."
-            echo "::error::To publish this build anyway, dispatch this workflow with build_run_id=$BUILD_RUN_ID."
-            exit 1
-          fi
-
-          echo "main matches build $BUILD_RUN_ID ($head_sha) across components/ and wit/."
+          echo "Build $BUILD_RUN_ID was made from $head_sha on main."
 
   azure-prod:
     needs: which-build
@@ -98,5 +89,4 @@ jobs:
       build_run_id: ${{ needs.which-build.outputs.build_run_id }}
       environment: production
       component_namespace: betty-blocks-utilities
-      wit_namespace: betty-blocks-types
       name_column: azure_name

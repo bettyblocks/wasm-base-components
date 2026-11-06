@@ -28,90 +28,87 @@ What it doesn't include:
 
 ## Release & Publish
 
-1. merge to `dev`. **Build WASM Components** builds and runs semantic-release, then
-   **Publish WASM Components (dev)** pushes the images to ghcr and the dev registry.
-2. merge `dev` into `main`. **Publish WASM Components (production)** republishes that same
-   build to the production registry — it does not rebuild, so production runs the bytes that
-   were tested on dev.
+There is one branch: `main`. All PRs go into `main`.
+
+1. Merge a PR into `main`. **Build WASM Components** builds all components and runs
+   semantic-release.
+2. **Publish WASM Components (after build)** then publishes that build automatically:
+   - the components go to ghcr and the dev (edge) registry;
+   - the WIT packages go to the dev (edge) registry and the production registry. A WIT version
+     has no effect until a step or a service imports that version.
+3. Test the components on edge. Then dispatch **Publish WASM Components (production)**. This
+   manual step publishes the components of that build to production. An app uses a new
+   component at its next compile, thus a person must start this step. The step does not
+   rebuild, so production gets the bytes that you tested on edge.
 
 ### The workflows, high over
 
 | workflow | runs on | what it does |
 |---|---|---|
-| **Build WASM Components** (`release.yaml`) | push to `dev` that touches something a component is built from | builds every component, runs semantic-release, uploads one `wasm-components` artifact holding **all** of them, and writes its own run id into `.build-run-id` in the release commit |
-| **Publish WASM Components (dev)** (`publish.yaml`) | that build finishing, or manual dispatch | picks *which* build to publish, nothing more. Fans out to ghcr and the dev registry |
-| **Publish WASM Components (production)** (`publish-prod.yaml`) | push to `main`, or manual dispatch | reads the build run id out of `.build-run-id`, checks `main`'s tree still matches that build's commit, then publishes to production |
+| **Build WASM Components** (`release.yaml`) | push to `main` that touches something a component is built from | builds every component, runs semantic-release, uploads one `wasm-components` artifact holding **all** of them, and writes its own run id into `.build-run-id` in the release commit |
+| **Publish WASM Components (after build)** (`publish.yaml`) | that build finishing, or manual dispatch | selects the build to publish. Publishes the components to ghcr and the dev registry. Publishes the WIT packages to the dev registry and the production registry |
+| **Publish WASM Components (production)** (`publish-prod.yaml`) | manual dispatch only | takes a build run id. If the run id is empty, uses the latest release on `main`. Makes sure that the commit of the build is on `main`. Publishes the components of the build to production |
 | **Publish components** (`publish-components.yaml`) | called by the two above | all the actual publishing logic, once, identically per destination |
-| **CI** / **Version Check** / **Commit Lint** | pull requests | build, test, and lint checks |
+| **CI** / **Version Check** / **Commit Lint** | pull requests | build, test, and lint checks. On a PR, CI builds only the components and WIT packages that the PR changes. A change to a shared file, for example `rust-toolchain.toml`, builds all (`scripts/ci-targets.sh`) |
 
 Publishing always takes a **build run id** as its input, never a commit or a branch. One run id
 resolves to exactly one artifact; a commit can have several build runs, so the run id is the only
 thing that names a specific set of bytes.
 
-A push to `dev` that changes only `docs/`, markdown, `**/tests/`, `.github/` or `scripts/` doesn't
+A push to `main` that changes only `docs/`, markdown, `**/tests/`, `.github/` or `scripts/` doesn't
 build, so it doesn't publish either — those can't change a component binary. A push is skipped
 only when *every* changed file matches, so a commit touching `src/` alongside a test still builds.
 Changes to `.github/` and `scripts/` do change how publishing behaves; to exercise them, dispatch
-**Publish WASM Components (dev)** with the previous build's run id.
+**Publish WASM Components (after build)** with the previous build's run id.
 
 ### What gets tagged
 
 Each component gets:
 
-- `X.Y.Z` — the version in its own `wit/world.wit`. Every publish moves it, so a deployment
-  pinned to `2.0.0` can get different bytes tomorrow.
-- `X.Y.Z-<short-sha>` — the same version plus the build's commit. Publishing any other commit
-  leaves it untouched, so pin this one to keep a deployment on what it runs today. It names the
-  commit, not the bytes: rebuilding that same commit overwrites it. Use the image digest if you
-  need byte-exactness.
+- `X.Y.Z` — the version in its own `wit/world.wit`. A publish never changes an `X.Y.Z` that
+  exists.
+- `X.Y.Z-<short-sha>` — the same version plus the commit of the build that first published
+  `X.Y.Z`.
 - `latest` — only on ghcr.
 
 Components come from the build artifact. The WIT packages under `wit/` are built from the
 **checkout at that build's commit** instead, and only go to the Azure registries — ghcr gets
 components only.
 
-### Every publish pushes everything
+### A publish pushes only new versions
 
-There's no change detection and no skipping. Every component and every tag is pushed on every
-publish, even when nothing changed.
+A publish reads the registry before each push. If `X.Y.Z` of a component or a WIT package exists,
+the publish skips it. The version check makes each change increase the version. Thus an `X.Y.Z`
+that exists already holds the current code, and a new version means a changed package.
 
-That's deliberate: pushing is idempotent, so it's cheap (registries are content-addressed — a
-blob that's already there isn't uploaded again) and re-running a publish that failed halfway is
-always safe.
+The skip is a safety rule: a published version never changes. A change that the version check
+does not see, for example a new `rust-toolchain.toml`, cannot overwrite a version in production.
 
-Each tag is a separate `wkg oci push` of the same file, because `wkg` pushes a file rather than
-pointing a tag at a digest. Only the first uploads the component; the rest find the blob already
-present and just write a manifest, so a component is three pushes but one artifact.
+The publish pushes the tags of a component in this sequence: `X.Y.Z-<short-sha>`, `latest`,
+`X.Y.Z`. It stops at the first failure. Thus `X.Y.Z` exists only when all tags of the component
+exist. When a publish fails halfway, run it again. It pushes the components that it did not
+complete.
 
-Deployments reference `X.Y.Z`, and that tag moves with every publish — so on its own, nothing
-records *which build* is currently deployed, and there's no name for the build that worked
-yesterday. `X.Y.Z-<short-sha>` is that name: it's the tag a rollback points at, and the one to
-pin when a deployment has to stay on what it runs today.
+A `Cargo.lock` change also counts as a change: it changes the bytes of the component, so the
+version check requires a new version.
 
-### Republishing an old build, and rollback
+### Publishing a build by hand
 
 Dispatch **Publish WASM Components (production)** with `build_run_id` set to a
-**Build WASM Components** run id (the last part of that run's URL). Leave it empty and the build
-recorded in `.build-run-id` is used. For dev, dispatch **Publish WASM Components (dev)** the same
-way — there `build_run_id` is required.
+**Build WASM Components** run id (the last part of that run's URL). If you leave it empty, the
+workflow uses the latest release on `main` (the run id in `.build-run-id`). For edge, dispatch
+**Publish WASM Components (after build)** the same way. There, `build_run_id` is required.
 
-This is how a rollback works, and it is a real rewrite: `X.Y.Z` and `latest` move **back** to the
-older build's bytes, and the WIT packages go back to that commit's WIT. That's the point of a
-rollback, but it does mean the mutable tags now point at something older than `main`.
+A dispatch publishes only the versions that are not in the registry. Use it to release
+components to production, or to complete a publish that failed.
 
-Build artifacts are deleted after 90 days, which bounds how long a `dev` → `main` promotion can
-be delayed and how far back a rollback can reach.
+GitHub deletes build artifacts after 90 days. Thus, publish a build to production within 90 days
+of the merge.
 
-### Overwriting a tag
+### Rollback
 
-Nothing stops you. Tags are mutable and publishing doesn't check what's already there, so
-republishing overwrites whatever the tags currently point at — including `X.Y.Z-<short-sha>` if
-you publish a *different* build run of the same commit. Because Rust builds aren't
-bit-reproducible, that tag would then hold different bytes than it did before.
-
-Prefer republishing the **original run id** rather than re-running the build for a commit: same
-run id means the same artifact, so the push is a genuine no-op. Re-running the build gives you
-equivalent-but-different bytes under a tag someone may already have pinned.
+A publish never overwrites a tag, thus a rollback is a new release. Revert the bad change,
+increase the version, and merge. Then publish the new build to production.
 
 ## Versioning
 
@@ -132,32 +129,22 @@ the newer one, without checking what is inside a record. The details are in
 [ADR 001](docs/decisions/001-major-only-wit-version-bumps.md), which is superseded as a policy
 but still describes that behaviour.
 
-### Iterating on dev
+### No version reuse
 
-`dev` tags are mutable — every publish overwrites `X.Y.Z` in place — so a change still in flight
-does not need a new version per PR. Bump **once**, then keep reusing it:
-
-| PR | package version | verdict |
-|---|---|---|
-| first feature PR into `dev` | `2.0.0` → `2.1.0` | ✅ the bump |
-| follow-up PRs into `dev` | stays `2.1.0` | ♻️ reuse, allowed |
-| promotion PR `dev` → `main` | `2.0.0` → `2.1.0` vs `main` | ✅ version went up |
-
-Reuse needs the PR’s base to be `dev`. Because a reused tag points at different bytes than it
-did yesterday, pin `X.Y.Z-<short-sha>` for anything that has to stay put — see
-[What gets tagged](#what-gets-tagged).
+Each PR that changes a package must increase the version of that package. This rule also
+applies to a follow-up PR of the same feature. Each merge to `main` publishes the WIT packages
+to production. Thus a reused version changes a production package in place.
 
 ### Enforcement
 
 `scripts/check-version-bumps.sh`, run by the **Version Check** workflow on every PR. It compares
 each package whose files changed against the same file on the PR’s base branch:
 
-- changed and not bumped → ❌, unless the base is `dev`, where it is ♻️ reuse;
-- changed and the version went down → ❌, on every base;
+- changed and not bumped → ❌;
+- changed and the version went down → ❌;
 - a package with no version on the base is new and may start at any version.
 
-Run it locally with the base you intend to target: `./scripts/check-version-bumps.sh dev` or
-`./scripts/check-version-bumps.sh main`. It diffs `<base>...HEAD`, so it reads **committed**
+Run it locally with `./scripts/check-version-bumps.sh main`. It diffs `<base>...HEAD`, so it reads **committed**
 state — uncommitted edits are invisible to it.
 
 The check gates PRs, not the registry: if a wrong version already got published, correcting it

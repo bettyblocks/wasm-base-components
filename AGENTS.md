@@ -39,27 +39,26 @@ Applies to the hand-written `package …@X.Y.Z;` line in:
 It does **not** apply to the repo's own release version (`CHANGELOG.md`, `.version`), which
 semantic-release manages from conventional commits. Leave that alone.
 
-### The dev exception
+### No version reuse
 
-`dev` tags are mutable; every publish overwrites `X.Y.Z` in place. So while a change is still
-being iterated on, a package may **reuse** the version it already took on `dev` rather than
-bumping again per PR.
+There is one branch, `main`. Each merge to `main` publishes the WIT packages to all zones,
+production included. Thus each PR that changes a package must increase its version, measured
+against `main`. This rule also applies to a follow-up PR of the same feature. A version must
+never go down.
 
-- PR based on `dev` → reusing the current version is allowed.
-- PR `dev` → `main` → the bump is mandatory, measured against `main`.
-
-A version is never allowed to go down, on any base.
+Components go to edge on each merge. They go to production only when a person dispatches
+**Publish WASM Components (production)**.
 
 ## When you change a WIT package
 
-1. Bump the package's own `package …@X.Y.Z;` (or reuse, per above).
+1. Bump the package's own `package …@X.Y.Z;`.
 2. **Repoint every reference to it** — `use`/`import`/`export` lines naming that package, in
    both `wit/` and `components/`. Everything that reaches one package must name the same
    version of it; `wkg` keys dependencies by name without the version, so the first version it
    meets wins and the rest are silently dropped.
 3. If the package is exported by a component, that component's world changed — bump it too.
 4. A package whose dependency edges changed has changed, even when its own types did not.
-   Republishing the same version with different content is not allowed off `dev`.
+   Republishing the same version with different content is not allowed.
 
 `scripts/generate-wkg-toml.sh` catches disagreements and names the files that conflict. It also
 decides where each dependency comes from: the local checkout when `wit/<pkg>` declares exactly
@@ -84,7 +83,7 @@ the version asked for, the registry otherwise.
 ## Verify before finishing
 
 ```sh
-./scripts/check-version-bumps.sh dev     # or main, matching the PR's base
+./scripts/check-version-bumps.sh main
 just build-all
 ```
 

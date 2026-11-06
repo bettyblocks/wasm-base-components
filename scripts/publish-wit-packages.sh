@@ -6,6 +6,9 @@
 # against — the WIT *is* the source. The version is each package's own
 # `package betty-blocks-types:<name>@X.Y.Z;` declaration, never a git tag.
 #
+# A package whose version already exists in the registry is skipped, also before the build. A WIT
+# version never gets new content: the version check makes every change increase the version.
+#
 # Env:
 #   REGISTRY          required  host and namespace, e.g. myreg.azurecr.io/betty-blocks-types
 #   REGISTRY_USERNAME optional  identity for *reading* dependencies out of REGISTRY's host.
@@ -48,6 +51,21 @@ main() {
       result_code=1
       continue
     fi
+
+    "$repo_root/scripts/registry-has-tag.sh" "$REGISTRY/$name:$version"
+    case $? in
+    0)
+      echo "Skipped $REGISTRY/$name:$version, it already exists"
+      append_to_summary "- \`$REGISTRY/$name:$version\` already exists, skipped"
+      continue
+      ;;
+    1) ;;
+    *)
+      append_to_summary "- ~\`$REGISTRY/$name:$version\`~ **registry read failed**"
+      result_code=1
+      continue
+      ;;
+    esac
 
     if ! build_wit_package "$package_dir" "$name"; then
       echo "::error::$name: wkg wit build failed in $package_dir"
