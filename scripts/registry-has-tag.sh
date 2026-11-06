@@ -16,7 +16,7 @@ if output=$(docker manifest inspect "$ref" 2>&1 >/dev/null); then
 fi
 
 # A missing tag and a missing repository both mean the tag does not exist yet.
-if grep -qiE 'manifest unknown|name unknown|not found' <<<"$output"; then
+if grep -qiE 'manifest unknown|name unknown|no such manifest|not found' <<<"$output"; then
   exit 1
 fi
 
