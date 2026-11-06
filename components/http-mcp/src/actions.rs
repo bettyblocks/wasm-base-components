@@ -11,6 +11,7 @@ pub async fn execute_mapped_action(
     configurations: &str,
     wasmcloud_host: &str,
     application_id: &str,
+    jwt: &str,
 ) -> Result<(bool, Vec<ContentBlock>), String> {
     let input_json = serde_json::to_string(arguments)
         .map_err(|e| format!("Failed to serialize arguments: {e}"))?;
@@ -21,10 +22,9 @@ pub async fn execute_mapped_action(
             "input": input_json,
             "configurations": configurations
         },
-        // The HTTP wrapper we call does not validate or use the JWT;
-        // it is included only because the endpoint schema requires it.
-        // TODO: Should we pass through the caller's JWT instead of an empty string?
-        "jwt": ""
+        // The caller's bearer token, passed through unchanged.
+        // Empty when the request had no bearer token.
+        "jwt": jwt
     });
 
     let body_bytes = serde_json::to_vec(&request_body)
@@ -45,6 +45,20 @@ pub async fn execute_mapped_action(
     };
     let output_value = data.get("output").cloned().unwrap_or(Value::Null);
     Ok((false, parse_action_output(&output_value)))
+}
+
+/// Returns an empty string when the header is absent or not a bearer token.
+pub fn extract_bearer_token(headers: &[(String, Vec<u8>)]) -> String {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
+        .and_then(|(_, value)| std::str::from_utf8(value).ok())
+        .and_then(|value| {
+            let (scheme, token) = value.trim().split_once(' ')?;
+            scheme.eq_ignore_ascii_case("bearer").then(|| token.trim())
+        })
+        .unwrap_or_default()
+        .to_string()
 }
 
 async fn send_http_request(
@@ -122,6 +136,19 @@ pub fn parse_action_output(output: &Value) -> Vec<ContentBlock> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn test_extract_bearer_token() {
+        let h = vec![("Authorization".to_string(), b"Bearer abc.def".to_vec())];
+        assert_eq!(extract_bearer_token(&h), "abc.def");
+    }
+
+    #[test]
+    fn test_extract_bearer_token_missing_or_other_scheme() {
+        assert_eq!(extract_bearer_token(&[]), "");
+        let h = vec![("authorization".to_string(), b"Basic xyz".to_vec())];
+        assert_eq!(extract_bearer_token(&h), "");
+    }
 
     #[test]
     fn test_parse_action_output_null() {

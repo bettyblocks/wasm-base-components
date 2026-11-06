@@ -249,12 +249,20 @@ async fn handle_call_tool(
         .map(|m| Value::Object(m.clone()))
         .unwrap_or(Value::Null);
 
+    // A public action never receives the token of the caller.
+    let jwt = if config::is_public_action(&tool_with_action.action_id)? {
+        String::new()
+    } else {
+        actions::extract_bearer_token(headers)
+    };
+
     let (is_error, content) = actions::execute_mapped_action(
         &tool_with_action.action_id,
         &args_value,
         &configurations,
         wasmcloud_host,
         application_id,
+        &jwt,
     )
     .await?;
 
