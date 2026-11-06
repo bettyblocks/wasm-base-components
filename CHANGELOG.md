@@ -1,3 +1,11 @@
+## [1.42.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.42.0...v1.42.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **ci:** treat 'no such manifest' as a missing registry tag ([65c0363](https://github.com/bettyblocks/wasm-base-components/commit/65c0363641bcd8299dc763e53b5cc90deecea209))
+* **logs-writer:** time out stalled requests and send both POSTs at once ([ac72ae8](https://github.com/bettyblocks/wasm-base-components/commit/ac72ae83d77ad256f55faad5f2eeaa64167270eb))
+
 # [1.42.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.41.0...v1.42.0) (2026-11-06)
 
 
