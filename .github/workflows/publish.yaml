@@ -1,14 +1,16 @@
-name: Publish WASM Components (dev)
+name: Publish WASM Components (after build)
 run-name: >-
-  Publish build ${{ github.event.workflow_run.id || inputs.build_run_id }} to dev
+  Publish build ${{ github.event.workflow_run.id || inputs.build_run_id }}
   ${{ github.event_name == 'workflow_dispatch' && '(manual)' || '(auto)' }}
 
 # This workflow contains no publishing logic. Its only job is to say *which build* to
-# publish; publish-components.yaml does the rest, identically for every destination.
+# publish and where; publish-components.yaml does the rest, identically for every destination.
 #
-# Note that workflow_run always executes the copy of this file on the default branch (main),
-# while release.yaml executes the copy on dev. Anything both files agree on — the artifact
-# name in particular — is a contract between the two branches.
+# Every build on main goes out here automatically:
+#   - components to ghcr and the dev (edge) registry;
+#   - WIT packages to every Azure zone, production included.
+# Components reach production only through publish-prod.yaml, a manual dispatch.
+# README.md, "Release & Publish", gives the reason.
 
 on:
   workflow_run:
@@ -16,7 +18,7 @@ on:
     types:
       - completed
     branches:
-      - dev
+      - main
   workflow_dispatch:
     inputs:
       build_run_id:
@@ -45,4 +47,16 @@ jobs:
       environment: dev
       component_namespace: betty-blocks-utilities
       wit_namespace: betty-blocks-types
+      name_column: azure_name
+
+  azure-prod-wit:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    uses: ./.github/workflows/publish-components.yaml
+    secrets: inherit
+    with:
+      build_run_id: ${{ format('{0}', github.event.workflow_run.id || inputs.build_run_id) }}
+      environment: production
+      component_namespace: betty-blocks-utilities
+      wit_namespace: betty-blocks-types
+      publish_components: false
       name_column: azure_name

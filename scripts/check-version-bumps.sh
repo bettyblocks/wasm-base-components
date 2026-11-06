@@ -6,7 +6,7 @@
 # For each package we compare the version in its `package <ns>:<name>@X.Y.Z;`
 # declaration against the same file on the base branch. A package is considered
 # "changed" when any of these (tracked) files differ from the base:
-#   - components/<component>/    : src/**, build.rs, Cargo.toml, wit/** (excl. wit/deps/**)
+#   - components/<component>/    : src/**, build.rs, Cargo.toml, Cargo.lock, wit/** (excl. wit/deps/**)
 #   - wit/<shared-pkg>/          : the shared WIT package files (types, actions, ...)
 #
 # Generated/tooling files never trigger the requirement: wit/deps/ (gitignored),
@@ -18,11 +18,6 @@
 set -uo pipefail
 
 BASE_REF="${1:-${GITHUB_BASE_REF:-main}}"
-
-# dev is an integration branch, not a production environment, so overwriting a version that is
-# still in development is safe: a changed package may keep the major it already took there. The
-# promotion PR compares against main, which still has to show a version bump.
-REUSE_ALLOWED_ON="dev"
 
 main() {
   # Make the base ref available (no-op if already fetched, e.g. local dev).
@@ -39,13 +34,6 @@ main() {
 
   echo "Comparing against base: ${BASE}"
 
-  if [ "$BASE_REF" = "$REUSE_ALLOWED_ON" ]; then
-    allow_reuse=true
-    echo "Base is ${REUSE_ALLOWED_ON}: a changed package may reuse the version it already has there."
-  else
-    allow_reuse=false
-  fi
-
   changed="$(git diff --name-only "${BASE}...HEAD")"
   if [ -z "$changed" ]; then
     echo "No changes vs base. Nothing to check."
@@ -59,7 +47,7 @@ main() {
     [ -z "$world" ] && continue
     dir="$(dirname "$(dirname "$world")")"
     require_bump "$dir" "$world" \
-      "^${dir}/(src/|build\.rs$|Cargo\.toml$|wit/)" \
+      "^${dir}/(src/|build\.rs$|Cargo\.(toml|lock)$|wit/)" \
       "^${dir}/wit/deps/"
   done < <(find components -name world.wit -not -path '*/wit/deps/*' | sort)
 
@@ -107,10 +95,6 @@ require_bump() {
     return 0
   fi
   if [ "$cur" = "$base" ]; then
-    if [ "$allow_reuse" = true ]; then
-      echo "♻️  ${label}: changed, version reused @${cur} — allowed on ${BASE_REF}"
-      return 0
-    fi
     errors+=("${label} — changed but version NOT bumped (still @${cur}); bump the version in ${vfile}")
     echo "❌ ${label}: changed, version still @${cur}"
     return 0

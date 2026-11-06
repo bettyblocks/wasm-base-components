@@ -5,9 +5,12 @@
 # Every component is checked before any is pushed, so a failure leaves nothing published — not
 # the first half of the table. MODE=check runs the check alone.
 #
-# Each component gets two tags: X.Y.Z (and latest) from the WIT version, which move with every
-# build, and X.Y.Z-<short-sha>, which names the commit the build came from so a deployment can pin
-# a tag no later publish moves.
+# Each component gets two tags: X.Y.Z (and latest) from the WIT version, and X.Y.Z-<short-sha>,
+# which names the commit the build came from.
+#
+# A component whose X.Y.Z already exists in the registry is skipped: the version check makes every
+# change increase the version, so an existing X.Y.Z holds the current code. X.Y.Z is pushed last,
+# so a publish that failed halfway does not leave it behind. A publish never overwrites X.Y.Z.
 #
 # Env:
 #   COMPONENTS   required  the component table, one "key|wasm|world|ghcr_name|azure_name"
@@ -172,8 +175,25 @@ push_all_targets() {
   for target in "${_targets[@]}"; do
     IFS='|' read -r key wasm image version pinned <<<"$target"
 
-    tags=("$pinned" "$version")
+    "$script_dir/registry-has-tag.sh" "$image:$version"
+    case $? in
+    0)
+      echo "Skipped $image:$version, it already exists"
+      echo "- \`$image:$version\` already exists, skipped" >>"$summary"
+      continue
+      ;;
+    1) ;;
+    *)
+      echo "- ~\`$image:$version\`~ **registry read failed**" >>"$summary"
+      result_code=1
+      continue
+      ;;
+    esac
+
+    # X.Y.Z goes last: the skip above reads it as "this component is fully published".
+    tags=("$pinned")
     [ "$TAG_LATEST" = true ] && tags+=("latest")
+    tags+=("$version")
 
     for tag in "${tags[@]}"; do
       if [ "$DRY_RUN" = true ]; then
@@ -186,6 +206,7 @@ push_all_targets() {
         echo "::error::$key: failed to push $image:$tag"
         echo "- ~\`$image:$tag\`~ **push failed**" >>"$summary"
         result_code=1
+        break
       fi
     done
   done
