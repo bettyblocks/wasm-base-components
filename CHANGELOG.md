@@ -1,3 +1,10 @@
+# [1.41.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.40.1...v1.41.0) (2026-11-06)
+
+
+### Features
+
+* add headers, query and body parameters to betty-software-ap ([46e8cb6](https://github.com/bettyblocks/wasm-base-components/commit/46e8cb66dac7a48b98c3a961e7d4d32037f21c4c))
+
 ## [1.40.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.40.0...v1.40.1) (2026-11-02)
 
 
