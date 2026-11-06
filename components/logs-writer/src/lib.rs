@@ -1,11 +1,16 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::value::RawValue;
 use std::{collections::HashMap, env, time::Duration};
 use tracing::error;
+use wstd::http::{Client, Request};
 
 use crate::exports::betty_blocks_types::logs_writer::debug_logging::Guest;
 
 wit_bindgen::generate!({ generate_all });
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const FIRST_BYTE_TIMEOUT: Duration = Duration::from_secs(10);
+const BETWEEN_BYTES_TIMEOUT: Duration = Duration::from_secs(10);
 
 // tracing doesn't bubble up to the wasmcloud host yet, but eprintln does.
 // Use this function to ensure errors are visible in both tracing subscribers and host stderr.
@@ -26,16 +31,28 @@ struct Config {
     jaws_secret_key: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LogsWriterMessage {
-    pub application_id: String,
-
-    #[serde(flatten)]
-    pub other: HashMap<String, Value>,
+#[derive(Deserialize)]
+struct MessageApplication {
+    application_id: String,
 }
 
-pub type VariablesPayload = HashMap<String, HashMap<String, Value>>;
-pub type VariablesOutput = HashMap<String, Vec<Value>>;
+#[derive(Serialize)]
+struct LogsData<'a> {
+    data: Vec<&'a RawValue>,
+}
+
+#[derive(Serialize)]
+struct Variable<'a> {
+    hash: &'a str,
+    value: &'a RawValue,
+}
+
+#[derive(Serialize)]
+struct VariablesData<'a> {
+    data: HashMap<&'a str, Vec<Variable<'a>>>,
+}
+
+type VariablesPayload<'a> = HashMap<String, HashMap<String, &'a RawValue>>;
 
 impl Config {
     fn from_env() -> Result<Self, String> {
@@ -84,132 +101,117 @@ impl Guest for LogsWriter {
             }
         };
 
-        let jwt = match generate_jaws(&config) {
-            Ok(jwt) => jwt,
-            Err(err) => {
-                log_error(&format!("logs writer jwt generation failed: {err}"));
-                return;
-            }
-        };
-
-        let logs_data = match parse_messages_json(&messages) {
-            Ok(data) => filter_messages_by_application_id(data, &config.application_id),
+        let logs_body = match logs_body(&messages, &config.application_id) {
+            Ok(body) => body,
             Err(err) => {
                 log_error(&format!("logs writer messages parse failed: {err}"));
                 return;
             }
         };
 
-        let variables_data = match parse_variables_json(&variables) {
-            Ok(data) => filter_variables_by_application_id(data, &config.application_id),
+        let variables_body = match variables_body(&variables, &config.application_id) {
+            Ok(body) => body,
             Err(err) => {
                 log_error(&format!("logs writer variables parse failed: {err}"));
                 return;
             }
         };
 
-        let client = waki::Client::new();
-        let logs_payload = serde_json::json!({ "data": logs_data });
-        let variables_payload = serde_json::json!({ "data": variables_data });
+        let mut client = Client::new();
+        client.set_connect_timeout(CONNECT_TIMEOUT);
+        client.set_first_byte_timeout(FIRST_BYTE_TIMEOUT);
+        client.set_between_bytes_timeout(BETWEEN_BYTES_TIMEOUT);
 
-        send_request(&client, &config.logs_address(), &jwt, logs_payload);
-        send_request(
-            &client,
-            &config.variables_address(),
-            &jwt,
-            variables_payload,
-        );
+        wstd::runtime::block_on(futures_lite::future::zip(
+            send_request(&client, &config, config.logs_address(), logs_body),
+            send_request(&client, &config, config.variables_address(), variables_body),
+        ));
     }
 }
 
-pub fn parse_messages_json(
-    messages: &[String],
-) -> Result<Vec<LogsWriterMessage>, serde_json::Error> {
-    messages
+fn logs_body(messages: &[String], application_id: &str) -> Result<Vec<u8>, serde_json::Error> {
+    let data = messages
         .iter()
-        .map(|s| serde_json::from_str::<LogsWriterMessage>(s))
-        .collect()
+        .filter_map(
+            |message| match serde_json::from_str::<MessageApplication>(message) {
+                Ok(m) if m.application_id == application_id => {
+                    Some(serde_json::from_str::<&RawValue>(message))
+                }
+                Ok(_) => None,
+                Err(err) => Some(Err(err)),
+            },
+        )
+        .collect::<Result<Vec<_>, _>>()?;
+    serde_json::to_vec(&LogsData { data })
 }
 
-fn filter_messages_by_application_id(
-    messages: Vec<LogsWriterMessage>,
-    application_id: &str,
-) -> Vec<LogsWriterMessage> {
-    messages
-        .into_iter()
-        .filter(|message| message.application_id == application_id)
-        .collect()
-}
-
-fn filter_variables_by_application_id(
-    variables: VariablesOutput,
-    application_id: &str,
-) -> VariablesOutput {
-    variables
-        .into_iter()
-        .filter(|(app_id, _)| app_id == application_id)
-        .collect()
-}
-
-pub fn parse_variables_json(json: &str) -> Result<VariablesOutput, serde_json::Error> {
-    let variable_payload: VariablesPayload = serde_json::from_str(json)?;
-
-    Ok(variable_payload
-        .into_iter()
-        .map(|(application_id, app_vars)| {
-            let variables: Vec<Value> = app_vars
-                .into_iter()
-                .map(|(hash, value)| serde_json::json!({ "hash": hash, "value": value }))
+fn variables_body(json: &str, application_id: &str) -> Result<Vec<u8>, serde_json::Error> {
+    let payload: VariablesPayload = serde_json::from_str(json)?;
+    let data = payload
+        .iter()
+        .filter(|(app_id, _)| app_id.as_str() == application_id)
+        .map(|(app_id, app_vars)| {
+            let variables = app_vars
+                .iter()
+                .map(|(hash, value)| Variable { hash, value })
                 .collect();
-            (application_id, variables)
+            (app_id.as_str(), variables)
         })
-        .collect())
+        .collect();
+    serde_json::to_vec(&VariablesData { data })
 }
 
-fn send_request(client: &waki::Client, url: &str, jwt: &str, payload: serde_json::Value) {
-    let body = match serde_json::to_vec(&payload) {
-        Ok(body) => body,
+async fn send_request(client: &Client, config: &Config, url: String, body: Vec<u8>) {
+    let jwt = match generate_jaws(config) {
+        Ok(jwt) => jwt,
         Err(err) => {
             log_error(&format!(
-                "logs writer payload encode failed | url={url} | error={err}"
+                "logs writer jwt generation failed: {err} | url={url}"
             ));
             return;
         }
     };
 
-    let response = client
-        .post(url)
+    let request = match Request::post(&url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {jwt}"))
-        .connect_timeout(Duration::from_secs(5))
         .body(body)
-        .send();
-
-    match response {
-        Ok(response) => {
-            let status_code = response.status_code();
-            if status_code != 201 {
-                match response.body() {
-                    Ok(body) => {
-                        let body_text = String::from_utf8_lossy(&body);
-                        log_error(&format!(
-                            "logs writer request returned unexpected status \
-                             | status_code={status_code} | url={url} | response_body={body_text}"
-                        ));
-                    }
-                    Err(err) => {
-                        log_error(&format!(
-                            "logs writer response body read failed \
-                             | error={err} | status_code={status_code} | url={url}"
-                        ));
-                    }
-                }
-            }
-        }
+    {
+        Ok(request) => request,
         Err(err) => {
             log_error(&format!(
-                "logs writer request failed | error={err} | url={url}"
+                "logs writer request build failed | error={err} | url={url}"
             ));
+            return;
+        }
+    };
+
+    let mut response = match client.send(request).await {
+        Ok(response) => response,
+        Err(err) => {
+            log_error(&format!(
+                "logs writer request failed | error={err:?} | url={url}"
+            ));
+            return;
+        }
+    };
+
+    let status_code = response.status().as_u16();
+    if status_code != 201 {
+        match response.body_mut().contents().await {
+            Ok(body) => {
+                let body_text = String::from_utf8_lossy(body);
+                log_error(&format!(
+                    "logs writer request returned unexpected status \
+                     | status_code={status_code} | url={url} | response_body={body_text}"
+                ));
+            }
+            Err(err) => {
+                log_error(&format!(
+                    "logs writer response body read failed \
+                     | error={err:?} | status_code={status_code} | url={url}"
+                ));
+            }
         }
     }
 }
@@ -233,130 +235,72 @@ export!(LogsWriter);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use serde_json::{Value, json};
 
-    #[test]
-    fn when_parsing_multiple_messages_it_should_return_all_entries() {
-        let expected_result = vec![
-            LogsWriterMessage {
-                application_id: "app-1".to_string(),
-                other: HashMap::from([("k".to_string(), serde_json::json!(1))]),
-            },
-            LogsWriterMessage {
-                application_id: "app-2".to_string(),
-                other: HashMap::from([("k".to_string(), serde_json::json!(2))]),
-            },
-        ];
-        let messages = vec![
-            r#"{"application_id":"app-1","k":1}"#.to_string(),
-            r#"{"application_id":"app-2","k":2}"#.to_string(),
-        ];
-        let parsed = parse_messages_json(&messages).expect("messages parse failed");
-
-        assert_eq!(parsed, expected_result);
+    fn parse(body: Vec<u8>) -> Value {
+        serde_json::from_slice(&body).expect("body is not valid JSON")
     }
 
     #[test]
-    fn when_parsing_messages_with_invalid_json_it_should_return_error() {
+    fn logs_body_keeps_only_messages_of_the_application() {
+        let messages = vec![
+            r#"{"application_id":"app-1","k":1,"nested":{"b":2,"a":1}}"#.to_string(),
+            r#"{"application_id":"app-2","k":2}"#.to_string(),
+            r#"{"application_id":"app-1","k":3}"#.to_string(),
+        ];
+
+        let body = parse(logs_body(&messages, "app-1").unwrap());
+
+        assert_eq!(
+            body,
+            json!({"data": [
+                {"application_id": "app-1", "k": 1, "nested": {"b": 2, "a": 1}},
+                {"application_id": "app-1", "k": 3},
+            ]})
+        );
+    }
+
+    #[test]
+    fn logs_body_is_empty_when_no_message_matches() {
+        let messages = vec![r#"{"application_id":"app-2"}"#.to_string()];
+
+        assert_eq!(
+            parse(logs_body(&messages, "app-1").unwrap()),
+            json!({"data": []})
+        );
+    }
+
+    #[test]
+    fn logs_body_rejects_invalid_json() {
         let messages = vec![
             r#"{"application_id":"app-1"}"#.to_string(),
-            r#"{"application_id": "bad""#.to_string(),
+            r#"{"application_id":"app-1"} trailing"#.to_string(),
         ];
 
-        let result = parse_messages_json(&messages);
-        assert!(result.is_err());
+        assert!(logs_body(&messages, "app-1").is_err());
     }
 
     #[test]
-    fn when_parsing_variables_json_it_should_parse_successfully() {
-        let json = r#"{"app-1":{"h1":{"k":1},"h2":"v"}}"#;
-        let vars = parse_variables_json(json).expect("variables parse failed");
+    fn variables_body_groups_the_variables_of_the_application() {
+        let json = r#"{"app-1":{"h1":{"k":[1,2]},"h2":"v"},"app-2":{"h3":"other"}}"#;
 
-        assert_eq!(vars.len(), 1);
-        let app_vars = vars.get("app-1").expect("app-1 should exist");
-        assert_eq!(app_vars.len(), 2);
-        assert!(app_vars.contains(&serde_json::json!({"hash": "h1", "value": {"k": 1}})));
-        assert!(app_vars.contains(&serde_json::json!({"hash": "h2", "value": "v"})));
-    }
+        let body = parse(variables_body(json, "app-1").unwrap());
 
-    #[test]
-    fn when_parsing_variables_json_it_should_serialize_as_grouped_map() {
-        let json = r#"{"app-1":{"h1":"v1"}}"#;
-        let vars = parse_variables_json(json).expect("variables parse failed");
-        let serialized = serde_json::to_value(&vars).expect("serialize failed");
-
+        let mut variables = body["data"]["app-1"].as_array().unwrap().clone();
+        variables.sort_by_key(|v| v["hash"].as_str().unwrap().to_string());
         assert_eq!(
-            serialized,
-            serde_json::json!({"app-1": [{"hash": "h1", "value": "v1"}]})
+            variables,
+            vec![
+                json!({"hash": "h1", "value": {"k": [1, 2]}}),
+                json!({"hash": "h2", "value": "v"}),
+            ]
         );
+        assert_eq!(body["data"].as_object().unwrap().len(), 1);
     }
 
     #[test]
-    fn when_parsing_variables_json_with_multiple_apps_it_should_group_by_app() {
-        let json = r#"{"app-1":{"h1":"v1"},"app-2":{"h2":"v2"}}"#;
-        let vars = parse_variables_json(json).expect("variables parse failed");
-
-        assert_eq!(vars.len(), 2);
-        let app1_vars = vars.get("app-1").expect("app-1 should exist");
-        assert_eq!(
-            app1_vars,
-            &vec![serde_json::json!({"hash": "h1", "value": "v1"})]
-        );
-        let app2_vars = vars.get("app-2").expect("app-2 should exist");
-        assert_eq!(
-            app2_vars,
-            &vec![serde_json::json!({"hash": "h2", "value": "v2"})]
-        );
-    }
-
-    #[test]
-    fn when_parsing_variables_with_invalid_json_it_should_return_error() {
-        let json = r#"{"app-1":{"h1":1},"#;
-        let result = parse_variables_json(json);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn when_filtering_messages_it_should_only_keep_matching_application_id() {
-        let expected_result = vec![LogsWriterMessage {
-            application_id: "app-1".to_string(),
-            other: HashMap::from([("k".to_string(), serde_json::json!(1))]),
-        }];
-
-        let messages = vec![
-            LogsWriterMessage {
-                application_id: "app-1".to_string(),
-                other: HashMap::from([("k".to_string(), serde_json::json!(1))]),
-            },
-            LogsWriterMessage {
-                application_id: "app-2".to_string(),
-                other: HashMap::from([("k".to_string(), serde_json::json!(2))]),
-            },
-        ];
-
-        let filtered = filter_messages_by_application_id(messages, "app-1");
-
-        assert_eq!(filtered, expected_result);
-    }
-
-    #[test]
-    fn when_filtering_variables_it_should_only_keep_matching_application_id() {
-        let variables = HashMap::from([
-            (
-                "app-1".to_string(),
-                vec![serde_json::json!({"hash": "h1", "value": "v1"})],
-            ),
-            (
-                "app-2".to_string(),
-                vec![serde_json::json!({"hash": "h2", "value": "v2"})],
-            ),
-        ]);
-
-        let filtered = filter_variables_by_application_id(variables, "app-1");
-
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("app-1"));
-        assert!(!filtered.contains_key("app-2"));
+    fn variables_body_rejects_invalid_json() {
+        assert!(variables_body(r#"{"app-1":{"h1":1},"#, "app-1").is_err());
     }
 
     #[test]

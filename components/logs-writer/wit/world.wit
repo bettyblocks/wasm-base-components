@@ -1,4 +1,4 @@
-package betty-blocks-utilities:logs-writer@3.0.0;
+package betty-blocks-utilities:logs-writer@3.0.1;
 
 world main {
     import wasi:http/outgoing-handler@0.2.2;
