@@ -1,4 +1,4 @@
-package betty-blocks-types:types@3.3.0;
+package betty-blocks-types:types@3.4.0;
 
 interface types {
     type json-string = string;
@@ -153,6 +153,9 @@ interface types {
         api-name: string,
         base-url: string,
         path: string,
-        method: betty-http-method
+        method: betty-http-method,
+        headers: option<json-string>,
+        query-parameters: option<json-string>,
+        body-parameters: option<json-string>
     }
 }
