@@ -12,6 +12,7 @@ The components currently include:
 - http-wrapper
 - log-to-stdout
 - http-mcp
+- http-webhook
 - logs-writer
 - live-announcer
 
@@ -19,7 +20,7 @@ These are the names used in the component table in
 [`publish-components.yaml`](.github/workflows/publish-components.yaml). The published image name
 is not always the same: on ghcr several carry a `-component` suffix (`auth-component`,
 `crud-component`, `data-api-component`, `upload-file-component`, `pdf-generator-component`),
-and on the Azure registries `http-mcp` is published as `mcp`.
+and on the Azure registries `http-mcp` is published as `mcp` and `http-webhook` as `webhook`.
 
 What it doesn't include:
 
