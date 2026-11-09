@@ -251,9 +251,9 @@ async fn handle_call_tool(
 
     // A public action never receives the token of the caller.
     let jwt = if config::is_public_action(&tool_with_action.action_id)? {
-        String::new()
+        None
     } else {
-        actions::extract_bearer_token(headers)
+        action_client::extract_bearer_token(headers)
     };
 
     let (is_error, content) = actions::execute_mapped_action(
@@ -262,7 +262,7 @@ async fn handle_call_tool(
         &configurations,
         wasmcloud_host,
         application_id,
-        &jwt,
+        jwt.as_deref(),
     )
     .await?;
 

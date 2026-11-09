@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Select the components and WIT packages that CI must build: all of them, or with a base ref only
-# the ones that changed since that base. A change to a shared build file selects all.
+# Select the components, shared crates and WIT packages that CI must build: all of them, or with a
+# base ref only the ones that changed since that base. A change to a shared build file selects all.
 #
 # Usage: ./scripts/ci-targets.sh [<base-ref>]
 #
@@ -10,7 +10,7 @@
 set -euo pipefail
 
 # Files that every build reads.
-SHARED='^(rust-toolchain\.toml|Justfile|wit-deps\.just|wkg-config\.toml|scripts/generate-wkg-toml\.sh|scripts/ci-targets\.sh|\.github/workflows/ci\.yml|\.github/actions/)'
+SHARED='^(rust-toolchain\.toml|Justfile|wit-deps\.just|wkg-config\.toml|scripts/generate-wkg-toml\.sh|scripts/ci-targets\.sh|\.github/workflows/ci\.yml|\.github/actions/|crates/)'
 
 main() {
   local base=${1:-} changed components wit_packages
@@ -37,8 +37,9 @@ main() {
   echo "wit_packages=$(json_list <<<"$wit_packages")"
 }
 
+# The shared crates in crates/ are not components, but CI runs the same checks on them.
 list_components() {
-  find components -mindepth 2 -name Justfile -not -path '*/target/*' -printf '%h\n' | sort
+  find components crates -mindepth 2 -name Justfile -not -path '*/target/*' -printf '%h\n' | sort
 }
 
 list_wit_packages() {

@@ -1,0 +1,8 @@
+[package]
+name = "action-client"
+edition = "2021"
+version = "0.1.0"
+
+[dependencies]
+serde_json = "1.0"
+wstd = "0.6.5"

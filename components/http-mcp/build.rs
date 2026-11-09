@@ -131,6 +131,7 @@ fn main() {
     }
 
     println!("cargo::rerun-if-changed=src/");
+    println!("cargo::rerun-if-changed=../../crates/action-client/src/");
     println!("cargo::rerun-if-changed=wasmcloud.toml");
     println!("cargo::rerun-if-changed=../utilities/auth/src/");
     println!("cargo::rerun-if-changed=../utilities/auth/wasmcloud.toml");

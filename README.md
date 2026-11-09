@@ -202,6 +202,7 @@ See the [./integration-test](./integration-test) folder
 - AGENT.md: working rules for coding agents, chiefly the [versioning](#versioning) policy
 - Justfile: contains commands to run commands
 - components: contains wasm components that are not action steps
+- crates: contains shared Rust libraries that components use as a path dependency. A crate is not a component.
 - docs/decisions: architecture decision records
 - integration-test: Contains the tests to verify that the providers work in wasmcloud
 - wit: contains shared WIT interface definitions used by the wasm components
