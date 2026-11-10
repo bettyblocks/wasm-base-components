@@ -86,6 +86,7 @@ jobs:
         logs-writer|components/logs-writer/target/wasm32-wasip2/release/logs_writer.wasm|components/logs-writer/wit/world.wit|logs-writer|logs-writer
         live-announcer|components/live-announcer/target/wasm32-wasip2/release/live_announcer.wasm|components/live-announcer/wit/world.wit|live-announcer|live-announcer
         http-well-known|components/http-well-known/target/wasm32-wasip2/release/well_known_component.wasm|components/http-well-known/wit/world.wit|http-well-known|well-known
+        http-webhook|components/http-webhook/target/wasm32-wasip2/release/webhook_component.wasm|components/http-webhook/wit/world.wit|http-webhook|webhook
 
     steps:
       # Everything below is anchored to the build's commit, not to the commit this publish run sits on.

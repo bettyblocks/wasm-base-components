@@ -1,0 +1,16 @@
+build:
+    cargo build --target wasm32-wasip2 --release
+
+test:
+    cargo test --lib
+
+integration-test:
+
+lint:
+    cargo check --target wasm32-wasip2
+
+formatting *args:
+    cargo fmt --all {{args}}
+
+clippy:
+    cargo clippy --target wasm32-wasip2 --all-targets --all-features -- -D warnings

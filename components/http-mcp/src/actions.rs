@@ -1,9 +1,6 @@
+use action_client::{ActionError, ActionRequest};
 use rust_mcp_schema::ContentBlock;
-use serde_json::{json, Value};
-use wstd::http::{Body, Client, Method, Request};
-use wstd::time::Duration;
-
-const MAX_ACTION_RESPONSE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
+use serde_json::Value;
 
 pub async fn execute_mapped_action(
     action_id: &str,
@@ -11,115 +8,21 @@ pub async fn execute_mapped_action(
     configurations: &str,
     wasmcloud_host: &str,
     application_id: &str,
-    jwt: &str,
+    jwt: Option<&str>,
 ) -> Result<(bool, Vec<ContentBlock>), String> {
-    let input_json = serde_json::to_string(arguments)
-        .map_err(|e| format!("Failed to serialize arguments: {e}"))?;
-
-    let request_body = json!({
-        "action_id": action_id,
-        "payload": {
-            "input": input_json,
-            "configurations": configurations
-        },
-        // The caller's bearer token, passed through unchanged.
-        // Empty when the request had no bearer token.
-        "jwt": jwt
-    });
-
-    let body_bytes = serde_json::to_vec(&request_body)
-        .map_err(|e| format!("Failed to serialize request body: {e}"))?;
-
-    let response_body = send_http_request(wasmcloud_host, application_id, &body_bytes).await?;
-
-    let data: Value = match serde_json::from_str(&response_body) {
-        Ok(v) => v,
-        Err(_) => {
-            return Ok((
-                true,
-                vec![ContentBlock::text_content(format!(
-                    "Failed to parse action response: {response_body}"
-                ))],
-            ))
-        }
+    let action_request = ActionRequest {
+        wasmcloud_host,
+        application_id,
+        action_id,
+        input: arguments,
+        configurations,
+        jwt,
     };
-    let output_value = data.get("output").cloned().unwrap_or(Value::Null);
-    Ok((false, parse_action_output(&output_value)))
-}
-
-/// Returns an empty string when the header is absent or not a bearer token.
-pub fn extract_bearer_token(headers: &[(String, Vec<u8>)]) -> String {
-    headers
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case("authorization"))
-        .and_then(|(_, value)| std::str::from_utf8(value).ok())
-        .and_then(|value| {
-            let (scheme, token) = value.trim().split_once(' ')?;
-            scheme.eq_ignore_ascii_case("bearer").then(|| token.trim())
-        })
-        .unwrap_or_default()
-        .to_string()
-}
-
-async fn send_http_request(
-    wasmcloud_host: &str,
-    application_id: &str,
-    body_bytes: &[u8],
-) -> Result<String, String> {
-    let uri = format!("{wasmcloud_host}/");
-    let request = Request::builder()
-        .method(Method::POST)
-        .uri(&uri)
-        // NOTE: WASI prohibits to set the host header so as a workaround
-        // we set this header. The runtime-gateway then sets the host header
-        // with this value
-        .header("x-route-host", application_id)
-        .header("content-type", "application/json")
-        .body(Body::from(body_bytes.to_vec()))
-        .map_err(|e| format!("Failed to build request: {e}"))?;
-
-    let timeout = Duration::from_secs(10 * 60); // 10 minutes
-    let mut client = Client::new();
-    client.set_connect_timeout(timeout);
-    client.set_first_byte_timeout(timeout);
-    client.set_between_bytes_timeout(timeout);
-
-    let response = client
-        .send(request)
-        .await
-        .map_err(|e| format!("HTTP request failed (possibly timed out after 10 minutes): {e}"))?;
-
-    let status = response.status();
-    let mut body = response.into_body();
-
-    reject_oversized_response_hint(&body, MAX_ACTION_RESPONSE_SIZE)?;
-
-    let response_text = body
-        .str_contents()
-        .await
-        .map_err(|e| format!("Failed to read response body: {e}"))?
-        .to_string();
-
-    crate::reject_oversized_body("Action response", &response_text, MAX_ACTION_RESPONSE_SIZE)?;
-
-    if !status.is_success() {
-        return Err(format!(
-            "Action HTTP request failed with status {status}: {response_text}"
-        ));
+    match action_client::call_action(&action_request).await {
+        Ok(output) => Ok((false, parse_action_output(&output))),
+        Err(ActionError::Failed(e)) => Err(e),
+        Err(e) => Ok((true, vec![ContentBlock::text_content(e.to_string())])),
     }
-    Ok(response_text)
-}
-
-/// Best-effort early rejection based on response content-length (may be absent).
-fn reject_oversized_response_hint(body: &Body, max_size: u64) -> Result<(), String> {
-    if let Some(content_length) = body.content_length() {
-        if content_length > max_size {
-            return Err(format!(
-                "Action response too large: {content_length} bytes exceeds {max_size} byte limit"
-            ));
-        }
-    }
-    Ok(())
 }
 
 pub fn parse_action_output(output: &Value) -> Vec<ContentBlock> {
@@ -136,19 +39,6 @@ pub fn parse_action_output(output: &Value) -> Vec<ContentBlock> {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn test_extract_bearer_token() {
-        let h = vec![("Authorization".to_string(), b"Bearer abc.def".to_vec())];
-        assert_eq!(extract_bearer_token(&h), "abc.def");
-    }
-
-    #[test]
-    fn test_extract_bearer_token_missing_or_other_scheme() {
-        assert_eq!(extract_bearer_token(&[]), "");
-        let h = vec![("authorization".to_string(), b"Basic xyz".to_vec())];
-        assert_eq!(extract_bearer_token(&h), "");
-    }
 
     #[test]
     fn test_parse_action_output_null() {

@@ -12,6 +12,7 @@ The components currently include:
 - http-wrapper
 - log-to-stdout
 - http-mcp
+- http-webhook
 - logs-writer
 - live-announcer
 
@@ -19,7 +20,7 @@ These are the names used in the component table in
 [`publish-components.yaml`](.github/workflows/publish-components.yaml). The published image name
 is not always the same: on ghcr several carry a `-component` suffix (`auth-component`,
 `crud-component`, `data-api-component`, `upload-file-component`, `pdf-generator-component`),
-and on the Azure registries `http-mcp` is published as `mcp`.
+and on the Azure registries `http-mcp` is published as `mcp` and `http-webhook` as `webhook`.
 
 What it doesn't include:
 
@@ -202,6 +203,7 @@ See the [./integration-test](./integration-test) folder
 - AGENT.md: working rules for coding agents, chiefly the [versioning](#versioning) policy
 - Justfile: contains commands to run commands
 - components: contains wasm components that are not action steps
+- crates: contains shared Rust libraries that components use as a path dependency. A crate is not a component.
 - docs/decisions: architecture decision records
 - integration-test: Contains the tests to verify that the providers work in wasmcloud
 - wit: contains shared WIT interface definitions used by the wasm components
