@@ -1,3 +1,10 @@
+# [1.43.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.42.1...v1.43.0) (2026-11-10)
+
+
+### Features
+
+* **http-webhook:** run the action of a webhook on GET or POST /api/webhooks/{name} ([57999ab](https://github.com/bettyblocks/wasm-base-components/commit/57999ab6199af6fbdccdf1c7ccc3a9e8f3e221c6))
+
 ## [1.42.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.42.0...v1.42.1) (2026-11-06)
 
 
