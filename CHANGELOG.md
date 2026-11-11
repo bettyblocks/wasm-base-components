@@ -1,3 +1,10 @@
+## [1.43.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.43.0...v1.43.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **http-webhook:** serve the webhooks on /api/webhook/{name} ([f70f362](https://github.com/bettyblocks/wasm-base-components/commit/f70f362ceba11926a6177712a2bdc7d21b2710ed))
+
 # [1.43.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.42.1...v1.43.0) (2026-11-10)
 
 
