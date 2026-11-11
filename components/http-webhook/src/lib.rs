@@ -12,7 +12,7 @@ wit_bindgen::generate!({
 
 mod config;
 
-const PATH_PREFIX: &str = "/api/webhooks/";
+const PATH_PREFIX: &str = "/api/webhook/";
 const MAX_REQUEST_BODY_SIZE: u64 = 10 * 1024 * 1024;
 
 type Failure = (StatusCode, String);
@@ -184,12 +184,12 @@ mod tests {
     #[test]
     fn test_webhook_name() {
         assert_eq!(
-            webhook_name("/api/webhooks/send-invoice"),
+            webhook_name("/api/webhook/send-invoice"),
             Some("send-invoice")
         );
-        assert_eq!(webhook_name("/api/webhooks/"), None);
-        assert_eq!(webhook_name("/api/webhooks"), None);
-        assert_eq!(webhook_name("/api/webhooks/a/b"), None);
+        assert_eq!(webhook_name("/api/webhook/"), None);
+        assert_eq!(webhook_name("/api/webhook"), None);
+        assert_eq!(webhook_name("/api/webhook/a/b"), None);
         assert_eq!(webhook_name("/api/mcp/send-invoice"), None);
     }
 

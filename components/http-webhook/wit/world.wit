@@ -1,4 +1,4 @@
-package betty-blocks-utilities:webhook@1.0.0;
+package betty-blocks-utilities:webhook@1.0.1;
 
 world webhook {
     import betty-blocks-types:auth/jwt@4.0.0;

@@ -1,7 +1,7 @@
 //! Integration tests for the webhook component.
 //!
 //! Runs the webhook, auth and data-api components in a wash host and sends real HTTP requests
-//! to `/api/webhooks/{webhook-name}`. A mock action server answers with what it received, so the
+//! to `/api/webhook/{webhook-name}`. A mock action server answers with what it received, so the
 //! tests can check which action ran with which input and token.
 //!
 //! Fixtures are automatically built by build.rs before tests run.
@@ -280,7 +280,7 @@ async fn post(
     token: Option<&str>,
     body: &str,
 ) -> Result<(u16, reqwest::header::HeaderMap, Value)> {
-    let path = format!("/api/webhooks/{webhook}");
+    let path = format!("/api/webhook/{webhook}");
     send(addr, reqwest::Method::POST, &path, token, body).await
 }
 
@@ -329,7 +329,7 @@ async fn test_get_runs_the_action_with_empty_input() -> Result<()> {
     let (_host, addr) = setup().await?;
     let token = make_token(TEST_SECRET, TEST_PROFILE_ID);
 
-    let path = "/api/webhooks/send-invoice";
+    let path = "/api/webhook/send-invoice";
     let (status, _, body) = send(addr, reqwest::Method::GET, path, Some(&token), "").await?;
 
     assert_eq!(status, 200, "body: {body}");
@@ -376,7 +376,7 @@ async fn test_request_errors() -> Result<()> {
     assert_eq!(status, 404, "body: {body}");
     assert!(body["error"].as_str().unwrap().contains("'unknown'"));
 
-    let (status, _, _) = send(addr, reqwest::Method::PUT, "/api/webhooks/ping", None, "").await?;
+    let (status, _, _) = send(addr, reqwest::Method::PUT, "/api/webhook/ping", None, "").await?;
     assert_eq!(status, 405);
 
     let (status, _, _) = send(addr, reqwest::Method::POST, "/api/other", None, "").await?;
