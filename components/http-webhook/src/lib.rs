@@ -1,5 +1,5 @@
 use action_client::ActionRequest;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use wstd::http::{Body, HeaderMap, Method, Request, Response, StatusCode};
 
 use crate::config::Config;
@@ -12,7 +12,8 @@ wit_bindgen::generate!({
 mod config;
 
 const PATH_PREFIX: &str = "/api/webhook/";
-const MAX_REQUEST_BODY_SIZE: u64 = 10 * 1024 * 1024;
+const REQUEST_KEY: &str = "__request";
+const MAX_REQUEST_BODY_SIZE: u64 = 5 * 1024 * 1024;
 
 type Failure = (StatusCode, String);
 
@@ -57,17 +58,23 @@ fn route(request: &Request<Body>) -> Result<String, Failure> {
 }
 
 async fn read_input(request: Request<Body>) -> Result<Value, Failure> {
-    match *request.method() {
-        Method::GET => Ok(json!({})),
-        Method::POST => read_body(request).await,
-        _ => Err((
+    let method = request.method().clone();
+    if method != Method::GET && method != Method::POST {
+        return Err((
             StatusCode::METHOD_NOT_ALLOWED,
             "Method not allowed. Expected GET or POST".to_string(),
-        )),
+        ));
     }
+    let headers = header_object(request.headers());
+    let body = if method == Method::POST {
+        read_body(request).await?
+    } else {
+        String::new()
+    };
+    Ok(action_input(method.as_str(), headers, body))
 }
 
-async fn read_body(request: Request<Body>) -> Result<Value, Failure> {
+async fn read_body(request: Request<Body>) -> Result<String, Failure> {
     if let Some(content_length) = content_length(request.headers()) {
         reject_oversized(content_length)?;
     }
@@ -79,7 +86,7 @@ async fn read_body(request: Request<Body>) -> Result<Value, Failure> {
         )
     })?;
     reject_oversized(body.len() as u64)?;
-    action_input(body).map_err(with_status(StatusCode::BAD_REQUEST))
+    Ok(body.to_string())
 }
 
 fn with_status(status: StatusCode) -> impl Fn(String) -> Failure {
@@ -91,15 +98,31 @@ fn webhook_name(path: &str) -> Option<&str> {
         .filter(|name| !name.is_empty() && !name.contains('/'))
 }
 
-fn action_input(body: &str) -> Result<Value, String> {
-    if body.trim().is_empty() {
-        return Ok(json!({}));
-    }
-    match serde_json::from_str::<Value>(body) {
-        Ok(input @ Value::Object(_)) => Ok(input),
-        Ok(_) => Err("Request body must be a JSON object".to_string()),
-        Err(e) => Err(format!("Request body is not valid JSON: {e}")),
-    }
+fn action_input(method: &str, headers: Map<String, Value>, body: String) -> Value {
+    let mut input = match serde_json::from_str::<Value>(&body) {
+        Ok(Value::Object(fields)) => fields,
+        _ => Map::new(),
+    };
+    input.insert(
+        REQUEST_KEY.to_string(),
+        json!({ "method": method, "headers": headers, "body": body }),
+    );
+    Value::Object(input)
+}
+
+fn header_object(headers: &HeaderMap) -> Map<String, Value> {
+    headers
+        .keys()
+        .map(|name| {
+            let value = headers
+                .get_all(name)
+                .iter()
+                .map(|value| String::from_utf8_lossy(value.as_bytes()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            (name.as_str().to_string(), Value::String(value))
+        })
+        .collect()
 }
 
 fn content_length(headers: &HeaderMap) -> Option<u64> {
@@ -149,12 +172,43 @@ mod tests {
         assert_eq!(webhook_name("/api/mcp/send-invoice"), None);
     }
 
+    fn request(method: &str, body: &str) -> Value {
+        json!({ "method": method, "headers": {}, "body": body })
+    }
+
     #[test]
     fn test_action_input() {
-        assert_eq!(action_input(""), Ok(json!({})));
-        assert_eq!(action_input(" \n"), Ok(json!({})));
-        assert_eq!(action_input(r#"{"amount": 12}"#), Ok(json!({"amount": 12})));
-        assert!(action_input("[1, 2]").unwrap_err().contains("JSON object"));
-        assert!(action_input("{").unwrap_err().contains("not valid JSON"));
+        let input = |body: &str| action_input("POST", Map::new(), body.to_string());
+
+        assert_eq!(
+            input(r#"{"amount": 12}"#),
+            json!({ "amount": 12, "__request": request("POST", r#"{"amount": 12}"#) })
+        );
+        assert_eq!(
+            input(r#"{"__request": "spoofed"}"#),
+            json!({ "__request": request("POST", r#"{"__request": "spoofed"}"#) })
+        );
+        assert_eq!(
+            input("token=abc&command=%2Fdeploy"),
+            json!({ "__request": request("POST", "token=abc&command=%2Fdeploy") })
+        );
+        assert_eq!(
+            input("[1, 2]"),
+            json!({ "__request": request("POST", "[1, 2]") })
+        );
+        assert_eq!(input(""), json!({ "__request": request("POST", "") }));
+    }
+
+    #[test]
+    fn test_header_object() {
+        let mut headers = HeaderMap::new();
+        headers.append("X-Slack-Signature", "v0=abc".parse().unwrap());
+        headers.append("accept", "text/html".parse().unwrap());
+        headers.append("accept", "application/json".parse().unwrap());
+
+        assert_eq!(
+            Value::Object(header_object(&headers)),
+            json!({ "x-slack-signature": "v0=abc", "accept": "text/html, application/json" })
+        );
     }
 }

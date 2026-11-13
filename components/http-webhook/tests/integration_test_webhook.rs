@@ -174,15 +174,14 @@ async fn send(
     addr: SocketAddr,
     method: reqwest::Method,
     path: &str,
-    token: Option<&str>,
+    headers: &[(&str, &str)],
     body: &str,
 ) -> Result<(u16, Value)> {
     let mut req = reqwest::Client::new()
         .request(method, format!("http://{addr}{path}"))
-        .header("Content-Type", "application/json")
         .body(body.to_string());
-    if let Some(t) = token {
-        req = req.header("Authorization", format!("Bearer {t}"));
+    for (name, value) in headers {
+        req = req.header(*name, *value);
     }
     let response = timeout(Duration::from_secs(10), req.send())
         .await
@@ -196,28 +195,70 @@ async fn send(
 async fn post(
     addr: SocketAddr,
     webhook: &str,
-    token: Option<&str>,
+    headers: &[(&str, &str)],
     body: &str,
 ) -> Result<(u16, Value)> {
     let path = format!("/api/webhook/{webhook}");
-    send(addr, reqwest::Method::POST, &path, token, body).await
+    send(addr, reqwest::Method::POST, &path, headers, body).await
 }
+
+/// The input the action received, parsed from the JSON string the mock server echoes.
+fn action_input(body: &Value) -> Value {
+    serde_json::from_str(body["input"].as_str().expect("input is a string")).unwrap()
+}
+
+const JSON: (&str, &str) = ("content-type", "application/json");
 
 #[tokio::test]
 async fn test_runs_the_action_of_the_webhook() -> Result<()> {
     let (_host, addr) = setup().await?;
 
-    let (status, body) = post(addr, "send-invoice", None, r#"{"amount": 12}"#).await?;
+    let raw = r#"{"amount": 12}"#;
+    let (status, body) = post(addr, "send-invoice", &[JSON], raw).await?;
 
     assert_eq!(status, 200, "body: {body}");
+    assert_eq!(body["action_id"], SEND_INVOICE_ACTION_ID);
+    assert_eq!(body["configurations"], BETTY_CONFIG);
+    assert_eq!(body["jwt"], "");
+
+    let input = action_input(&body);
+    assert_eq!(input["amount"], 12);
+    assert_eq!(input["__request"]["method"], "POST");
+    assert_eq!(input["__request"]["body"], raw);
     assert_eq!(
-        body,
-        json!({
-            "action_id": SEND_INVOICE_ACTION_ID,
-            "input": r#"{"amount":12}"#,
-            "configurations": BETTY_CONFIG,
-            "jwt": ""
-        })
+        input["__request"]["headers"]["content-type"],
+        "application/json"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_passes_the_raw_request_for_signature_checks() -> Result<()> {
+    let (_host, addr) = setup().await?;
+
+    let raw = "token=abc&command=%2Fdeploy";
+    let headers = [
+        ("content-type", "application/x-www-form-urlencoded"),
+        (
+            "X-Slack-Signature",
+            "v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503",
+        ),
+        ("X-Slack-Request-Timestamp", "1531420618"),
+    ];
+    let (status, body) = post(addr, "ping", &headers, raw).await?;
+
+    assert_eq!(status, 200, "body: {body}");
+    let input = action_input(&body);
+    assert_eq!(input.as_object().unwrap().len(), 1, "input: {input}");
+    let request = &input["__request"];
+    assert_eq!(request["body"], raw);
+    assert_eq!(
+        request["headers"]["x-slack-signature"],
+        "v0=a2114d57b48eac39b9ad189dd8316235a7b4a8d21a10bd27519666489c69b503"
+    );
+    assert_eq!(
+        request["headers"]["x-slack-request-timestamp"],
+        "1531420618"
     );
     Ok(())
 }
@@ -226,31 +267,33 @@ async fn test_runs_the_action_of_the_webhook() -> Result<()> {
 async fn test_does_not_forward_the_token_of_the_caller() -> Result<()> {
     let (_host, addr) = setup().await?;
 
-    let (status, body) = post(addr, "ping", Some("token-of-the-caller"), "").await?;
+    let headers = [("authorization", "Bearer token-of-the-caller")];
+    let (status, body) = post(addr, "ping", &headers, "").await?;
 
     assert_eq!(status, 200, "body: {body}");
+    assert_eq!(body["action_id"], PING_ACTION_ID);
+    assert_eq!(body["jwt"], "");
+    // the action can still check the header itself
     assert_eq!(
-        body,
-        json!({
-            "action_id": PING_ACTION_ID,
-            "input": "{}",
-            "configurations": BETTY_CONFIG,
-            "jwt": ""
-        })
+        action_input(&body)["__request"]["headers"]["authorization"],
+        "Bearer token-of-the-caller"
     );
     Ok(())
 }
 
 #[tokio::test]
-async fn test_get_runs_the_action_with_empty_input() -> Result<()> {
+async fn test_get_runs_the_action_with_the_request_only() -> Result<()> {
     let (_host, addr) = setup().await?;
 
     let path = "/api/webhook/send-invoice";
-    let (status, body) = send(addr, reqwest::Method::GET, path, None, "").await?;
+    let (status, body) = send(addr, reqwest::Method::GET, path, &[], "").await?;
 
     assert_eq!(status, 200, "body: {body}");
     assert_eq!(body["action_id"], SEND_INVOICE_ACTION_ID);
-    assert_eq!(body["input"], "{}");
+    let input = action_input(&body);
+    assert_eq!(input.as_object().unwrap().len(), 1, "input: {input}");
+    assert_eq!(input["__request"]["method"], "GET");
+    assert_eq!(input["__request"]["body"], "");
     Ok(())
 }
 
@@ -258,17 +301,18 @@ async fn test_get_runs_the_action_with_empty_input() -> Result<()> {
 async fn test_request_errors() -> Result<()> {
     let (_host, addr) = setup().await?;
 
-    let (status, body) = post(addr, "unknown", None, "{}").await?;
+    let (status, body) = post(addr, "unknown", &[JSON], "{}").await?;
     assert_eq!(status, 404, "body: {body}");
     assert!(body["error"].as_str().unwrap().contains("'unknown'"));
 
-    let (status, _) = send(addr, reqwest::Method::PUT, "/api/webhook/ping", None, "").await?;
+    let (status, _) = send(addr, reqwest::Method::PUT, "/api/webhook/ping", &[], "").await?;
     assert_eq!(status, 405);
 
-    let (status, _) = send(addr, reqwest::Method::POST, "/api/other", None, "").await?;
+    let (status, _) = send(addr, reqwest::Method::POST, "/api/other", &[], "").await?;
     assert_eq!(status, 404);
 
-    let (status, body) = post(addr, "send-invoice", None, "[1, 2]").await?;
-    assert_eq!(status, 400, "body: {body}");
+    let too_large = "x".repeat(5 * 1024 * 1024 + 1);
+    let (status, _) = post(addr, "ping", &[], &too_large).await?;
+    assert_eq!(status, 413);
     Ok(())
 }
