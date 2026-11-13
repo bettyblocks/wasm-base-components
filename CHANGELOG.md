@@ -1,3 +1,10 @@
+# [1.44.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.43.1...v1.44.0) (2026-11-13)
+
+
+### Features
+
+* **http-webhook:** pass the raw request to the action as __request ([2984461](https://github.com/bettyblocks/wasm-base-components/commit/2984461917451de26f11afafaef5aa5baf5eaa16))
+
 ## [1.43.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.43.0...v1.43.1) (2026-11-11)
 
 
