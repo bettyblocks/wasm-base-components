@@ -1,8 +1,7 @@
-use action_client::{ActionRequest, BearerToken};
+use action_client::ActionRequest;
 use serde_json::{json, Value};
 use wstd::http::{Body, HeaderMap, Method, Request, Response, StatusCode};
 
-use crate::betty_blocks_types::auth::jwt::{allowed_to_call, AuthError};
 use crate::config::Config;
 
 wit_bindgen::generate!({
@@ -31,7 +30,6 @@ async fn handle(request: Request<Body>) -> Result<Value, Failure> {
     let action_id = config
         .action_id(&name)
         .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Webhook '{name}' not found")))?;
-    let jwt = authorize(request.headers(), &config, action_id)?;
     let input = read_input(request).await?;
 
     let action_request = ActionRequest {
@@ -40,7 +38,7 @@ async fn handle(request: Request<Body>) -> Result<Value, Failure> {
         action_id,
         input: &input,
         configurations: &config.configurations,
-        jwt: jwt.as_deref(),
+        jwt: None,
     };
     action_client::call_action(&action_request)
         .await
@@ -56,24 +54,6 @@ fn route(request: &Request<Body>) -> Result<String, Failure> {
                 format!("Not found. Expected {PATH_PREFIX}{{webhook-name}}"),
             )
         })
-}
-
-fn authorize(
-    headers: &HeaderMap,
-    config: &Config,
-    action_id: &str,
-) -> Result<Option<BearerToken>, Failure> {
-    let headers = header_entries(headers);
-    allowed_to_call(&headers, &config.application_id, action_id).map_err(auth_failure)?;
-
-    let public = config
-        .is_public(action_id)
-        .map_err(with_status(StatusCode::INTERNAL_SERVER_ERROR))?;
-    Ok(if public {
-        None
-    } else {
-        action_client::extract_bearer_token(&headers)
-    })
 }
 
 async fn read_input(request: Request<Body>) -> Result<Value, Failure> {
@@ -106,17 +86,6 @@ fn with_status(status: StatusCode) -> impl Fn(String) -> Failure {
     move |message| (status, message)
 }
 
-fn auth_failure(error: AuthError) -> Failure {
-    let (status, message) = match error {
-        AuthError::MalformedToken => (StatusCode::UNAUTHORIZED, "malformed token".to_string()),
-        AuthError::ValidationFailed(msg) => (StatusCode::UNAUTHORIZED, msg),
-        AuthError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
-        AuthError::Unavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
-        AuthError::MissingConfig(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-    };
-    (status, format!("Auth error: {message}"))
-}
-
 fn webhook_name(path: &str) -> Option<&str> {
     path.strip_prefix(PATH_PREFIX)
         .filter(|name| !name.is_empty() && !name.contains('/'))
@@ -131,13 +100,6 @@ fn action_input(body: &str) -> Result<Value, String> {
         Ok(_) => Err("Request body must be a JSON object".to_string()),
         Err(e) => Err(format!("Request body is not valid JSON: {e}")),
     }
-}
-
-fn header_entries(headers: &HeaderMap) -> Vec<(String, Vec<u8>)> {
-    headers
-        .iter()
-        .map(|(k, v)| (k.as_str().to_string(), v.as_bytes().to_vec()))
-        .collect()
 }
 
 fn content_length(headers: &HeaderMap) -> Option<u64> {
@@ -168,13 +130,7 @@ fn json_response(status: StatusCode, body: &Value) -> Response<Body> {
 }
 
 fn error_response(status: StatusCode, message: &str) -> Response<Body> {
-    let mut response = json_response(status, &json!({ "error": message }));
-    if status == StatusCode::UNAUTHORIZED {
-        response
-            .headers_mut()
-            .insert("www-authenticate", "Bearer".parse().expect("valid header"));
-    }
-    response
+    json_response(status, &json!({ "error": message }))
 }
 
 #[cfg(test)]
@@ -200,27 +156,5 @@ mod tests {
         assert_eq!(action_input(r#"{"amount": 12}"#), Ok(json!({"amount": 12})));
         assert!(action_input("[1, 2]").unwrap_err().contains("JSON object"));
         assert!(action_input("{").unwrap_err().contains("not valid JSON"));
-    }
-
-    #[test]
-    fn test_auth_failure_status() {
-        let status = |error| auth_failure(error).0;
-        assert_eq!(status(AuthError::MalformedToken), StatusCode::UNAUTHORIZED);
-        assert_eq!(
-            status(AuthError::ValidationFailed("expired".into())),
-            StatusCode::UNAUTHORIZED
-        );
-        assert_eq!(
-            status(AuthError::Forbidden("no".into())),
-            StatusCode::FORBIDDEN
-        );
-        assert_eq!(
-            status(AuthError::Unavailable("down".into())),
-            StatusCode::SERVICE_UNAVAILABLE
-        );
-        assert_eq!(
-            status(AuthError::MissingConfig("missing".into())),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
     }
 }

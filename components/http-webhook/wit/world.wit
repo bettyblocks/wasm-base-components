@@ -1,7 +1,6 @@
-package betty-blocks-utilities:webhook@1.0.1;
+package betty-blocks-utilities:webhook@1.1.0;
 
 world webhook {
-    import betty-blocks-types:auth/jwt@4.0.0;
     import wasi:config/store@0.2.0-rc.1;
     import wasi:cli/environment@0.2.2;
 }
