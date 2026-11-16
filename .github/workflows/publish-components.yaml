@@ -120,6 +120,16 @@ jobs:
         with:
           ref: ${{ steps.build.outputs.head_sha }}
 
+      # The component publish logic comes from the commit of this workflow, not from the build's
+      # commit: a build made before a change to the script would run the old script. The paths in
+      # the component table and the world.wit files still come from the build's checkout.
+      # publish-wit-packages.sh stays in the build's checkout, because it reads wit/ next to itself.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: .publish-tools
+          sparse-checkout: scripts
+
       - uses: ./.github/actions/install-wkg
 
       - uses: taiki-e/install-action@v2
@@ -197,7 +207,7 @@ jobs:
           REGISTRY: ${{ steps.dest.outputs.component_registry }}
           NAME_COLUMN: ${{ inputs.name_column }}
           MODE: check
-        run: ./scripts/publish-components.sh
+        run: ./.publish-tools/scripts/publish-components.sh
 
       - name: Log in to the registry
         uses: docker/login-action@v3
@@ -246,4 +256,4 @@ jobs:
           SOURCE_SHA: ${{ steps.build.outputs.head_sha }}
           ONLY: ${{ inputs.only }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: ./scripts/publish-components.sh
+        run: ./.publish-tools/scripts/publish-components.sh
