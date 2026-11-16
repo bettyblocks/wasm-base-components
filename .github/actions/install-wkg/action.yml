@@ -2,9 +2,12 @@ name: Install wkg
 description: >-
   Install a pinned wkg and verify its checksum before running it.
 
-# To move to a new wkg: bump WKG_VERSION and replace both digests with the ones from
-#   sha256sum wkg-x86_64-unknown-linux-gnu wkg-aarch64-unknown-linux-gnu
-# taken from https://github.com/bytecodealliance/wasm-pkg-tools/releases
+# To move to a new wkg, change these together:
+# - the default of the version input below
+# - the version in the "digests belong to one release" check
+# - WKG_SHA_AMD64 and WKG_SHA_ARM64, from
+#     sha256sum wkg-x86_64-unknown-linux-gnu wkg-aarch64-unknown-linux-gnu
+#   on the binaries from https://github.com/bytecodealliance/wasm-pkg-tools/releases
 
 inputs:
   version:

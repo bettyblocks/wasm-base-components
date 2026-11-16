@@ -1,0 +1,66 @@
+name: Install wash
+description: >-
+  Install a pinned wash and verify its checksum before running it.
+
+# The wasmcloud.com/sh installer finds and downloads the release through api.github.com without
+# a token. That API allows 60 requests per hour per runner IP, so the component matrix hit the
+# rate limit. A plain release download does not use the API.
+#
+# To move to a new wash, change these together:
+# - the default of the version input below
+# - the version in the "digests belong to one release" check
+# - WASH_SHA_AMD64 and WASH_SHA_ARM64, from
+#     sha256sum wash-x86_64-unknown-linux-gnu wash-aarch64-unknown-linux-gnu
+#   on the binaries from https://github.com/wasmCloud/wasmCloud/releases
+
+inputs:
+  version:
+    description: "wash release to install, without the leading v"
+    required: false
+    default: "2.12.1"
+
+runs:
+  using: composite
+  steps:
+    - name: Install wash
+      shell: bash
+      env:
+        WASH_VERSION: ${{ inputs.version }}
+        WASH_SHA_AMD64: 5e11793301c32924d82276a0217f692ed17f254d3cc56ceffa0483037c713de7
+        WASH_SHA_ARM64: 9f1e0580bb369f344684ac21c7f7e6b3db12f1dce0b7a46977c24f3471b963d2
+      run: |
+        set -euo pipefail
+
+        case "$(uname -m)" in
+          x86_64)          target=x86_64-unknown-linux-gnu;  expected="$WASH_SHA_AMD64" ;;
+          aarch64 | arm64) target=aarch64-unknown-linux-gnu; expected="$WASH_SHA_ARM64" ;;
+          *)
+            echo "::error::no pinned wash digest for $(uname -m)"
+            exit 1
+            ;;
+        esac
+
+        # The digests belong to one release, so fail with the reason instead of a mismatch.
+        if [ "$WASH_VERSION" != "2.12.1" ]; then
+          echo "::error::the digests in this action are for wash 2.12.1, not $WASH_VERSION."
+          echo "::error::Update WASH_SHA_AMD64 and WASH_SHA_ARM64 together with the default version."
+          exit 1
+        fi
+
+        url="https://github.com/wasmCloud/wasmCloud/releases/download/v${WASH_VERSION}/wash-${target}"
+        tmp=$(mktemp -d)
+        trap 'rm -rf "$tmp"' EXIT
+
+        echo "Downloading wash $WASH_VERSION for $target"
+        curl -fsSL --retry 3 -o "$tmp/wash" "$url"
+
+        actual=$(sha256sum "$tmp/wash" | cut -d' ' -f1)
+        if [ "$actual" != "$expected" ]; then
+          echo "::error::wash $WASH_VERSION for $target does not have the expected contents."
+          echo "::error::  expected sha256:$expected"
+          echo "::error::  got      sha256:$actual"
+          exit 1
+        fi
+
+        install -m 0755 "$tmp/wash" /usr/local/bin/wash
+        wash --version
