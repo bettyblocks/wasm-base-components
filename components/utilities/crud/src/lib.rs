@@ -78,9 +78,13 @@ fn convert_object_to_graphql(field: &str, data: &serde_json::Value) -> String {
 
             object_to_graphql_query(field, first_object)
         }
-        // Objects or arrays without a usable record shape (empty, or lacking an
-        // `id` key) still represent a relation in GraphQL and therefore need a
-        // subselection. Fall back to `field { id }` so the query stays valid.
+        // A non-empty object without an `id` is not a relation, it is a file or
+        // image value (e.g. `{ "url": .., "name": .. }`). Those types have no `id`
+        // field, so select the property by name like a top-level file property.
+        serde_json::Value::Object(object) if !object.is_empty() => field.to_string(),
+        // Empty objects or arrays without a usable record shape still represent a
+        // relation in GraphQL and therefore need a subselection. Fall back to
+        // `field { id }` so the query stays valid.
         serde_json::Value::Object(_) | serde_json::Value::Array(_) => id_fragment(field),
         _ => field.to_string(),
     }
@@ -1155,6 +1159,47 @@ fragment taskFields on Task {
         id
         name
         team { id }
+    }
+}"#
+                    .to_string(),
+                    name: "taskFields".to_string(),
+                }
+                .minify()
+            );
+        }
+
+        #[test]
+        fn returns_task_fragment_without_id_for_file_and_image_values_in_relation() {
+            let property_map = vec![BettyPropertyMap {
+                key: vec![BettyPropertyPath {
+                    kind: "BELONGS_TO".to_string(),
+                    name: "user".to_string(),
+                    object_fields: None,
+                }],
+                value: Some(
+                    json!({
+                        "id": 1,
+                        "name": "John",
+                        "avatar": { "url": "https://example.com/a.png", "name": "a.png" },
+                        "resume": { "url": "https://example.com/r.pdf", "name": "r.pdf" }
+                    })
+                    .to_string(),
+                ),
+            }];
+
+            let fragment = parse_to_gql_fragment("Task", property_map);
+
+            assert_eq!(
+                fragment.minify(),
+                GraphQL {
+                    gql: r#"
+fragment taskFields on Task {
+    id
+    user {
+        avatar
+        id
+        name
+        resume
     }
 }"#
                     .to_string(),
