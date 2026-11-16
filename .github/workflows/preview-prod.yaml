@@ -1,0 +1,43 @@
+name: Show unreleased components (production)
+run-name: Show unreleased components of build ${{ inputs.build_run_id || '(latest release)' }}
+
+# Lists which components of a build have a version that production does not have yet. It pushes
+# nothing. Then tick those components in "Publish WASM Components (production)".
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: "Build run to compare (leave empty to use the latest release on main, from .build-run-id)"
+        required: false
+        type: string
+
+jobs:
+  which-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      build_run_id: ${{ steps.pick.outputs.build_run_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: ./.github/actions/pick-prod-build
+        id: pick
+        with:
+          build_run_id: ${{ inputs.build_run_id }}
+
+  azure-prod:
+    needs: which-build
+    uses: ./.github/workflows/publish-components.yaml
+    secrets: inherit
+    with:
+      build_run_id: ${{ needs.which-build.outputs.build_run_id }}
+      environment: production
+      component_namespace: betty-blocks-utilities
+      name_column: azure_name
+      dry_run: true

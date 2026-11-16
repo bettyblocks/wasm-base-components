@@ -1,0 +1,72 @@
+name: Pick the build for production
+description: >-
+  Decide which build run goes to production, and make sure that the build was made from main.
+
+# The caller must check out main with full history (fetch-depth: 0) first: the check looks for
+# the build's commit in main's history.
+#
+# semantic-release writes the build's run id into .build-run-id in the release commit on main,
+# so an empty build_run_id means the latest release.
+
+inputs:
+  build_run_id:
+    description: "Build run to use. Empty means the latest release on main, from .build-run-id"
+    required: false
+    default: ""
+
+outputs:
+  build_run_id:
+    description: "The build run that goes to production"
+    value: ${{ steps.pick.outputs.build_run_id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Decide which build to use
+      id: pick
+      shell: bash
+      env:
+        DISPATCH_RUN_ID: ${{ inputs.build_run_id }}
+      run: |
+        if [ -n "$DISPATCH_RUN_ID" ]; then
+          build_run_id="$DISPATCH_RUN_ID"
+          echo "Using the build run given on dispatch: $build_run_id"
+        elif [ -s .build-run-id ]; then
+          build_run_id=$(tr -d '[:space:]' < .build-run-id)
+          echo "Using the build run recorded in .build-run-id: $build_run_id"
+        else
+          echo "::error::no .build-run-id on main, and no build_run_id was given."
+          echo "::error::.build-run-id is written by semantic-release in the release commit on main."
+          exit 1
+        fi
+
+        case "$build_run_id" in
+          '' | *[!0-9]*)
+            echo "::error::'$build_run_id' is not a run id"
+            exit 1
+            ;;
+        esac
+
+        echo "build_run_id=$build_run_id" >> "$GITHUB_OUTPUT"
+
+    # Production only takes builds that went through main, and so through review and edge.
+    - name: Check the build was made from main
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        BUILD_RUN_ID: ${{ steps.pick.outputs.build_run_id }}
+      run: |
+        head_sha=$(gh run view "$BUILD_RUN_ID" --json headSha --jq '.headSha')
+        if [ -z "$head_sha" ]; then
+          echo "::error::build run $BUILD_RUN_ID has no head SHA — check the run id"
+          exit 1
+        fi
+
+        if ! git merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null; then
+          echo "::error::build $BUILD_RUN_ID was made from $head_sha, which is not in main's history."
+          echo "::error::Production can only publish a build whose commit reached main."
+          exit 1
+        fi
+
+        echo "Build $BUILD_RUN_ID was made from $head_sha on main."

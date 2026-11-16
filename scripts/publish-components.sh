@@ -20,6 +20,8 @@
 #   SOURCE_SHA   required to push; the commit the build was made from, for the pinned tag
 #   MODE         optional  check | push | all   (default all)
 #   TAG_LATEST   optional  true to also push :latest   (default false)
+#   ONLY         optional  space-separated component keys to push; empty pushes every component.
+#                          The check still covers every component.
 #   DRY_RUN      optional  true to print pushes instead of making them
 #
 # To run the check locally against a build you have downloaded, paste the table from
@@ -36,6 +38,7 @@ MODE=${MODE:-all}
 TAG_LATEST=${TAG_LATEST:-false}
 DRY_RUN=${DRY_RUN:-false}
 SOURCE_SHA=${SOURCE_SHA:-}
+ONLY=${ONLY:-}
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 main() {
@@ -53,6 +56,7 @@ main() {
   fi
 
   check_every_component_is_tabled "$component_rows" || exit 1
+  check_only_names_known_keys "$component_rows" || exit 2
 
   if [ "$MODE" = check ] || [ "$MODE" = all ]; then
     check_components_match_worlds <<<"$component_rows" || {
@@ -130,6 +134,23 @@ check_every_component_is_tabled() {
   return $result_code
 }
 
+check_only_names_known_keys() {
+  local rows=$1 key result_code=0
+
+  for key in $ONLY; do
+    awk -F'|' -v k="$key" '$1 == k { found = 1 } END { exit !found }' <<<"$rows" && continue
+    echo "::error::ONLY names '$key', which is not a key in the component table"
+    result_code=1
+  done
+
+  return $result_code
+}
+
+is_selected() {
+  [ -z "$ONLY" ] && return 0
+  [[ " $ONLY " == *" $1 "* ]]
+}
+
 check_components_match_worlds() {
   local key wasm world ghcr_name azure_name result_code=0
 
@@ -150,6 +171,7 @@ plan_push_targets() {
   local key wasm world ghcr_name azure_name name version image pinned result_code=0
 
   while IFS='|' read -r key wasm world ghcr_name azure_name; do
+    is_selected "$key" || continue
     name=$(image_name "$ghcr_name" "$azure_name")
     version=$(sed -nE 's/^package[^@]*@([^;[:space:]]+).*/\1/p' "$world" | head -1)
     if [ -z "$version" ]; then
@@ -179,7 +201,7 @@ push_all_targets() {
     case $? in
     0)
       echo "Skipped $image:$version, it already exists"
-      echo "- \`$image:$version\` already exists, skipped" >>"$summary"
+      echo "- $key: \`$image:$version\` already exists, skipped" >>"$summary"
       continue
       ;;
     1) ;;
@@ -190,16 +212,19 @@ push_all_targets() {
       ;;
     esac
 
+    if [ "$DRY_RUN" = true ]; then
+      echo "would push $image:$version  <-  $wasm"
+      echo "- **$key**: \`$image:$version\` is not released yet" >>"$summary"
+      continue
+    fi
+
     # X.Y.Z goes last: the skip above reads it as "this component is fully published".
     tags=("$pinned")
     [ "$TAG_LATEST" = true ] && tags+=("latest")
     tags+=("$version")
 
     for tag in "${tags[@]}"; do
-      if [ "$DRY_RUN" = true ]; then
-        echo "would push $image:$tag  <-  $wasm"
-        echo "- \`$image:$tag\` (dry run)" >>"$summary"
-      elif wkg oci push "$image:$tag" "$wasm"; then
+      if wkg oci push "$image:$tag" "$wasm"; then
         echo "Published $image:$tag"
         echo "- \`$image:$tag\`" >>"$summary"
       else

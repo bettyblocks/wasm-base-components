@@ -41,6 +41,10 @@ There is one branch: `main`. All PRs go into `main`.
    manual step publishes the components of that build to production. An app uses a new
    component at its next compile, thus a person must start this step. The step does not
    rebuild, so production gets the bytes that you tested on edge.
+4. To see which components production does not have yet, dispatch **Show unreleased components
+   (production)**. Its run summary shows the list in bold. This workflow pushes nothing.
+5. In the dispatch form of **Publish WASM Components (production)**, tick each component to
+   publish. Production gets only the ticked components. A dispatch with no ticks fails.
 
 ### The workflows, high over
 
@@ -48,8 +52,9 @@ There is one branch: `main`. All PRs go into `main`.
 |---|---|---|
 | **Build WASM Components** (`release.yaml`) | push to `main` that touches something a component is built from | builds every component, runs semantic-release, uploads one `wasm-components` artifact holding **all** of them, and writes its own run id into `.build-run-id` in the release commit |
 | **Publish WASM Components (after build)** (`publish.yaml`) | that build finishing, or manual dispatch | selects the build to publish. Publishes the components to ghcr and the dev registry. Publishes the WIT packages to the dev registry and the production registry |
-| **Publish WASM Components (production)** (`publish-prod.yaml`) | manual dispatch only | takes a build run id. If the run id is empty, uses the latest release on `main`. Makes sure that the commit of the build is on `main`. Publishes the components of the build to production |
-| **Publish components** (`publish-components.yaml`) | called by the two above | all the actual publishing logic, once, identically per destination |
+| **Publish WASM Components (production)** (`publish-prod.yaml`) | manual dispatch only | takes a build run id. If the run id is empty, uses the latest release on `main`. Makes sure that the commit of the build is on `main`. Publishes the ticked components of the build to production |
+| **Show unreleased components (production)** (`preview-prod.yaml`) | manual dispatch only | takes a build run id in the same way. Lists the components of the build that production does not have yet. Pushes nothing |
+| **Publish components** (`publish-components.yaml`) | called by `publish.yaml`, `publish-prod.yaml` and `preview-prod.yaml` | all the actual publishing logic, once, identically per destination |
 | **CI** / **Version Check** / **Commit Lint** | pull requests | build, test, and lint checks. On a PR, CI builds only the components and WIT packages that the PR changes. A change to a shared file, for example `rust-toolchain.toml`, builds all (`scripts/ci-targets.sh`) |
 
 Publishing always takes a **build run id** as its input, never a commit or a branch. One run id
