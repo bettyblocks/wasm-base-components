@@ -51,6 +51,16 @@ on:
         required: false
         default: false
         type: boolean
+      only:
+        description: "Space-separated component keys to push. Empty pushes every component"
+        required: false
+        default: ""
+        type: string
+      dry_run:
+        description: "Only list what a push would publish. Pushes nothing"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   publish:
@@ -199,8 +209,14 @@ jobs:
       - name: Start the summary
         run: |
           {
-            echo "## Published to \`${{ inputs.environment }}\`"
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "## Preview for \`${{ inputs.environment }}\` (nothing was pushed)"
+            else
+              echo "## Published to \`${{ inputs.environment }}\`"
+            fi
             echo
+            echo "**Selected components:** ${{ inputs.only || 'all' }}"
+
             echo "**Build run:** \`${{ inputs.build_run_id }}\`, built from \`${{ steps.build.outputs.head_sha }}\`"
             if [ "${{ inputs.publish_components }}" = "true" ]; then
               echo "**Components:** \`${{ steps.dest.outputs.component_registry }}\`"
@@ -215,7 +231,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Push the WIT packages
-        if: steps.dest.outputs.wit_registry != ''
+        if: steps.dest.outputs.wit_registry != '' && !inputs.dry_run
         env:
           REGISTRY: ${{ steps.dest.outputs.wit_registry }}
         run: ./scripts/publish-wit-packages.sh
@@ -228,4 +244,6 @@ jobs:
           MODE: push
           TAG_LATEST: ${{ inputs.tag_latest }}
           SOURCE_SHA: ${{ steps.build.outputs.head_sha }}
+          ONLY: ${{ inputs.only }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: ./scripts/publish-components.sh

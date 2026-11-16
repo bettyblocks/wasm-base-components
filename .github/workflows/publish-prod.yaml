@@ -8,6 +8,11 @@ run-name: Publish build ${{ inputs.build_run_id || '(latest release)' }} compone
 # Only components go out here. The WIT packages of each build already reached production
 # automatically (publish.yaml). A WIT version has no effect in production until a step or a
 # service imports that version.
+#
+# Tick the components to publish. To see which components production does not have yet, run
+# preview-prod.yaml first.
+# Each checkbox has the name of the component's key in the table in publish-components.yaml.
+# A new component needs a new checkbox here.
 
 on:
   workflow_dispatch:
@@ -16,70 +21,88 @@ on:
         description: "Build run to publish (leave empty to use the latest release on main, from .build-run-id)"
         required: false
         type: string
+      auth:
+        description: "Publish auth"
+        type: boolean
+        default: false
+      crud:
+        description: "Publish crud"
+        type: boolean
+        default: false
+      data-api:
+        description: "Publish data-api"
+        type: boolean
+        default: false
+      upload-file:
+        description: "Publish upload-file"
+        type: boolean
+        default: false
+      pdf-generator:
+        description: "Publish pdf-generator"
+        type: boolean
+        default: false
+      http-wrapper:
+        description: "Publish http-wrapper"
+        type: boolean
+        default: false
+      log-to-stdout:
+        description: "Publish log-to-stdout"
+        type: boolean
+        default: false
+      http-mcp:
+        description: "Publish http-mcp"
+        type: boolean
+        default: false
+      logs-writer:
+        description: "Publish logs-writer"
+        type: boolean
+        default: false
+      live-announcer:
+        description: "Publish live-announcer"
+        type: boolean
+        default: false
+      http-well-known:
+        description: "Publish http-well-known"
+        type: boolean
+        default: false
+      http-webhook:
+        description: "Publish http-webhook"
+        type: boolean
+        default: false
 
 jobs:
-  # semantic-release writes the build's run id into .build-run-id in the release commit on main,
-  # so an empty input means the latest release.
   which-build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       build_run_id: ${{ steps.pick.outputs.build_run_id }}
+      only: ${{ steps.select.outputs.only }}
 
     steps:
-      # Full history: the check below looks for the build's commit in main's history.
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Decide which build to publish
+      - uses: ./.github/actions/pick-prod-build
         id: pick
+        with:
+          build_run_id: ${{ inputs.build_run_id }}
+
+      - name: Read the ticked components
+        id: select
         env:
-          DISPATCH_RUN_ID: ${{ inputs.build_run_id }}
+          INPUTS: ${{ toJSON(inputs) }}
         run: |
-          if [ -n "$DISPATCH_RUN_ID" ]; then
-            build_run_id="$DISPATCH_RUN_ID"
-            echo "Using the build run given on dispatch: $build_run_id"
-          elif [ -s .build-run-id ]; then
-            build_run_id=$(tr -d '[:space:]' < .build-run-id)
-            echo "Using the build run recorded in .build-run-id: $build_run_id"
-          else
-            echo "::error::no .build-run-id on main, and no build_run_id was given."
-            echo "::error::.build-run-id is written by semantic-release in the release commit on main."
+          only=$(jq -r 'to_entries | map(select(.value == true) | .key) | join(" ")' <<<"$INPUTS")
+          if [ -z "$only" ]; then
+            echo "::error::no component is ticked. Tick the components to publish."
+            echo "::error::To see which components production does not have yet, run 'Show unreleased components (production)'."
             exit 1
           fi
-
-          case "$build_run_id" in
-            '' | *[!0-9]*)
-              echo "::error::'$build_run_id' is not a run id"
-              exit 1
-              ;;
-          esac
-
-          echo "build_run_id=$build_run_id" >> "$GITHUB_OUTPUT"
-
-      # Production only takes builds that went through main, and so through review and edge.
-      - name: Check the build was made from main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          BUILD_RUN_ID: ${{ steps.pick.outputs.build_run_id }}
-        run: |
-          head_sha=$(gh run view "$BUILD_RUN_ID" --json headSha --jq '.headSha')
-          if [ -z "$head_sha" ]; then
-            echo "::error::build run $BUILD_RUN_ID has no head SHA — check the run id"
-            exit 1
-          fi
-
-          if ! git merge-base --is-ancestor "$head_sha" HEAD 2>/dev/null; then
-            echo "::error::build $BUILD_RUN_ID was made from $head_sha, which is not in main's history."
-            echo "::error::Production can only publish a build whose commit reached main."
-            exit 1
-          fi
-
-          echo "Build $BUILD_RUN_ID was made from $head_sha on main."
+          echo "Publishing: $only"
+          echo "only=$only" >> "$GITHUB_OUTPUT"
 
   azure-prod:
     needs: which-build
@@ -90,3 +113,4 @@ jobs:
       environment: production
       component_namespace: betty-blocks-utilities
       name_column: azure_name
+      only: ${{ needs.which-build.outputs.only }}
