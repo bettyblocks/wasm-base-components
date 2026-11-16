@@ -1,3 +1,11 @@
+## [1.44.2](https://github.com/bettyblocks/wasm-base-components/compare/v1.44.1...v1.44.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **crud:** bump the crud interface to 4.0.2 ([1713e3d](https://github.com/bettyblocks/wasm-base-components/commit/1713e3d877633e8d2856cf467e691560849e495a))
+* **crud:** bump the crud package and interface to 4.0.3 ([a0eac19](https://github.com/bettyblocks/wasm-base-components/commit/a0eac19dcce6fbf286c9b9b21b01da3c8eed6350))
+
 ## [1.44.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.44.0...v1.44.1) (2026-11-16)
 
 
