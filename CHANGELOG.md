@@ -1,3 +1,11 @@
+## [1.44.1](https://github.com/bettyblocks/wasm-base-components/compare/v1.44.0...v1.44.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **ci:** run the component publish script from the workflow's commit ([de5fb0a](https://github.com/bettyblocks/wasm-base-components/commit/de5fb0a6a6b2c82b7955f5939d4a835b89235f5a)), closes [#162](https://github.com/bettyblocks/wasm-base-components/issues/162)
+* **crud:** do not select id on file and image values in relation objects ([9319fca](https://github.com/bettyblocks/wasm-base-components/commit/9319fcaa8a0e07f3b1da43c46bae608870d8966d))
+
 # [1.44.0](https://github.com/bettyblocks/wasm-base-components/compare/v1.43.1...v1.44.0) (2026-11-13)
 
 
